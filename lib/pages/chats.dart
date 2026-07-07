@@ -183,7 +183,7 @@ final activeChatMessagesStreamProvider = StreamProvider<List<ChatMessage>>((ref)
   if (activeChatId == null) return const Stream.empty();
   return firestore
       .collection('support_chats')
-      .doc(activeChatId)
+      .doc(activeChatId!)
       .collection('messages')
       .orderBy('createdAt', descending: false)
       .snapshots()
@@ -645,7 +645,7 @@ class _ChatsPageState extends State<ChatsPage> {
 
                         await firestore
                             .collection('support_chats')
-                            .doc(activeChatId)
+                            .doc(activeChatId!)
                             .collection('messages')
                             .add({
                           'senderId': u?.uid ?? 'agent',
@@ -658,7 +658,7 @@ class _ChatsPageState extends State<ChatsPage> {
 
                         await firestore
                             .collection('support_chats')
-                            .doc(activeChatId)
+                            .doc(activeChatId!)
                             .set({
                           'lastMessage': textVal,
                           'updatedAt': DateTime.now().millisecondsSinceEpoch,

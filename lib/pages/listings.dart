@@ -199,6 +199,8 @@ class _ListingsPageState extends State<ListingsPage> {
   double? _priceMin;
   double? _priceMax;
 
+  bool _showReportedOnly = false;
+
   // Single listing detailed view state
   ListingData? _detailsModalItem;
 
@@ -580,6 +582,60 @@ class _ListingsPageState extends State<ListingsPage> {
                           ])
                       ])
                     ]),
+                  // Penalize Creator Dropdown
+                  (() {
+                    final creatorId = _detailsModalItem!.rawData['hostId'] as String? ?? _detailsModalItem!.rawData['creatorId'] as String?;
+                    if (creatorId == null || creatorId.isEmpty) return div([]);
+                    return div(classes: 'flex flex-col gap-1.5 border-t border-zinc-100 pt-3 mt-2', [
+                      span(classes: 'text-[9px] font-black text-red-500 uppercase tracking-wider', [text('⚠️ Penalize Listing Creator')]),
+                      p(classes: 'text-[10px] text-zinc-400 font-medium', [text('Apply account suspension directly to the creator of this listing.')]),
+                      select(
+                        classes: 'bg-red-50/30 border border-red-200/50 rounded-xl px-3 py-2 text-[10px] font-black text-red-700 focus:outline-none cursor-pointer w-full mt-1',
+                        onChange: (v) async {
+                          if (v.isEmpty || v.first.isEmpty) return;
+                          
+                          final selection = v.first;
+                          final firestore = context.read(firestoreProvider);
+                          
+                          bool isBanned = false;
+                          int? suspendUntil;
+                          String msg = 'Status updated.';
+                          final nowMs = DateTime.now().millisecondsSinceEpoch;
+                          
+                          if (selection == 'ban') {
+                            isBanned = true;
+                            msg = '🚫 Creator permanently banned.';
+                          } else if (selection == '3d') {
+                            suspendUntil = nowMs + (3 * 24 * 60 * 60 * 1000);
+                            msg = '⏳ Creator suspended for 3 days.';
+                          } else if (selection == '7d') {
+                            suspendUntil = nowMs + (7 * 24 * 60 * 60 * 1000);
+                            msg = '⏳ Creator suspended for 7 days.';
+                          } else if (selection == '14d') {
+                            suspendUntil = nowMs + (14 * 24 * 60 * 60 * 1000);
+                            msg = '⏳ Creator suspended for 14 days.';
+                          } else if (selection == 'active') {
+                            msg = '✅ Creator account activated.';
+                          }
+                          
+                          await firestore.collection('users').doc(creatorId).update({
+                            'banned': isBanned,
+                            'suspendedUntil': suspendUntil,
+                          });
+                          
+                          web.window.alert(msg);
+                        },
+                        [
+                          option(value: '', selected: true, [text('Choose suspension timeframe...')]),
+                          option(value: 'active', [text('✅ Active (Lift Penalties)')]),
+                          option(value: '3d', [text('⏳ Suspend 3 Days')]),
+                          option(value: '7d', [text('⏳ Suspend 1 Week')]),
+                          option(value: '14d', [text('⏳ Suspend 2 Weeks')]),
+                          option(value: 'ban', [text('🚫 Permanent Ban')]),
+                        ]
+                      )
+                    ]);
+                  }()),
                 ]),
 
                 // Modal Footer
@@ -630,8 +686,19 @@ class _ListingsPageState extends State<ListingsPage> {
       div(classes: 'w-full bg-white border border-zinc-200/50 rounded-[24px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col gap-4', [
         // Title / Info row
         div(classes: 'flex items-center justify-between', [
-          h3(classes: 'text-[11px] font-extrabold text-zinc-400 uppercase tracking-wider', [text('Database Query Filter')]),
-          if (_searchQuery.isNotEmpty || _locationFilter.isNotEmpty || _categoryFilter.isNotEmpty || _priceMin != null || _priceMax != null)
+          div(classes: 'flex items-center gap-4', [
+            h3(classes: 'text-[11px] font-extrabold text-zinc-400 uppercase tracking-wider', [text('Database Query Filter')]),
+            label(classes: 'flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-black text-red-500 hover:text-red-650 transition-colors', [
+              input(
+                classes: 'rounded border-red-300 text-red-600 focus:ring-red-500 h-3.5 w-3.5 cursor-pointer',
+                attributes: {'type': 'checkbox'},
+                checked: _showReportedOnly,
+                onChange: (v) => setState(() => _showReportedOnly = !_showReportedOnly)
+              ),
+              text('🚨 SHOW REPORTED ONLY')
+            ]),
+          ]),
+          if (_searchQuery.isNotEmpty || _locationFilter.isNotEmpty || _categoryFilter.isNotEmpty || _priceMin != null || _priceMax != null || _showReportedOnly)
             button(
               onClick: () => setState(() {
                 _searchQuery = '';
@@ -639,6 +706,7 @@ class _ListingsPageState extends State<ListingsPage> {
                 _categoryFilter = '';
                 _priceMin = null;
                 _priceMax = null;
+                _showReportedOnly = false;
               }),
               classes: 'text-[10px] font-bold text-indigo-500 hover:underline',
               [text('Clear Active Filters')]
@@ -710,6 +778,8 @@ class _ListingsPageState extends State<ListingsPage> {
         data: (listings) {
           // Perform high-fidelity client-side filtering on paginated batch
           final filteredListings = listings.where((item) {
+            if (_showReportedOnly && item.reportCount == 0) return false;
+
             // Keyword filter (recursively searches all properties)
             if (_searchQuery.isNotEmpty) {
               final q = _searchQuery.toLowerCase();

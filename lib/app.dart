@@ -16,6 +16,9 @@ import 'pages/users.dart';
 import 'pages/settings.dart';
 import 'pages/login.dart';
 import 'pages/tickets.dart';
+import 'pages/promos.dart';
+import 'pages/news.dart';
+import 'pages/reports.dart';
 
 /// Provider that streams the currently logged-in Admin staff member.
 final adminCurrentUserProvider = StreamProvider<User?>((ref) {
@@ -104,6 +107,9 @@ class AppShell extends StatelessComponent {
                   Route(path: '/chats', title: 'Live Support', builder: (context, state) => const ChatsPage()),
                   Route(path: '/tickets', title: 'Support Tickets', builder: (context, state) => const TicketsPage()),
                   Route(path: '/users', title: 'Users directory', builder: (context, state) => const UsersPage()),
+                  Route(path: '/promos', title: 'Promotions', builder: (context, state) => const PromosPage()),
+                  Route(path: '/news', title: 'News & Banners', builder: (context, state) => const NewsPage()),
+                  Route(path: '/reports', title: 'Abuse reports', builder: (context, state) => const ReportsPage()),
                   Route(
                     path: '/settings',
                     title: 'Settings console',

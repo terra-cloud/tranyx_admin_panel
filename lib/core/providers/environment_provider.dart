@@ -108,16 +108,25 @@ final activeEnvAuthUserProvider = StreamProvider<User?>((ref) {
             'bgChecked': true,
             'verificationLevel': 2,
             'createdAt': DateTime.now().millisecondsSinceEpoch,
-          }, SetOptions(merge: true)).catchError((e) => print('[AuthSync] Failed to seed user for ${auth.app.name}: $e'));
+          }, SetOptions(merge: true)).catchError((e) {
+            print('[AuthSync] Failed to seed user for ${auth.app.name}: $e');
+            return null;
+          });
         } else {
           // Doc exists and is NOT a known admin — only update non-role fields
           docRef.update({
             'uid': user.uid,
             'email': email,
             'updatedAt': DateTime.now().millisecondsSinceEpoch,
-          }).catchError((e) => print('[AuthSync] Failed to update metadata for ${auth.app.name}: $e'));
+          }).catchError((e) {
+            print('[AuthSync] Failed to update metadata for ${auth.app.name}: $e');
+            return null;
+          });
         }
-      }).catchError((e) => print('[AuthSync] Failed to check user doc for ${auth.app.name}: $e'));
+      }).catchError((e) {
+        print('[AuthSync] Failed to check user doc for ${auth.app.name}: $e');
+        return null;
+      });
     }
     return user;
   });

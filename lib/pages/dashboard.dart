@@ -9,6 +9,7 @@ import '../app.dart';
 import '../core/providers/environment_provider.dart';
 import 'listings.dart';
 import 'bookings.dart';
+import 'chats.dart';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -706,6 +707,11 @@ class _DashboardState extends State<Dashboard> {
   @override
   Component build(BuildContext context) {
     final user = context.watch(adminCurrentUserProvider).value;
+    final userEmail = user?.email ?? '';
+    final isAdmin = userEmail.toLowerCase().contains('admin') || userEmail == 'sarah.johnson@tranyx.com';
+    if (!isAdmin) {
+      _revenueTimeframe = '24h';
+    }
     final currentEnv = context.watch(activeEnvironmentProvider);
     final now = DateTime.now();
     final dateString = '${_dayNames[now.weekday - 1]}, ${now.day} ${_monthNames[now.month - 1]} ${now.year}';
@@ -720,6 +726,10 @@ class _DashboardState extends State<Dashboard> {
     final liveListings = context.watch(liveListingsProvider).value ?? LiveListingsBreakdown(total: 0, vehicles: 0, properties: 0, services: 0);
     final reportedListingsCount = context.watch(reportedListingsCountProvider).value ?? 0;
     final openTicketsCount = context.watch(openTicketsCountProvider).value ?? 0;
+    final pendingChatsCount = context.watch(supportChatsStreamProvider).maybeWhen(
+          data: (chats) => chats.where((c) => c.isPending).length,
+          orElse: () => 0,
+        );
 
     final maxRev = monthlyRevenue.fold(0.0, (a, b) => b > a ? b : a);
     final maxUsers = monthlyUsers.fold(0, (a, b) => b > a ? b : a);
@@ -801,6 +811,30 @@ class _DashboardState extends State<Dashboard> {
         ]),
       ]),
 
+      if (pendingChatsCount > 0 && !isAdmin)
+        div(
+          classes: 'p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center justify-between shadow-lg shadow-rose-500/5 animate-pulse relative overflow-hidden',
+          [
+            div(classes: 'absolute top-0 left-0 w-1.5 h-full bg-rose-600', []),
+            div(classes: 'flex items-center gap-3.5 pl-2', [
+              span(classes: 'text-xl', [text('🚨')]),
+              div(classes: 'flex flex-col', [
+                h4(classes: 'text-xs font-black text-rose-800 uppercase tracking-wider', [text('Urgent Live Support Alert')]),
+                p(classes: 'text-[11px] text-rose-650 font-bold', [
+                  text('There ${pendingChatsCount == 1 ? "is 1 pending support chat" : "are $pendingChatsCount pending support chats"} awaiting agent assignment!')
+                ]),
+              ]),
+            ]),
+            button(
+              onClick: () {
+                Router.of(context).push('/chats');
+              },
+              classes: 'px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md shadow-rose-600/10 cursor-pointer border-0 outline-none',
+              [text('Respond Now')]
+            ),
+          ]
+        ),
+
       // Quick action links
       div(classes: 'grid grid-cols-2 sm:grid-cols-4 gap-3', [
         _promoBanner('Verify KYC Queue', 'Approve identity verifications', 'bg-amber-50 border border-amber-100', '/kyc'),
@@ -837,9 +871,11 @@ class _DashboardState extends State<Dashboard> {
               onChange: (v) => setState(() => _revenueTimeframe = v.isNotEmpty ? v.first : '24h'),
               [
                 option(value: '24h', selected: _revenueTimeframe == '24h', [text('24h')]),
-                option(value: '7d', selected: _revenueTimeframe == '7d', [text('7 Days')]),
-                option(value: '30d', selected: _revenueTimeframe == '30d', [text('1 Month')]),
-                option(value: 'allTime', selected: _revenueTimeframe == 'allTime', [text('Accumulated')]),
+                if (isAdmin) ...[
+                  option(value: '7d', selected: _revenueTimeframe == '7d', [text('7 Days')]),
+                  option(value: '30d', selected: _revenueTimeframe == '30d', [text('1 Month')]),
+                  option(value: 'allTime', selected: _revenueTimeframe == 'allTime', [text('Accumulated')]),
+                ],
               ]
             ),
           ]),
@@ -873,9 +909,11 @@ class _DashboardState extends State<Dashboard> {
             ]),
             div(classes: 'grid grid-cols-2 gap-1 mt-1 text-[8px] font-bold text-zinc-400 border-t border-zinc-50 pt-1', [
               span([text('24H: ₱${detailedRevenue.rev24h.toStringAsFixed(0)}')]),
-              span([text('7D: ₱${detailedRevenue.rev7d.toStringAsFixed(0)}')]),
-              span([text('30D: ₱${detailedRevenue.rev30d.toStringAsFixed(0)}')]),
-              span([text('ACC: ₱${detailedRevenue.revAllTime.toStringAsFixed(0)}')]),
+              if (isAdmin) ...[
+                span([text('7D: ₱${detailedRevenue.rev7d.toStringAsFixed(0)}')]),
+                span([text('30D: ₱${detailedRevenue.rev30d.toStringAsFixed(0)}')]),
+                span([text('ACC: ₱${detailedRevenue.revAllTime.toStringAsFixed(0)}')]),
+              ],
             ]),
           ]),
         ]),
@@ -991,61 +1029,106 @@ class _DashboardState extends State<Dashboard> {
 
       ]),
 
-      // ── KYC Summary chips ──────────────────────────────────────
-      div(classes: 'flex flex-wrap gap-2', [
-        div(classes: 'flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-extrabold shadow-sm bg-[#e6f7ef] border-[#0fa95830]', [
-          span(classes: 'text-[#0fa958]', [text('✅ Approved KYC')]),
-          span(classes: 'px-2 py-0.5 rounded-full text-white text-[10px] font-black bg-[#0fa958]', [text(kycStats.approved.toString())]),
-        ]),
-        div(classes: 'flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-extrabold shadow-sm bg-amber-50 border-amber-200', [
-          span(classes: 'text-amber-700', [text('⏳ Pending KYC')]),
-          span(classes: 'px-2 py-0.5 rounded-full text-white text-[10px] font-black bg-amber-500', [text(kycStats.pending.toString())]),
-        ]),
-        div(classes: 'flex items-center gap-2 px-4 py-2 rounded-full border text-xs font-extrabold shadow-sm bg-red-50 border-red-200', [
-          span(classes: 'text-red-600', [text('❌ Rejected KYC')]),
-          span(classes: 'px-2 py-0.5 rounded-full text-white text-[10px] font-black bg-red-500', [text(kycStats.rejected.toString())]),
-        ]),
-      ]),
+
 
       // ── Charts Row ─────────────────────────────────────────────
-      div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5', [
+      if (isAdmin)
+        div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5', [
 
-        // Monthly Revenue Bar Chart (2/3 width)
-        div(classes: 'lg:col-span-2 bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]', [
-          div(classes: 'flex justify-between items-start border-b border-zinc-50 pb-4', [
-            div([
-              h3(classes: 'text-sm font-black text-zinc-900', [text('Monthly Revenue')]),
-              p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [text('Volume + 3% fee revenue — ${now.year}')]),
-            ]),
-            span(classes: 'text-[9px] font-extrabold px-3 py-1.5 bg-[#e6f7ef] text-[#0fa958] rounded-full border border-emerald-100', [
-              text('₱${monthlyRevenue[now.month - 1].toStringAsFixed(0)} this month'),
-            ]),
-          ]),
-          div(classes: 'h-52 flex items-end justify-between gap-1.5 pt-4 px-1 relative', [
-            for (var y = 1; y <= 4; y++)
-              div(classes: 'absolute left-0 right-0 border-t border-dashed border-zinc-100 pointer-events-none',
-                attributes: {'style': 'bottom: ${y * 22}%'}, []),
-            for (var i = 0; i < 12; i++)
-              div(classes: 'flex-1 flex flex-col items-center gap-1.5 z-10', [
-                div(classes: 'w-full flex flex-col justify-end rounded-xl overflow-hidden', attributes: {'style': 'height: 160px'}, [
-                  div(
-                    classes: 'w-full rounded-xl transition-all ${i == now.month - 1 ? "bg-gradient-to-t from-[#0fa958] to-emerald-400" : "bg-zinc-200 hover:bg-zinc-300"}',
-                    attributes: {
-                      'style': 'height: ${maxRev == 0 ? 8 : ((monthlyRevenue[i] / maxRev) * 90 + 8).clamp(8.0, 100.0)}%',
-                      'title': '₱${monthlyRevenue[i].toStringAsFixed(2)}',
-                    },
-                    [],
-                  ),
-                ]),
-                span(classes: 'text-[8px] font-extrabold text-zinc-400 uppercase', [text(_monthLabels[i])]),
+          // Monthly Revenue Bar Chart (2/3 width)
+          div(classes: 'lg:col-span-2 bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]', [
+            div(classes: 'flex justify-between items-start border-b border-zinc-50 pb-4', [
+              div([
+                h3(classes: 'text-sm font-black text-zinc-900', [text('Monthly Revenue')]),
+                p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [text('Volume + 3% fee revenue — ${now.year}')]),
               ]),
+              span(classes: 'text-[9px] font-extrabold px-3 py-1.5 bg-[#e6f7ef] text-[#0fa958] rounded-full border border-emerald-100', [
+                text('₱${monthlyRevenue[now.month - 1].toStringAsFixed(0)} this month'),
+              ]),
+            ]),
+            div(classes: 'h-52 flex items-end justify-between gap-1.5 pt-4 px-1 relative', [
+              for (var y = 1; y <= 4; y++)
+                div(classes: 'absolute left-0 right-0 border-t border-dashed border-zinc-100 pointer-events-none',
+                  attributes: {'style': 'bottom: ${y * 22}%'}, []),
+              for (var i = 0; i < 12; i++)
+                div(classes: 'flex-1 flex flex-col items-center gap-1.5 z-10', [
+                  div(classes: 'w-full flex flex-col justify-end rounded-xl overflow-hidden', attributes: {'style': 'height: 160px'}, [
+                    div(
+                      classes: 'w-full rounded-xl transition-all ${i == now.month - 1 ? "bg-gradient-to-t from-[#0fa958] to-emerald-400" : "bg-zinc-200 hover:bg-zinc-300"}',
+                      attributes: {
+                        'style': 'height: ${maxRev == 0 ? 8 : ((monthlyRevenue[i] / maxRev) * 90 + 8).clamp(8.0, 100.0)}%',
+                        'title': '₱${monthlyRevenue[i].toStringAsFixed(2)}',
+                      },
+                      [],
+                    ),
+                  ]),
+                  span(classes: 'text-[8px] font-extrabold text-zinc-400 uppercase', [text(_monthLabels[i])]),
+                ]),
+            ]),
           ]),
-        ]),
 
-        // Right column stacked
-        div(classes: 'flex flex-col gap-5', [
+          // Right column stacked
+          div(classes: 'flex flex-col gap-5', [
 
-          // KYC Pie Chart (CSS conic-gradient)
+            // KYC Pie Chart (CSS conic-gradient)
+            div(classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.01)]', [
+              div([
+                h3(classes: 'text-sm font-black text-zinc-900', [text('KYC Verifications')]),
+                p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [text('Identity submission breakdown')]),
+              ]),
+              div(classes: 'flex items-center gap-5', [
+                () {
+                  final approvedPct = (kycStats.approved / kycTotal) * 100;
+                  final pendingPct = (kycStats.pending / kycTotal) * 100;
+                  return div(attributes: {
+                    'style': 'width:88px;height:88px;border-radius:50%;flex-shrink:0;'
+                        'background:conic-gradient(#0fa958 0% ${approvedPct.toStringAsFixed(1)}%, #f59e0b ${approvedPct.toStringAsFixed(1)}% ${(approvedPct + pendingPct).toStringAsFixed(1)}%, #ef4444 ${(approvedPct + pendingPct).toStringAsFixed(1)}% 100%);'
+                        'box-shadow: 0 0 0 5px white, 0 0 0 6px #e5e7eb;',
+                  }, []);
+                }(),
+                div(classes: 'flex flex-col gap-2 flex-1', [
+                  for (final row in [
+                    ('Approved', kycStats.approved, '#0fa958'),
+                    ('Pending', kycStats.pending, '#f59e0b'),
+                    ('Rejected', kycStats.rejected, '#ef4444'),
+                  ])
+                    div(classes: 'flex items-center justify-between text-[10px]', [
+                      div(classes: 'flex items-center gap-1.5', [
+                        div(classes: 'w-2 h-2 rounded-full', attributes: {'style': 'background:${row.$3}'}, []),
+                        span(classes: 'font-bold text-zinc-600', [text(row.$1)]),
+                      ]),
+                      span(classes: 'font-extrabold text-zinc-800', [text(row.$2.toString())]),
+                    ]),
+                ]),
+              ]),
+            ]),
+
+            // New User Acquisitions mini chart
+            div(classes: 'flex-1 bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_8px_30px_rgba(0,0,0,0.01)]', [
+              div([
+                h3(classes: 'text-sm font-black text-zinc-900', [text('User Acquisitions')]),
+                p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [text('New signups per month — ${now.year}')]),
+              ]),
+              div(classes: 'flex items-end justify-between gap-1 mt-2', [
+                for (var i = 0; i < 12; i++)
+                  div(classes: 'flex-1 flex flex-col items-center gap-1', [
+                    div(
+                      classes: 'w-full rounded-md transition-all ${i == now.month - 1 ? "bg-indigo-400" : "bg-zinc-200 hover:bg-zinc-300"}',
+                      attributes: {
+                        'style': 'height: ${maxUsers == 0 ? 4 : ((monthlyUsers[i] / maxUsers) * 64 + 4).clamp(4.0, 68.0)}px',
+                        'title': '${monthlyUsers[i]} users',
+                      },
+                      [],
+                    ),
+                    span(classes: 'text-[7px] font-extrabold text-zinc-400 uppercase', [text(_monthLabels[i])]),
+                  ]),
+              ]),
+            ]),
+          ]),
+        ])
+      else
+        div(classes: 'grid grid-cols-1 lg:grid-cols-2 gap-5', [
+          // KYC Pie Chart (1/2 width)
           div(classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.01)]', [
             div([
               h3(classes: 'text-sm font-black text-zinc-900', [text('KYC Verifications')]),
@@ -1078,8 +1161,8 @@ class _DashboardState extends State<Dashboard> {
             ]),
           ]),
 
-          // New User Acquisitions mini chart
-          div(classes: 'flex-1 bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_8px_30px_rgba(0,0,0,0.01)]', [
+          // New User Acquisitions mini chart (1/2 width)
+          div(classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_8px_30px_rgba(0,0,0,0.01)]', [
             div([
               h3(classes: 'text-sm font-black text-zinc-900', [text('User Acquisitions')]),
               p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [text('New signups per month — ${now.year}')]),
@@ -1100,7 +1183,6 @@ class _DashboardState extends State<Dashboard> {
             ]),
           ]),
         ]),
-      ]),
 
       // ── Bottom Row: Top Agents + Platform Config ────────────────
       div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5', [

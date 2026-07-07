@@ -158,6 +158,8 @@ class UserProfileModel {
   final String? connectedWalletType;
   final String? role;
   final bool banned;
+  final int? suspendedUntil;
+  final int terraPoints;
 
   UserProfileModel({
     required this.uid,
@@ -171,6 +173,8 @@ class UserProfileModel {
     this.connectedWalletType,
     this.role,
     required this.banned,
+    this.suspendedUntil,
+    this.terraPoints = 0,
   });
 
   factory UserProfileModel.fromMap(String uid, Map<String, dynamic> map) {
@@ -186,6 +190,8 @@ class UserProfileModel {
       connectedWalletType: map['connectedWalletType'],
       role: map['role'],
       banned: map['banned'] ?? false,
+      suspendedUntil: map['suspendedUntil'] as int?,
+      terraPoints: map['terraPoints'] ?? 0,
     );
   }
 }
@@ -476,7 +482,7 @@ class _UsersPageState extends State<UsersPage> {
                       ]),
                     ]),
 
-                    div(classes: 'grid grid-cols-3 gap-3', [
+                    div(classes: 'grid grid-cols-4 gap-3', [
                       div(classes: 'bg-zinc-50/50 p-3 rounded-xl border border-zinc-100 flex flex-col gap-1', [
                         span(classes: 'text-[8px] font-extrabold text-zinc-400 uppercase tracking-wider', [text('ID Verified')]),
                         span(classes: 'px-2 py-0.5 rounded text-[8px] font-black w-max border '
@@ -494,6 +500,12 @@ class _UsersPageState extends State<UsersPage> {
                       div(classes: 'bg-zinc-50/50 p-3 rounded-xl border border-zinc-100 flex flex-col gap-1', [
                         span(classes: 'text-[8px] font-extrabold text-zinc-400 uppercase tracking-wider', [text('Trust Level')]),
                         span(classes: 'text-xs font-black text-zinc-900', [text('Level ${_selectedUser!.verificationLevel}')])
+                      ]),
+                      div(classes: 'bg-zinc-50/50 p-3 rounded-xl border border-zinc-100 flex flex-col gap-1', [
+                        span(classes: 'text-[8px] font-extrabold text-zinc-400 uppercase tracking-wider', [text('Terra Points')]),
+                        span(classes: 'text-xs font-black text-amber-600 flex items-center gap-1', [
+                          text('🪙 ${_selectedUser!.terraPoints} TP')
+                        ])
                       ]),
                     ]),
 
@@ -514,8 +526,26 @@ class _UsersPageState extends State<UsersPage> {
                         span(classes: 'text-zinc-400 font-semibold mt-1', [text('Not Linked')]),
                     ]),
 
-                    div(classes: 'flex flex-wrap gap-2 border-t border-zinc-100 pt-4 mt-2 justify-between items-center', [
-                      div(classes: 'flex gap-2', [
+                    // Account Status Block
+                    div(classes: 'bg-zinc-50/50 p-3.5 rounded-2xl border border-zinc-200/20 flex flex-col gap-1.5', [
+                      span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [text('Account Status')]),
+                      (() {
+                        final nowMs = DateTime.now().millisecondsSinceEpoch;
+                        if (_selectedUser!.banned) {
+                          return span(classes: 'px-2 py-0.5 rounded text-[10px] font-black w-max bg-red-50 text-red-500 border border-red-200', [text('🚫 Permanent Ban')]);
+                        } else if (_selectedUser!.suspendedUntil != null && _selectedUser!.suspendedUntil! > nowMs) {
+                          final date = DateTime.fromMillisecondsSinceEpoch(_selectedUser!.suspendedUntil!);
+                          return span(classes: 'px-2 py-0.5 rounded text-[10px] font-black w-max bg-amber-50 text-amber-600 border border-amber-200', [
+                            text('⏳ Suspended until ${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}')
+                          ]);
+                        } else {
+                          return span(classes: 'px-2 py-0.5 rounded text-[10px] font-black w-max bg-emerald-50 text-[#0fa958] border border-emerald-200', [text('✅ Active')]);
+                        }
+                      }())
+                    ]),
+
+                    div(classes: 'flex flex-wrap gap-4 border-t border-zinc-100 pt-4 mt-2 justify-between items-center', [
+                      div(classes: 'flex gap-2.5 items-center', [
                         if (!_selectedUser!.idVerified)
                           button(
                             onClick: () async {
@@ -544,23 +574,55 @@ class _UsersPageState extends State<UsersPage> {
                             classes: 'px-4 py-2 border border-zinc-200 hover:bg-zinc-50 text-zinc-700 text-[10px] font-black uppercase tracking-wide rounded-xl transition-all',
                             [text('Revoke KYC ID')]
                           ),
-                          
-                        button(
-                          onClick: () async {
-                            final firestore = context.read(firestoreProvider);
-                            final bannedState = !_selectedUser!.banned;
-                            await firestore.collection('users').doc(_selectedUser!.uid).update({
-                              'banned': bannedState,
-                            });
-                            _showToast(bannedState ? '🚫 User banned.' : '✅ User unbanned.');
-                            setState(() => _selectedUser = null);
-                          },
-                          classes: 'px-4 py-2 text-[10px] font-black uppercase tracking-wide rounded-xl transition-all '
-                              '${_selectedUser!.banned 
-                                  ? "bg-[#e2f1e9] text-[#0fa958] hover:bg-emerald-100" 
-                                  : "bg-red-50 text-red-500 hover:bg-red-100 border border-red-200"}',
-                          [text(_selectedUser!.banned ? 'Unban Account' : 'Ban Account')]
-                        ),
+
+                        // Manage Penalty Dropdown
+                        div(classes: 'flex items-center gap-2 bg-[#fafbfa] border border-zinc-200 rounded-xl px-3 py-1.5', [
+                          span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [text('Penalty:')]),
+                          select(
+                            classes: 'bg-transparent border-0 text-[10px] font-black text-zinc-700 focus:outline-none cursor-pointer',
+                            onChange: (v) async {
+                              if (v.isEmpty) return;
+                              final firestore = context.read(firestoreProvider);
+                              final selection = v.first;
+                              
+                              bool isBanned = false;
+                              int? suspendUntil;
+                              String msg = 'Status updated.';
+                              
+                              final nowMs = DateTime.now().millisecondsSinceEpoch;
+                              if (selection == 'ban') {
+                                isBanned = true;
+                                msg = '🚫 User permanently banned.';
+                              } else if (selection == '3d') {
+                                suspendUntil = nowMs + (3 * 24 * 60 * 60 * 1000);
+                                msg = '⏳ User suspended for 3 days.';
+                              } else if (selection == '7d') {
+                                suspendUntil = nowMs + (7 * 24 * 60 * 60 * 1000);
+                                msg = '⏳ User suspended for 7 days.';
+                              } else if (selection == '14d') {
+                                suspendUntil = nowMs + (14 * 24 * 60 * 60 * 1000);
+                                msg = '⏳ User suspended for 14 days.';
+                              } else {
+                                msg = '✅ User account activated.';
+                              }
+                              
+                              await firestore.collection('users').doc(_selectedUser!.uid).update({
+                                'banned': isBanned,
+                                'suspendedUntil': suspendUntil,
+                              });
+                              
+                              _showToast(msg);
+                              setState(() => _selectedUser = null);
+                            },
+                            [
+                              option(value: 'active', selected: !_selectedUser!.banned && (_selectedUser!.suspendedUntil == null || _selectedUser!.suspendedUntil! <= DateTime.now().millisecondsSinceEpoch), [text('Active')]),
+                              option(value: '3d', selected: _selectedUser!.suspendedUntil != null && _selectedUser!.suspendedUntil! > DateTime.now().millisecondsSinceEpoch && _selectedUser!.suspendedUntil! <= DateTime.now().millisecondsSinceEpoch + (4 * 24 * 60 * 60 * 1000), [text('Suspend 3 Days')]),
+                              option(value: '7d', selected: _selectedUser!.suspendedUntil != null && _selectedUser!.suspendedUntil! > DateTime.now().millisecondsSinceEpoch + (4 * 24 * 60 * 60 * 1000) && _selectedUser!.suspendedUntil! <= DateTime.now().millisecondsSinceEpoch + (8 * 24 * 60 * 60 * 1000), [text('Suspend 1 Week')]),
+                              option(value: '14d', selected: _selectedUser!.suspendedUntil != null && _selectedUser!.suspendedUntil! > DateTime.now().millisecondsSinceEpoch + (8 * 24 * 60 * 60 * 1000) && _selectedUser!.suspendedUntil! <= DateTime.now().millisecondsSinceEpoch + (15 * 24 * 60 * 60 * 1000), [text('Suspend 2 Weeks')]),
+                              option(value: 'ban', selected: _selectedUser!.banned, [text('Ban Account')]),
+                            ]
+                          )
+                        ]),
                       ]),
 
                       button(

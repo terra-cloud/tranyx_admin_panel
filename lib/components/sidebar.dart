@@ -7,6 +7,9 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'package:web/web.dart' as web;
 import '../app.dart';
 import '../core/providers/environment_provider.dart';
+import '../pages/kyc.dart';
+import '../pages/tickets.dart';
+import '../pages/reports.dart';
 
 class Sidebar extends StatefulComponent {
   const Sidebar({super.key});
@@ -36,8 +39,23 @@ class _SidebarState extends State<Sidebar> {
     final fb.User? user = context.watch(adminCurrentUserProvider).value;
     final currentPath = Router.of(context).matchList.uri.path;
 
+    final pendingKycCount = context.watch(kycQueueStreamProvider).maybeWhen(
+          data: (list) => list.where((k) => k.status.toLowerCase() == 'pending').length,
+          orElse: () => 0,
+        );
+
+    final openTicketsCount = context.watch(ticketsStreamProvider).maybeWhen(
+          data: (list) => list.where((t) => t.status.toLowerCase() != 'resolved').length,
+          orElse: () => 0,
+        );
+
+    final pendingReportsCount = context.watch(combinedReportedListingsProvider).maybeWhen(
+          data: (list) => list.length,
+          orElse: () => 0,
+        );
+
     // Helper to build a menu link item
-    Component buildMenuItem(String label, String path, String icon) {
+    Component buildMenuItem(String label, String path, String icon, {int? badgeCount}) {
       final isActive = currentPath == path || (path != '/' && currentPath.startsWith(path));
       return li(classes: 'w-full', [
         a(
@@ -50,9 +68,9 @@ class _SidebarState extends State<Sidebar> {
               '${isActive 
                   ? "bg-black text-white shadow-md shadow-black/10 scale-[1.02]" 
                   : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100/50"} '
-              '${_isCollapsed ? "justify-center px-0 w-11 h-11 mx-auto" : "w-full"}',
+              '${_isCollapsed ? "justify-center px-0 w-11 h-11 mx-auto relative" : "w-full"}',
           [
-            span(classes: 'text-base flex-shrink-0 flex items-center justify-center w-5 h-5', [
+            span(classes: 'text-base flex-shrink-0 flex items-center justify-center w-5 h-5 relative', [
               icon.endsWith('.png')
                   ? img(
                       src: icon,
@@ -60,16 +78,24 @@ class _SidebarState extends State<Sidebar> {
                           '${isActive ? "invert brightness-0" : "opacity-60 hover:opacity-100"}',
                       alt: label,
                     )
-                  : text(icon)
+                  : text(icon),
+              if (_isCollapsed && badgeCount != null && badgeCount > 0)
+                span(classes: 'absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center border border-white shadow-sm', [
+                  text('$badgeCount')
+                ])
             ]),
             if (!_isCollapsed)
               span(classes: 'truncate font-bold ml-1', [text(label)]),
+            if (!_isCollapsed && badgeCount != null && badgeCount > 0)
+              span(classes: 'ml-auto px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black leading-none flex items-center justify-center min-w-[16px] h-4', [
+                text('$badgeCount')
+              ]),
           ],
         )
       ]);
     }
 
-    Component buildMobileMenuItem(String label, String path, String icon) {
+    Component buildMobileMenuItem(String label, String path, String icon, {int? badgeCount}) {
       final isActive = currentPath == path || (path != '/' && currentPath.startsWith(path));
       return li([
         a(
@@ -94,6 +120,10 @@ class _SidebarState extends State<Sidebar> {
                   : text(icon)
             ]),
             span(classes: 'ml-1', [text(label)]),
+            if (badgeCount != null && badgeCount > 0)
+              span(classes: 'ml-auto px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black leading-none flex items-center justify-center min-w-[16px] h-4', [
+                text('$badgeCount')
+              ]),
           ],
         )
       ]);
@@ -121,10 +151,13 @@ class _SidebarState extends State<Sidebar> {
               buildMenuItem('Dashboard', '/', '/images/icon_dashboard.png'),
               buildMenuItem('Listings', '/listings', '/images/icon_listings.png'),
               buildMenuItem('Bookings', '/bookings', '/images/icon_bookings.png'),
-              buildMenuItem('KYC Verification', '/kyc', '/images/icon_kyc.png'),
+              buildMenuItem('KYC Verification', '/kyc', '/images/icon_kyc.png', badgeCount: pendingKycCount),
               buildMenuItem('Live Support', '/chats', '/images/icon_chats.png'),
-              buildMenuItem('Support Tickets', '/tickets', '🎟️'),
+              buildMenuItem('Support Tickets', '/tickets', '/images/icon_tickets.png', badgeCount: openTicketsCount),
               buildMenuItem('User Accounts', '/users', '/images/icon_users.png'),
+              buildMenuItem('Promotions', '/promos', '/images/icon_promos.png'),
+              buildMenuItem('News & Banners', '/news', '📰'),
+              buildMenuItem('Abuse Reports', '/reports', '🚩', badgeCount: pendingReportsCount),
               buildMenuItem('System Console', '/settings', '/images/icon_settings.png'),
             ]),
           ]),
@@ -209,10 +242,13 @@ class _SidebarState extends State<Sidebar> {
               buildMobileMenuItem('Dashboard', '/', '/images/icon_dashboard.png'),
               buildMobileMenuItem('Listings', '/listings', '/images/icon_listings.png'),
               buildMobileMenuItem('Bookings', '/bookings', '/images/icon_bookings.png'),
-              buildMobileMenuItem('KYC Verification', '/kyc', '/images/icon_kyc.png'),
+              buildMobileMenuItem('KYC Verification', '/kyc', '/images/icon_kyc.png', badgeCount: pendingKycCount),
               buildMobileMenuItem('Live Support', '/chats', '/images/icon_chats.png'),
-              buildMobileMenuItem('Support Tickets', '/tickets', '🎟️'),
+              buildMobileMenuItem('Support Tickets', '/tickets', '/images/icon_tickets.png', badgeCount: openTicketsCount),
               buildMobileMenuItem('User Accounts', '/users', '/images/icon_users.png'),
+              buildMobileMenuItem('Promotions', '/promos', '/images/icon_promos.png'),
+              buildMobileMenuItem('News & Banners', '/news', '📰'),
+              buildMobileMenuItem('Abuse Reports', '/reports', '🚩', badgeCount: pendingReportsCount),
               buildMobileMenuItem('System Console', '/settings', '/images/icon_settings.png'),
             ]),
             div(classes: 'border-t border-zinc-200 pt-4 flex justify-between items-center', [
