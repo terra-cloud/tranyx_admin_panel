@@ -138,12 +138,16 @@ class ChatMessage {
 // ── Providers ──────────────────────────────────────────────────
 final chatUsersStreamProvider = StreamProvider<List<UserProfileModel>>((ref) {
   final firestore = ref.watch(firestoreProvider);
-  return firestore.collection('users').snapshots().map((snap) {
-    return snap.docs.map((doc) => UserProfileModel.fromMap(doc.id, doc.data())).toList();
-  }).handleError((err) {
-    print('[Chats] Users stream error: $err');
-    return <UserProfileModel>[];
-  });
+  return firestore
+      .collection('users')
+      .snapshots()
+      .map((snap) {
+        return snap.docs.map((doc) => UserProfileModel.fromMap(doc.id, doc.data())).toList();
+      })
+      .handleError((err) {
+        print('[Chats] Users stream error: $err');
+        return <UserProfileModel>[];
+      });
 });
 
 /// Streams all support agents: anyone who is NOT admin and NOT a plain platform user
@@ -152,13 +156,12 @@ final supportAgentsProvider = StreamProvider<List<UserProfileModel>>((ref) {
   return firestore
       .collection('users')
       .snapshots()
-      .map((snap) => snap.docs
-          .map((doc) => UserProfileModel.fromMap(doc.id, doc.data()))
-          .where((u) {
-            final r = (u.role ?? '').toLowerCase().trim();
-            return r.isNotEmpty && r != 'admin' && r != 'user';
-          })
-          .toList())
+      .map(
+        (snap) => snap.docs.map((doc) => UserProfileModel.fromMap(doc.id, doc.data())).where((u) {
+          final r = (u.role ?? '').toLowerCase().trim();
+          return r.isNotEmpty && r != 'admin' && r != 'user';
+        }).toList(),
+      )
       .handleError((_) => <UserProfileModel>[]);
 });
 
@@ -170,9 +173,9 @@ final supportChatsStreamProvider = StreamProvider<List<SupportChat>>((ref) {
       .snapshots()
       .map((snap) => snap.docs.map((doc) => SupportChat.fromMap(doc.id, doc.data())).toList())
       .handleError((err) {
-    print('[Chats] Support chats stream error: $err');
-    return <SupportChat>[];
-  });
+        print('[Chats] Support chats stream error: $err');
+        return <SupportChat>[];
+      });
 });
 
 final activeChatRoomIdProvider = StateProvider<String?>((ref) => null);
@@ -189,9 +192,9 @@ final activeChatMessagesStreamProvider = StreamProvider<List<ChatMessage>>((ref)
       .snapshots()
       .map((snap) => snap.docs.map((doc) => ChatMessage.fromMap(doc.data())).toList())
       .handleError((err) {
-    print('[Chats] Active messages stream error: $err');
-    return <ChatMessage>[];
-  });
+        print('[Chats] Active messages stream error: $err');
+        return <ChatMessage>[];
+      });
 });
 
 final chatReplyTextProvider = StateProvider<String>((ref) => '');
@@ -230,10 +233,7 @@ class _ChatsPageState extends State<ChatsPage> {
       final now = DateTime.now().millisecondsSinceEpoch;
       final cutoff = now - (_kReassignTimeoutSec * 1000);
 
-      final snap = await firestore
-          .collection('support_chats')
-          .where('status', isEqualTo: 'assigned')
-          .get();
+      final snap = await firestore.collection('support_chats').where('status', isEqualTo: 'assigned').get();
 
       for (final doc in snap.docs) {
         final data = doc.data();
@@ -345,7 +345,10 @@ class _ChatsPageState extends State<ChatsPage> {
 
     String getCustomerName(List<String> uIds) {
       for (final id in uIds) {
-        final match = users.firstWhere((u) => u.uid == id, orElse: () => UserProfileModel(uid: '', name: '', email: ''));
+        final match = users.firstWhere(
+          (u) => u.uid == id,
+          orElse: () => UserProfileModel(uid: '', name: '', email: ''),
+        );
         if (match.uid.isNotEmpty && (match.role == null || match.role == 'user')) return match.name;
       }
       return uIds.isNotEmpty ? '${uIds.first.substring(0, min(6, uIds.first.length))}...' : 'Unknown';
@@ -353,15 +356,31 @@ class _ChatsPageState extends State<ChatsPage> {
 
     Component buildStatusBadge(SupportChat chat) {
       if (chat.isPending) {
-        return span(classes: 'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-amber-100 text-amber-700 border border-amber-200', [text('Pending')]);
+        return span(
+          classes:
+              'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-amber-100 text-amber-700 border border-amber-200',
+          [Component.text('Pending')],
+        );
       }
       if (chat.isAssigned) {
-        return span(classes: 'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-blue-100 text-blue-700 border border-blue-200', [text('Assigned')]);
+        return span(
+          classes:
+              'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-blue-100 text-blue-700 border border-blue-200',
+          [Component.text('Assigned')],
+        );
       }
       if (chat.isActive) {
-        return span(classes: 'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-[#e6f7ef] text-[#0fa958] border border-[#b7e6d0]', [text('Active')]);
+        return span(
+          classes:
+              'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-[#e6f7ef] text-[#0fa958] border border-[#b7e6d0]',
+          [Component.text('Active')],
+        );
       }
-      return span(classes: 'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-zinc-100 text-zinc-500 border border-zinc-200', [text('Resolved')]);
+      return span(
+        classes:
+            'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-zinc-100 text-zinc-500 border border-zinc-200',
+        [Component.text('Resolved')],
+      );
     }
 
     Component buildChatItem(SupportChat chat) {
@@ -374,45 +393,47 @@ class _ChatsPageState extends State<ChatsPage> {
         onClick: () {
           context.read(activeChatRoomIdProvider.notifier).state = chat.id;
         },
-        classes: 'w-full text-left p-3.5 rounded-xl border text-xs transition-all flex flex-col gap-1.5 '
+        classes:
+            'w-full text-left p-3.5 rounded-xl border text-xs transition-all flex flex-col gap-1.5 '
             '${isSelected ? 'bg-zinc-150 border-zinc-300 shadow-sm' : 'bg-zinc-50/50 border-transparent hover:bg-zinc-100/50'}'
             '${isHighPriority && !isSelected ? ' border-amber-200/80 bg-amber-50/50' : ''}',
         [
           div(classes: 'flex justify-between items-start gap-1', [
-            span(classes: 'font-bold text-zinc-800 truncate flex-1', [text(getCustomerName(chat.userIds))]),
+            span(classes: 'font-bold text-zinc-800 truncate flex-1', [Component.text(getCustomerName(chat.userIds))]),
             buildStatusBadge(chat),
           ]),
           div(classes: 'flex items-center justify-between gap-1', [
-            p(classes: 'text-[10px] text-zinc-500 truncate flex-1', [text(chat.lastMessage)]),
-            span(classes: 'text-[9px] text-zinc-400 flex-shrink-0', [text(_formatTime(chat.updatedAt))]),
+            p(classes: 'text-[10px] text-zinc-500 truncate flex-1', [Component.text(chat.lastMessage)]),
+            span(classes: 'text-[9px] text-zinc-400 flex-shrink-0', [Component.text(_formatTime(chat.updatedAt))]),
           ]),
           // Waiting + agent info row
           div(classes: 'flex items-center justify-between mt-0.5', [
-            span(classes: 'text-[9px] font-bold '
-                '${isHighPriority ? "text-amber-600" : "text-zinc-400"}', [
-              text(isHighPriority ? '⚠ $waiting' : waiting)
-            ]),
+            span(
+              classes:
+                  'text-[9px] font-bold '
+                  '${isHighPriority ? "text-amber-600" : "text-zinc-400"}',
+              [Component.text(isHighPriority ? '⚠ $waiting' : waiting)],
+            ),
             if (chat.assignedAgentName != null)
               span(classes: 'text-[9px] text-zinc-400 font-semibold truncate max-w-[100px]', [
-                text('→ ${chat.assignedAgentName!}')
+                Component.text('→ ${chat.assignedAgentName!}'),
               ])
             else if (chat.reassignCount > 0)
               span(classes: 'text-[9px] text-rose-500 font-bold', [
-                text('↺ ${chat.reassignCount}× reassigned')
-              ])
+                Component.text('↺ ${chat.reassignCount}× reassigned'),
+              ]),
           ]),
         ],
       );
     }
 
     return div(classes: 'flex-1 p-6 md:p-8 flex flex-col gap-4 max-w-7xl mx-auto w-full h-[calc(100vh-80px)] bg-[#eff2f0]', [
-
       // Header
       div(classes: 'flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-200/50 pb-5', [
         div(classes: 'flex flex-col gap-1', [
-          h1(classes: 'text-xl font-black tracking-tight text-zinc-900', [text('Live Customer Service')]),
+          h1(classes: 'text-xl font-black tracking-tight text-zinc-900', [Component.text('Live Customer Service')]),
           p(classes: 'text-xs text-zinc-400 font-medium', [
-            text('Manage support chats, agent assignments, and escalations.')
+            Component.text('Manage support chats, agent assignments, and escalations.'),
           ]),
         ]),
         // Summary badges
@@ -423,18 +444,26 @@ class _ChatsPageState extends State<ChatsPage> {
             final active = chats.where((c) => c.isActive).length;
             return div(classes: 'flex items-center gap-2', [
               if (pending > 0)
-                div(classes: 'flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 border border-amber-200 rounded-full text-[10px] font-extrabold text-amber-700', [
-                  span(classes: 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse', []),
-                  text('$pending Pending')
-                ]),
+                div(
+                  classes:
+                      'flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 border border-amber-200 rounded-full text-[10px] font-extrabold text-amber-700',
+                  [
+                    span(classes: 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse', []),
+                    Component.text('$pending Pending'),
+                  ],
+                ),
               if (assigned > 0)
-                div(classes: 'flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 border border-blue-200 rounded-full text-[10px] font-extrabold text-blue-700', [
-                  text('$assigned Assigned')
-                ]),
+                div(
+                  classes:
+                      'flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 border border-blue-200 rounded-full text-[10px] font-extrabold text-blue-700',
+                  [Component.text('$assigned Assigned')],
+                ),
               if (active > 0)
-                div(classes: 'flex items-center gap-1.5 px-3 py-1.5 bg-[#e6f7ef] border border-[#b7e6d0] rounded-full text-[10px] font-extrabold text-[#0fa958]', [
-                  text('$active Active')
-                ]),
+                div(
+                  classes:
+                      'flex items-center gap-1.5 px-3 py-1.5 bg-[#e6f7ef] border border-[#b7e6d0] rounded-full text-[10px] font-extrabold text-[#0fa958]',
+                  [Component.text('$active Active')],
+                ),
             ]);
           },
           loading: () => div(classes: '', []),
@@ -444,237 +473,294 @@ class _ChatsPageState extends State<ChatsPage> {
 
       // New request alert banner
       if (alerts.isNotEmpty)
-        div(classes: 'w-full p-3 bg-amber-50 border border-amber-300 rounded-2xl flex items-center gap-3 animate-pulse shadow-sm', [
-          span(classes: 'text-xl flex-shrink-0', [text('🔔')]),
-          div(classes: 'flex flex-col gap-0.5 flex-1', [
-            span(classes: 'text-xs font-extrabold text-amber-800', [text('New support request${alerts.length > 1 ? "s" : ""} incoming!')]),
-            span(classes: 'text-[10px] text-amber-700 font-medium', [
-              text('${alerts.length} customer${alerts.length > 1 ? "s" : ""} waiting for an agent. Claim a chat to assist.')
+        div(
+          classes:
+              'w-full p-3 bg-amber-50 border border-amber-300 rounded-2xl flex items-center gap-3 animate-pulse shadow-sm',
+          [
+            span(classes: 'text-xl flex-shrink-0', [Component.text('🔔')]),
+            div(classes: 'flex flex-col gap-0.5 flex-1', [
+              span(classes: 'text-xs font-extrabold text-amber-800', [
+                Component.text('New support request${alerts.length > 1 ? "s" : ""} incoming!'),
+              ]),
+              span(classes: 'text-[10px] text-amber-700 font-medium', [
+                Component.text(
+                  '${alerts.length} customer${alerts.length > 1 ? "s" : ""} waiting for an agent. Claim a chat to assist.',
+                ),
+              ]),
             ]),
-          ]),
-          button(
-            onClick: () => context.read(newChatAlertProvider.notifier).state = [],
-            classes: 'text-amber-500 hover:text-amber-800 font-bold text-xs px-2 py-1 rounded-lg hover:bg-amber-100 transition-colors flex-shrink-0',
-            [text('Dismiss')]
-          )
-        ]),
+            button(
+              onClick: () => context.read(newChatAlertProvider.notifier).state = [],
+              classes:
+                  'text-amber-500 hover:text-amber-800 font-bold text-xs px-2 py-1 rounded-lg hover:bg-amber-100 transition-colors flex-shrink-0',
+              [Component.text('Dismiss')],
+            ),
+          ],
+        ),
 
       // Main chat layout
       div(classes: 'flex-grow flex gap-5 overflow-hidden min-h-0', [
-
         // Left: Chat Room List
-        div(classes: 'w-80 flex flex-col gap-2 bg-white border border-zinc-200/50 rounded-[24px] p-4 overflow-y-auto no-scrollbar shadow-[0_8px_30px_rgba(0,0,0,0.01)]', [
-          span(classes: 'text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2 mb-1', [text('Support Queue')]),
-          chatsAsync.when(
-            data: (chats) {
-              if (chats.isEmpty) {
-                return div(classes: 'text-center p-8 text-xs text-zinc-450', [text('No support chats found.')]);
-              }
-              // Sort: pending first, then by priority (reassign count + wait time), then updated desc
-              final sorted = [...chats];
-              sorted.sort((a, b) {
-                // Resolved go last
-                if (a.isResolved && !b.isResolved) return 1;
-                if (!a.isResolved && b.isResolved) return -1;
-                // Pending goes first
-                if (a.isPending && !b.isPending) return -1;
-                if (!a.isPending && b.isPending) return 1;
-                // Higher reassign count (escalated) goes higher
-                final rDiff = b.reassignCount.compareTo(a.reassignCount);
-                if (rDiff != 0) return rDiff;
-                // Older wait time goes first
-                return a.requestedAt.compareTo(b.requestedAt);
-              });
-              return .fragment([for (final chat in sorted) buildChatItem(chat)]);
-            },
-            loading: () => div(classes: 'flex justify-center items-center py-10', [
-              div(classes: 'animate-spin h-5 w-5 border-2 border-zinc-200 border-t-indigo-500 rounded-full', [])
+        div(
+          classes:
+              'w-80 flex flex-col gap-2 bg-white border border-zinc-200/50 rounded-[24px] p-4 overflow-y-auto no-scrollbar shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+          [
+            span(classes: 'text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2 mb-1', [
+              Component.text('Support Queue'),
             ]),
-            error: (err, _) => text('Error: $err'),
-          ),
-        ]),
+            chatsAsync.when(
+              data: (chats) {
+                if (chats.isEmpty) {
+                  return div(classes: 'text-center p-8 text-xs text-zinc-450', [
+                    Component.text('No support chats found.'),
+                  ]);
+                }
+                // Sort: pending first, then by priority (reassign count + wait time), then updated desc
+                final sorted = [...chats];
+                sorted.sort((a, b) {
+                  // Resolved go last
+                  if (a.isResolved && !b.isResolved) return 1;
+                  if (!a.isResolved && b.isResolved) return -1;
+                  // Pending goes first
+                  if (a.isPending && !b.isPending) return -1;
+                  if (!a.isPending && b.isPending) return 1;
+                  // Higher reassign count (escalated) goes higher
+                  final rDiff = b.reassignCount.compareTo(a.reassignCount);
+                  if (rDiff != 0) return rDiff;
+                  // Older wait time goes first
+                  return a.requestedAt.compareTo(b.requestedAt);
+                });
+                return .fragment([for (final chat in sorted) buildChatItem(chat)]);
+              },
+              loading: () => div(classes: 'flex justify-center items-center py-10', [
+                div(classes: 'animate-spin h-5 w-5 border-2 border-zinc-200 border-t-indigo-500 rounded-full', []),
+              ]),
+              error: (err, _) => Component.text('Error: $err'),
+            ),
+          ],
+        ),
 
         // Right: Chat Pane
-        div(classes: 'flex-1 bg-white border border-zinc-200/50 rounded-[28px] overflow-hidden flex flex-col shadow-[0_8px_30px_rgba(0,0,0,0.015)]', [
-          if (activeChatId == null)
-            div(classes: 'flex-grow flex flex-col items-center justify-center text-center p-8 text-zinc-450', [
-              span(classes: 'text-3xl mb-2', [text('💬')]),
-              h3(classes: 'text-sm font-bold text-zinc-850', [text('Select a chat')]),
-              p(classes: 'text-xs text-zinc-500 mt-1', [text('Choose a support request from the queue to view the conversation.')]),
-            ])
-          else
-            // Find the selected chat
-            ...() {
-              final chat = (chatsAsync.value ?? []).where((c) => c.id == activeChatId).firstOrNull;
-              if (chat == null) return [div(classes: 'flex-grow flex items-center justify-center', [text('Loading...')])];
+        div(
+          classes:
+              'flex-1 bg-white border border-zinc-200/50 rounded-[28px] overflow-hidden flex flex-col shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+          [
+            if (activeChatId == null)
+              div(classes: 'flex-grow flex flex-col items-center justify-center text-center p-8 text-zinc-450', [
+                span(classes: 'text-3xl mb-2', [Component.text('💬')]),
+                h3(classes: 'text-sm font-bold text-zinc-850', [Component.text('Select a chat')]),
+                p(classes: 'text-xs text-zinc-500 mt-1', [
+                  Component.text('Choose a support request from the queue to view the conversation.'),
+                ]),
+              ])
+            else
+              // Find the selected chat
+              ...() {
+                final chat = (chatsAsync.value ?? []).where((c) => c.id == activeChatId).firstOrNull;
+                if (chat == null)
+                  return [
+                    div(classes: 'flex-grow flex items-center justify-center', [Component.text('Loading...')]),
+                  ];
 
-              final isMyChat = chat.assignedAgentId == currentUserId;
-              final canReply = !isAdmin && (chat.assignedAgentId == null || isMyChat);
+                final isMyChat = chat.assignedAgentId == currentUserId;
+                final canReply = !isAdmin && (chat.assignedAgentId == null || isMyChat);
 
-              return [
-                // Chat header with agent assignment info
-                div(classes: 'bg-[#f8faf9] px-5 py-3.5 border-b border-zinc-100 flex justify-between items-center gap-3', [
-                  div(classes: 'flex flex-col gap-0.5 min-w-0', [
-                    div(classes: 'flex items-center gap-2', [
-                      span(classes: 'w-2 h-2 rounded-full ${chat.isPending ? "bg-amber-500" : chat.isResolved ? "bg-zinc-400" : "bg-[#0fa958]"} ${chat.isPending ? "animate-pulse" : ""}', []),
-                      span(classes: 'text-xs font-black text-zinc-800 truncate', [
-                        text(getCustomerName(chat.userIds))
+                return [
+                  // Chat header with agent assignment info
+                  div(classes: 'bg-[#f8faf9] px-5 py-3.5 border-b border-zinc-100 flex justify-between items-center gap-3', [
+                    div(classes: 'flex flex-col gap-0.5 min-w-0', [
+                      div(classes: 'flex items-center gap-2', [
+                        span(
+                          classes:
+                              'w-2 h-2 rounded-full ${chat.isPending
+                                  ? "bg-amber-500"
+                                  : chat.isResolved
+                                  ? "bg-zinc-400"
+                                  : "bg-[#0fa958]"} ${chat.isPending ? "animate-pulse" : ""}',
+                          [],
+                        ),
+                        span(classes: 'text-xs font-black text-zinc-800 truncate', [
+                          Component.text(getCustomerName(chat.userIds)),
+                        ]),
                       ]),
+                      if (chat.assignedAgentName != null)
+                        span(classes: 'text-[10px] text-zinc-400 font-medium truncate', [
+                          Component.text(
+                            'Agent: ${chat.assignedAgentName!}${chat.assignedAgentEmail != null ? " (${chat.assignedAgentEmail})" : ""}',
+                          ),
+                        ])
+                      else
+                        span(classes: 'text-[10px] text-amber-600 font-bold', [
+                          Component.text('Unassigned — waiting for agent'),
+                        ]),
                     ]),
-                    if (chat.assignedAgentName != null)
-                      span(classes: 'text-[10px] text-zinc-400 font-medium truncate', [
-                        text('Agent: ${chat.assignedAgentName!}${chat.assignedAgentEmail != null ? " (${chat.assignedAgentEmail})" : ""}')
-                      ])
-                    else
-                      span(classes: 'text-[10px] text-amber-600 font-bold', [text('Unassigned — waiting for agent')])
+                    div(classes: 'flex items-center gap-2 flex-shrink-0', [
+                      // Waiting time chip
+                      span(
+                        classes:
+                            'text-[9px] px-2 py-1 rounded-full font-extrabold uppercase tracking-wide '
+                            '${chat.waitingTime.inMinutes >= 5 ? "bg-amber-100 text-amber-700" : "bg-zinc-100 text-zinc-500"}',
+                        [Component.text(_formatWaiting(chat.waitingTime))],
+                      ),
+                      if (chat.reassignCount > 0)
+                        span(classes: 'text-[9px] px-2 py-1 rounded-full font-extrabold bg-rose-100 text-rose-600', [
+                          Component.text('↺ ${chat.reassignCount}× reassigned'),
+                        ]),
+                      // Claim button (for non-admin agents when chat is pending or timed out)
+                      if (!isAdmin && !chat.isResolved && !isMyChat)
+                        button(
+                          onClick: () => _claimChat(chat),
+                          classes:
+                              'px-3 py-1.5 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold rounded-lg transition-colors',
+                          [Component.text(chat.isPending ? 'Claim Chat' : 'Take Over')],
+                        ),
+                      // Force reassign (admin only)
+                      if (isAdmin && !chat.isPending && !chat.isResolved)
+                        button(
+                          onClick: () => _forceReassign(chat),
+                          classes:
+                              'px-3 py-1.5 bg-zinc-100 hover:bg-amber-100 hover:text-amber-800 text-zinc-600 text-[10px] font-extrabold rounded-lg transition-colors border border-zinc-200',
+                          [Component.text('Force Reassign')],
+                        ),
+                      // Resolve button
+                      if (!chat.isResolved && (isAdmin || isMyChat))
+                        button(
+                          onClick: () => _resolveChat(chat),
+                          classes:
+                              'px-3 py-1.5 bg-[#0fa958]/10 hover:bg-[#0fa958]/20 text-[#0fa958] text-[10px] font-extrabold rounded-lg transition-colors border border-[#0fa958]/20',
+                          [Component.text('Resolve')],
+                        ),
+                    ]),
                   ]),
-                  div(classes: 'flex items-center gap-2 flex-shrink-0', [
-                    // Waiting time chip
-                    span(classes: 'text-[9px] px-2 py-1 rounded-full font-extrabold uppercase tracking-wide '
-                        '${chat.waitingTime.inMinutes >= 5 ? "bg-amber-100 text-amber-700" : "bg-zinc-100 text-zinc-500"}', [
-                      text(_formatWaiting(chat.waitingTime))
-                    ]),
-                    if (chat.reassignCount > 0)
-                      span(classes: 'text-[9px] px-2 py-1 rounded-full font-extrabold bg-rose-100 text-rose-600', [
-                        text('↺ ${chat.reassignCount}× reassigned')
+
+                  // Messages area
+                  div(classes: 'flex-grow p-5 flex flex-col gap-4 overflow-y-auto no-scrollbar bg-[#fafbfa]', [
+                    messagesAsync.when(
+                      data: (chatMessages) {
+                        if (chatMessages.isEmpty) {
+                          return div(classes: 'text-center p-8 text-xs text-zinc-500', [
+                            Component.text('No messages yet. Waiting for conversation to begin.'),
+                          ]);
+                        }
+                        return .fragment([
+                          for (final msg in chatMessages)
+                            div(
+                              classes:
+                                  'flex flex-col max-w-[80%] '
+                                  '${msg.isStaff ? 'self-end items-end' : 'self-start items-start'}',
+                              [
+                                div(
+                                  classes:
+                                      'px-4 py-2.5 rounded-2xl text-xs '
+                                      '${msg.isStaff ? 'bg-black text-white rounded-tr-none shadow-md shadow-black/5' : 'bg-white border border-zinc-200 text-zinc-800 rounded-tl-none'}',
+                                  [Component.text(msg.content)],
+                                ),
+                                span(classes: 'text-[8px] text-zinc-400 mt-1 px-1 font-bold', [
+                                  Component.text(
+                                    msg.isStaff
+                                        ? '${msg.senderName.toUpperCase()}${msg.agentEmail != null ? " (${msg.agentEmail})" : ""} • ${msg.createdAt > 0 ? _formatTime(msg.createdAt) : ""}'
+                                        : '${msg.senderName.toUpperCase()} • ${msg.createdAt > 0 ? _formatTime(msg.createdAt) : ""}',
+                                  ),
+                                ]),
+                              ],
+                            ),
+                        ]);
+                      },
+                      loading: () => div(classes: 'flex justify-center items-center py-10', [
+                        div(
+                          classes: 'animate-spin h-5 w-5 border-2 border-zinc-200 border-t-indigo-500 rounded-full',
+                          [],
+                        ),
                       ]),
-                    // Claim button (for non-admin agents when chat is pending or timed out)
-                    if (!isAdmin && !chat.isResolved && !isMyChat)
+                      error: (err, _) => Component.text('Error: $err'),
+                    ),
+                  ]),
+
+                  // Reply box — read-only for admin, locked for unassigned agent, active for assigned agent
+                  if (chat.isResolved)
+                    div(
+                      classes: 'p-4 bg-zinc-50 border-t border-zinc-100 text-center text-xs text-zinc-400 font-bold',
+                      [Component.text('✅ This conversation has been resolved.')],
+                    )
+                  else if (isAdmin)
+                    div(
+                      classes:
+                          'p-4 bg-zinc-50 border-t border-zinc-100 text-center text-xs text-zinc-500 font-bold flex items-center justify-center gap-2',
+                      [
+                        span(classes: 'text-sm', [Component.text('🔒')]),
+                        Component.text('Read-Only Mode: Only assigned support agents can send messages.'),
+                      ],
+                    )
+                  else if (!canReply && chat.assignedAgentId != null)
+                    div(classes: 'p-4 bg-zinc-50 border-t border-zinc-100 flex items-center justify-center gap-3', [
+                      span(classes: 'text-[10px] text-zinc-400 font-semibold', [
+                        Component.text('Assigned to ${chat.assignedAgentName ?? "another agent"}. '),
+                      ]),
                       button(
                         onClick: () => _claimChat(chat),
-                        classes: 'px-3 py-1.5 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold rounded-lg transition-colors',
-                        [text(chat.isPending ? 'Claim Chat' : 'Take Over')]
+                        classes:
+                            'px-3 py-1.5 bg-zinc-900 hover:bg-black text-white text-[10px] font-extrabold rounded-lg transition-colors',
+                        [Component.text('Take Over Chat')],
                       ),
-                    // Force reassign (admin only)
-                    if (isAdmin && !chat.isPending && !chat.isResolved)
+                    ])
+                  else if (chat.isPending && !isAdmin)
+                    div(classes: 'p-4 bg-amber-50 border-t border-amber-200 flex items-center justify-center gap-3', [
+                      span(classes: 'text-[10px] text-amber-700 font-bold', [
+                        Component.text('Claim this chat to start messaging.'),
+                      ]),
                       button(
-                        onClick: () => _forceReassign(chat),
-                        classes: 'px-3 py-1.5 bg-zinc-100 hover:bg-amber-100 hover:text-amber-800 text-zinc-600 text-[10px] font-extrabold rounded-lg transition-colors border border-zinc-200',
-                        [text('Force Reassign')]
+                        onClick: () => _claimChat(chat),
+                        classes:
+                            'px-3 py-1.5 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold rounded-lg transition-colors shadow-sm',
+                        [Component.text('Claim & Start')],
                       ),
-                    // Resolve button
-                    if (!chat.isResolved && (isAdmin || isMyChat))
+                    ])
+                  else
+                    div(classes: 'p-3 bg-white border-t border-zinc-100 flex gap-2', [
+                      input(
+                        value: replyText,
+                        onInput: (v) => context.read(chatReplyTextProvider.notifier).state = v as String,
+                        classes:
+                            'flex-1 bg-[#f3f6f4] border border-zinc-200 rounded-lg px-4 py-2.5 text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black',
+                        attributes: {'placeholder': 'Type support response...'},
+                      ),
                       button(
-                        onClick: () => _resolveChat(chat),
-                        classes: 'px-3 py-1.5 bg-[#0fa958]/10 hover:bg-[#0fa958]/20 text-[#0fa958] text-[10px] font-extrabold rounded-lg transition-colors border border-[#0fa958]/20',
-                        [text('Resolve')]
+                        onClick: () async {
+                          final textVal = context.read(chatReplyTextProvider).trim();
+                          if (textVal.isEmpty) return;
+
+                          final firestore = context.read(firestoreProvider);
+                          final u = context.read(adminCurrentUserProvider).value;
+                          final senderName = (u?.displayName?.isNotEmpty == true)
+                              ? u!.displayName!
+                              : (u?.email != null ? u!.email!.split('@').first : 'Support Agent');
+
+                          await firestore.collection('support_chats').doc(activeChatId!).collection('messages').add({
+                            'senderId': u?.uid ?? 'agent',
+                            'senderName': senderName,
+                            'content': textVal,
+                            'createdAt': DateTime.now().millisecondsSinceEpoch,
+                            'isStaff': true,
+                            'agentEmail': u?.email,
+                          });
+
+                          await firestore.collection('support_chats').doc(activeChatId!).set({
+                            'lastMessage': textVal,
+                            'updatedAt': DateTime.now().millisecondsSinceEpoch,
+                            'status': 'active',
+                            'lastSenderName': senderName,
+                          }, SetOptions(merge: true));
+
+                          context.read(chatReplyTextProvider.notifier).state = '';
+                        },
+                        classes:
+                            'px-5 py-2.5 bg-black hover:bg-zinc-800 text-white text-xs font-bold rounded-lg transition-colors shadow-sm',
+                        [Component.text('Send')],
                       ),
-                  ])
-                ]),
-
-                // Messages area
-                div(classes: 'flex-grow p-5 flex flex-col gap-4 overflow-y-auto no-scrollbar bg-[#fafbfa]', [
-                  messagesAsync.when(
-                    data: (chatMessages) {
-                      if (chatMessages.isEmpty) {
-                        return div(classes: 'text-center p-8 text-xs text-zinc-500', [text('No messages yet. Waiting for conversation to begin.')]);
-                      }
-                      return .fragment([
-                        for (final msg in chatMessages)
-                          div(classes: 'flex flex-col max-w-[80%] '
-                              '${msg.isStaff ? 'self-end items-end' : 'self-start items-start'}', [
-                            div(classes: 'px-4 py-2.5 rounded-2xl text-xs '
-                                '${msg.isStaff
-                                    ? 'bg-black text-white rounded-tr-none shadow-md shadow-black/5'
-                                    : 'bg-white border border-zinc-200 text-zinc-800 rounded-tl-none'}', [
-                              text(msg.content)
-                            ]),
-                            span(classes: 'text-[8px] text-zinc-400 mt-1 px-1 font-bold', [
-                              text(msg.isStaff
-                                  ? '${msg.senderName.toUpperCase()}${msg.agentEmail != null ? " (${msg.agentEmail})" : ""} • ${msg.createdAt > 0 ? _formatTime(msg.createdAt) : ""}'
-                                  : '${msg.senderName.toUpperCase()} • ${msg.createdAt > 0 ? _formatTime(msg.createdAt) : ""}')
-                            ]),
-                          ])
-                      ]);
-                    },
-                    loading: () => div(classes: 'flex justify-center items-center py-10', [
-                      div(classes: 'animate-spin h-5 w-5 border-2 border-zinc-200 border-t-indigo-500 rounded-full', [])
                     ]),
-                    error: (err, _) => text('Error: $err'),
-                  )
-                ]),
-
-                // Reply box — read-only for admin, locked for unassigned agent, active for assigned agent
-                if (chat.isResolved)
-                  div(classes: 'p-4 bg-zinc-50 border-t border-zinc-100 text-center text-xs text-zinc-400 font-bold', [
-                    text('✅ This conversation has been resolved.')
-                  ])
-                else if (isAdmin)
-                  div(classes: 'p-4 bg-zinc-50 border-t border-zinc-100 text-center text-xs text-zinc-500 font-bold flex items-center justify-center gap-2', [
-                    span(classes: 'text-sm', [text('🔒')]),
-                    text('Read-Only Mode: Only assigned support agents can send messages.')
-                  ])
-                else if (!canReply && chat.assignedAgentId != null)
-                  div(classes: 'p-4 bg-zinc-50 border-t border-zinc-100 flex items-center justify-center gap-3', [
-                    span(classes: 'text-[10px] text-zinc-400 font-semibold', [
-                      text('Assigned to ${chat.assignedAgentName ?? "another agent"}. '),
-                    ]),
-                    button(
-                      onClick: () => _claimChat(chat),
-                      classes: 'px-3 py-1.5 bg-zinc-900 hover:bg-black text-white text-[10px] font-extrabold rounded-lg transition-colors',
-                      [text('Take Over Chat')]
-                    ),
-                  ])
-                else if (chat.isPending && !isAdmin)
-                  div(classes: 'p-4 bg-amber-50 border-t border-amber-200 flex items-center justify-center gap-3', [
-                    span(classes: 'text-[10px] text-amber-700 font-bold', [text('Claim this chat to start messaging.')]),
-                    button(
-                      onClick: () => _claimChat(chat),
-                      classes: 'px-3 py-1.5 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold rounded-lg transition-colors shadow-sm',
-                      [text('Claim & Start')]
-                    ),
-                  ])
-                else
-                  div(classes: 'p-3 bg-white border-t border-zinc-100 flex gap-2', [
-                    input(
-                      value: replyText,
-                      onInput: (v) => context.read(chatReplyTextProvider.notifier).state = v as String,
-                      classes: 'flex-1 bg-[#f3f6f4] border border-zinc-200 rounded-lg px-4 py-2.5 text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black',
-                      attributes: {'placeholder': 'Type support response...'},
-                    ),
-                    button(
-                      onClick: () async {
-                        final textVal = context.read(chatReplyTextProvider).trim();
-                        if (textVal.isEmpty) return;
-
-                        final firestore = context.read(firestoreProvider);
-                        final u = context.read(adminCurrentUserProvider).value;
-                        final senderName = (u?.displayName?.isNotEmpty == true)
-                            ? u!.displayName!
-                            : (u?.email != null ? u!.email!.split('@').first : 'Support Agent');
-
-                        await firestore
-                            .collection('support_chats')
-                            .doc(activeChatId!)
-                            .collection('messages')
-                            .add({
-                          'senderId': u?.uid ?? 'agent',
-                          'senderName': senderName,
-                          'content': textVal,
-                          'createdAt': DateTime.now().millisecondsSinceEpoch,
-                          'isStaff': true,
-                          'agentEmail': u?.email,
-                        });
-
-                        await firestore
-                            .collection('support_chats')
-                            .doc(activeChatId!)
-                            .set({
-                          'lastMessage': textVal,
-                          'updatedAt': DateTime.now().millisecondsSinceEpoch,
-                          'status': 'active',
-                          'lastSenderName': senderName,
-                        }, SetOptions(merge: true));
-
-                        context.read(chatReplyTextProvider.notifier).state = '';
-                      },
-                      classes: 'px-5 py-2.5 bg-black hover:bg-zinc-800 text-white text-xs font-bold rounded-lg transition-colors shadow-sm',
-                      [text('Send')]
-                    )
-                  ])
-              ];
-            }(),
-        ]),
+                ];
+              }(),
+          ],
+        ),
       ]),
     ]);
   }

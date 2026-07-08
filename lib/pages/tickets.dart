@@ -33,6 +33,7 @@ class TicketModel {
       if (val is String) return int.tryParse(val) ?? 0;
       return 0;
     }
+
     return TicketModel(
       id: id,
       uid: map['uid'] ?? 'unknown',
@@ -74,28 +75,34 @@ class TicketsPage extends StatelessComponent {
     final isAdmin = userEmail.toLowerCase().contains('admin') || userEmail == 'sarah.johnson@tranyx.com';
 
     String getUserName(String uid) {
-      final match = users.firstWhere((u) => u.uid == uid, orElse: () => UserProfileModel(
-        uid: '',
-        name: 'Unknown User',
-        email: '',
-        idVerified: false,
-        bgChecked: false,
-        verificationLevel: 0,
-        banned: false,
-      ));
+      final match = users.firstWhere(
+        (u) => u.uid == uid,
+        orElse: () => UserProfileModel(
+          uid: '',
+          name: 'Unknown User',
+          email: '',
+          idVerified: false,
+          bgChecked: false,
+          verificationLevel: 0,
+          banned: false,
+        ),
+      );
       return match.name;
     }
 
     String getUserEmail(String uid) {
-      final match = users.firstWhere((u) => u.uid == uid, orElse: () => UserProfileModel(
-        uid: '',
-        name: '',
-        email: 'N/A',
-        idVerified: false,
-        bgChecked: false,
-        verificationLevel: 0,
-        banned: false,
-      ));
+      final match = users.firstWhere(
+        (u) => u.uid == uid,
+        orElse: () => UserProfileModel(
+          uid: '',
+          name: '',
+          email: 'N/A',
+          idVerified: false,
+          bgChecked: false,
+          verificationLevel: 0,
+          banned: false,
+        ),
+      );
       return match.email;
     }
 
@@ -103,9 +110,9 @@ class TicketsPage extends StatelessComponent {
       // Modern Header block
       div(classes: 'flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-200/50 pb-5', [
         div(classes: 'flex flex-col gap-1', [
-          h1(classes: 'text-xl font-black tracking-tight text-zinc-900', [text('Support Tickets Manager')]),
+          h1(classes: 'text-xl font-black tracking-tight text-zinc-900', [Component.text('Support Tickets Manager')]),
           p(classes: 'text-xs text-zinc-400 font-medium', [
-            text('Review, escalate, and resolve customer support and system troubleshooting tickets.'),
+            Component.text('Review, escalate, and resolve customer support and system troubleshooting tickets.'),
           ]),
         ]),
       ]),
@@ -118,10 +125,10 @@ class TicketsPage extends StatelessComponent {
               classes:
                   'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
               [
-                span(classes: 'text-3xl mb-3', [text('🎟️')]),
-                h3(classes: 'text-sm font-bold text-zinc-900', [text('No tickets submitted')]),
+                span(classes: 'text-3xl mb-3', [Component.text('🎟️')]),
+                h3(classes: 'text-sm font-bold text-zinc-900', [Component.text('No tickets submitted')]),
                 p(classes: 'text-xs text-zinc-500 mt-1', [
-                  text('No active support tickets exist in this environment database.'),
+                  Component.text('No active support tickets exist in this environment database.'),
                 ]),
               ],
             );
@@ -137,13 +144,13 @@ class TicketsPage extends StatelessComponent {
                       'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
                   [
                     tr([
-                      th(classes: 'p-5', [text('Ticket ID')]),
-                      th(classes: 'p-5', [text('User / Reporter')]),
-                      th(classes: 'p-5', [text('Subject & Category')]),
-                      th(classes: 'p-5', [text('Description')]),
-                      th(classes: 'p-5 text-center', [text('Status')]),
-                      th(classes: 'p-5 text-center', [text('Created')]),
-                      if (isAdmin) th(classes: 'p-5 text-right', [text('Control')]),
+                      th(classes: 'p-5', [Component.text('Ticket ID')]),
+                      th(classes: 'p-5', [Component.text('User / Reporter')]),
+                      th(classes: 'p-5', [Component.text('Subject & Category')]),
+                      th(classes: 'p-5', [Component.text('Description')]),
+                      th(classes: 'p-5 text-center', [Component.text('Status')]),
+                      th(classes: 'p-5 text-center', [Component.text('Created')]),
+                      if (isAdmin) th(classes: 'p-5 text-right', [Component.text('Control')]),
                     ]),
                   ],
                 ),
@@ -151,34 +158,38 @@ class TicketsPage extends StatelessComponent {
                   for (final ticket in tickets)
                     tr(classes: 'hover:bg-[#fcfdfc] transition-colors', [
                       td(classes: 'p-5 font-mono text-[10px] text-zinc-400 font-bold', [
-                        text('#${ticket.id.substring(ticket.id.length > 6 ? ticket.id.length - 6 : 0)}')
+                        Component.text('#${ticket.id.substring(ticket.id.length > 6 ? ticket.id.length - 6 : 0)}'),
                       ]),
                       td(classes: 'p-5 font-bold text-zinc-900', [
                         div(classes: 'flex flex-col gap-0.5', [
-                          span([text(getUserName(ticket.uid))]),
-                          span(classes: 'text-[9px] text-zinc-400 font-mono', [text(getUserEmail(ticket.uid))]),
+                          span([Component.text(getUserName(ticket.uid))]),
+                          span(classes: 'text-[9px] text-zinc-400 font-mono', [
+                            Component.text(getUserEmail(ticket.uid)),
+                          ]),
                         ]),
                       ]),
                       td(classes: 'p-5 text-zinc-700', [
                         div(classes: 'flex flex-col gap-0.5', [
-                          span(classes: 'font-bold text-zinc-800', [text(ticket.subject)]),
+                          span(classes: 'font-bold text-zinc-800', [Component.text(ticket.subject)]),
                           span(
-                            classes: 'text-[8px] font-black uppercase tracking-wider text-indigo-500 bg-indigo-50 border border-indigo-500/10 px-1.5 py-0.5 rounded w-max mt-0.5',
-                            [text(ticket.category)]
+                            classes:
+                                'text-[8px] font-black uppercase tracking-wider text-indigo-500 bg-indigo-50 border border-indigo-500/10 px-1.5 py-0.5 rounded w-max mt-0.5',
+                            [Component.text(ticket.category)],
                           ),
                         ]),
                       ]),
                       td(classes: 'p-5 text-zinc-500 font-medium max-w-xs leading-relaxed', [
-                        text(ticket.description)
+                        Component.text(ticket.description),
                       ]),
                       td(classes: 'p-5 text-center', [
                         select(
-                          classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-3 py-1.5 text-[10px] font-extrabold focus:outline-none transition-all '
+                          classes:
+                              'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-3 py-1.5 text-[10px] font-extrabold focus:outline-none transition-all '
                               '${ticket.status.toLowerCase() == 'open'
                                   ? 'text-amber-600 bg-amber-50'
                                   : ticket.status.toLowerCase() == 'in progress'
-                                      ? 'text-blue-600 bg-blue-50'
-                                      : 'text-[#0fa958] bg-[#e2f1e9]'}',
+                                  ? 'text-blue-600 bg-blue-50'
+                                  : 'text-[#0fa958] bg-[#e2f1e9]'}',
                           onChange: (value) async {
                             final list = value as List<String>;
                             final statusVal = list.isNotEmpty ? list.first : 'Open';
@@ -188,16 +199,22 @@ class TicketsPage extends StatelessComponent {
                             });
                           },
                           [
-                            option(value: 'Open', selected: ticket.status == 'Open', [text('OPEN')]),
-                            option(value: 'In Progress', selected: ticket.status == 'In Progress', [text('IN PROGRESS')]),
-                            option(value: 'Resolved', selected: ticket.status == 'Resolved', [text('RESOLVED')]),
-                          ]
-                        )
+                            option(value: 'Open', selected: ticket.status == 'Open', [Component.text('OPEN')]),
+                            option(value: 'In Progress', selected: ticket.status == 'In Progress', [
+                              Component.text('IN PROGRESS'),
+                            ]),
+                            option(value: 'Resolved', selected: ticket.status == 'Resolved', [
+                              Component.text('RESOLVED'),
+                            ]),
+                          ],
+                        ),
                       ]),
                       td(classes: 'p-5 text-center text-zinc-400 font-semibold', [
-                        text(ticket.createdAt > 0
-                            ? '${DateTime.fromMillisecondsSinceEpoch(ticket.createdAt).year}-${DateTime.fromMillisecondsSinceEpoch(ticket.createdAt).month.toString().padLeft(2, "0")}-${DateTime.fromMillisecondsSinceEpoch(ticket.createdAt).day.toString().padLeft(2, "0")}'
-                            : 'N/A')
+                        Component.text(
+                          ticket.createdAt > 0
+                              ? '${DateTime.fromMillisecondsSinceEpoch(ticket.createdAt).year}-${DateTime.fromMillisecondsSinceEpoch(ticket.createdAt).month.toString().padLeft(2, "0")}-${DateTime.fromMillisecondsSinceEpoch(ticket.createdAt).day.toString().padLeft(2, "0")}'
+                              : 'N/A',
+                        ),
                       ]),
                       if (isAdmin)
                         td(classes: 'p-5 text-right', [
@@ -206,9 +223,10 @@ class TicketsPage extends StatelessComponent {
                               final firestore = context.read(firestoreProvider);
                               await firestore.collection('supportTickets').doc(ticket.id).delete();
                             },
-                            classes: 'px-3 py-1.5 bg-red-50 hover:bg-red-100/50 border border-red-200 text-red-500 text-[10px] font-extrabold uppercase rounded-full transition-all shadow-sm',
-                            [text('Delete')]
-                          )
+                            classes:
+                                'px-3 py-1.5 bg-red-50 hover:bg-red-100/50 border border-red-200 text-red-500 text-[10px] font-extrabold uppercase rounded-full transition-all shadow-sm',
+                            [Component.text('Delete')],
+                          ),
                         ]),
                     ]),
                 ]),
@@ -223,7 +241,7 @@ class TicketsPage extends StatelessComponent {
         ),
         error: (err, _) => div(
           classes: 'p-6 bg-red-50/5 border border-red-500/10 text-red-500 text-xs rounded-[20px] font-mono shadow-sm',
-          [text('Error loading tickets: $err')],
+          [Component.text('Error loading tickets: $err')],
         ),
       ),
     ]);

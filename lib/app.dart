@@ -71,7 +71,9 @@ class AppShell extends StatelessComponent {
                                       'animate-spin h-8 w-8 border-2 border-zinc-200 border-t-indigo-500 rounded-full mb-4',
                                   [],
                                 ),
-                                h3(classes: 'text-sm font-bold text-zinc-800', [text('Synchronizing Authentication')]),
+                                h3(classes: 'text-sm font-bold text-zinc-800', [
+                                  Component.text('Synchronizing Authentication'),
+                                ]),
                                 p(classes: 'text-xs text-zinc-400 mt-1 max-w-xs leading-relaxed', [
                                   Component.text(
                                     'Establishing secure connection with the active database environment...',
@@ -93,7 +95,7 @@ class AppShell extends StatelessComponent {
                         ),
                         error: (err, _) => div(
                           classes: 'flex-1 p-8 text-red-500 font-mono text-xs',
-                          [text('Auth sync failed: $err')],
+                          [Component.text('Auth sync failed: $err')],
                         ),
                       ),
                     ]),
@@ -122,7 +124,7 @@ class AppShell extends StatelessComponent {
         },
         error: (error, stack) => div(
           classes: 'w-full min-h-screen flex justify-center items-center p-8 text-red-500 font-bold',
-          [text('Error loading portal: $error')],
+          [Component.text('Error loading portal: $error')],
         ),
         loading: () => div(classes: 'w-full min-h-screen flex justify-center items-center', [
           div(classes: 'animate-spin h-8 w-8 border-4 border-zinc-200 border-t-indigo-500 rounded-full', []),
@@ -149,7 +151,7 @@ class HeaderPanel extends StatelessComponent {
         classes:
             'px-5 py-1.5 text-xs font-bold transition-all duration-200 '
             '${isActive ? 'bg-black text-white rounded-full' : 'text-zinc-500 hover:text-zinc-900'}',
-        [text(label)],
+        [Component.text(label)],
       );
     }
 
@@ -158,9 +160,9 @@ class HeaderPanel extends StatelessComponent {
       div(classes: 'flex items-center gap-3', [
         div(
           classes: 'bg-[#0fa958] text-white w-9 h-9 rounded-full flex items-center justify-center font-black text-sm',
-          [text('T')],
+          [Component.text('T')],
         ),
-        span(classes: 'font-black text-sm tracking-wide text-zinc-900 uppercase', [text('Tranyx')]),
+        span(classes: 'font-black text-sm tracking-wide text-zinc-900 uppercase', [Component.text('Tranyx')]),
       ]),
 
       // Center: Capsules (Overview/Env selector style)
@@ -179,7 +181,7 @@ class HeaderPanel extends StatelessComponent {
         button(
           classes:
               'p-2 bg-white border border-zinc-200/50 rounded-full text-zinc-700 hover:text-black shadow-sm transition-all focus:outline-none',
-          [text('🔔')],
+          [Component.text('🔔')],
         ),
         div(classes: 'flex items-center gap-2.5', [
           div(
@@ -189,7 +191,9 @@ class HeaderPanel extends StatelessComponent {
               if ((user as dynamic)?.photoURL != null)
                 img(src: (user as dynamic).photoURL!, classes: 'w-full h-full object-cover', alt: 'Avatar')
               else
-                text((user as dynamic)?.email != null ? (user as dynamic).email!.substring(0, 1).toUpperCase() : 'A'),
+                Component.text(
+                  (user as dynamic)?.email != null ? (user as dynamic).email!.substring(0, 1).toUpperCase() : 'A',
+                ),
             ],
           ),
         ]),

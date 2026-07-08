@@ -350,10 +350,10 @@ class _NewsPageState extends State<NewsPage> {
       div(classes: 'flex justify-between items-center', [
         div([
           h1(classes: 'text-2xl font-black text-zinc-900 uppercase tracking-wider', [
-            text('News & Promotional Banners'),
+            Component.text('News & Promotional Banners'),
           ]),
           p(classes: 'text-xs text-zinc-500 font-semibold', [
-            text('Configure banners, custom buttons, links, and promo codes for mobile & web apps.'),
+            Component.text('Configure banners, custom buttons, links, and promo codes for mobile & web apps.'),
           ]),
         ]),
       ]),
@@ -365,9 +365,11 @@ class _NewsPageState extends State<NewsPage> {
           // Previews panel (Side-by-side)
           div(classes: 'bg-white rounded-3xl border border-zinc-200/60 p-6 space-y-6 shadow-sm', [
             div(classes: 'flex justify-between items-center border-b border-zinc-100 pb-3', [
-              h2(classes: 'text-sm font-bold text-zinc-800 uppercase tracking-wider', [text('Live Position Previews')]),
+              h2(classes: 'text-sm font-bold text-zinc-800 uppercase tracking-wider', [
+                Component.text('Live Position Previews'),
+              ]),
               span(classes: 'px-2.5 py-1 text-[10px] bg-indigo-50 text-indigo-500 rounded-lg font-bold', [
-                text('X, Y Coordinates Overlay'),
+                Component.text('X, Y Coordinates Overlay'),
               ]),
             ]),
 
@@ -375,7 +377,7 @@ class _NewsPageState extends State<NewsPage> {
               // Web layout card preview
               div(classes: 'space-y-3', [
                 p(classes: 'text-xs font-bold text-zinc-500 uppercase tracking-wider text-center', [
-                  text('💻 Web View Preview'),
+                  Component.text('💻 Web View Preview'),
                 ]),
                 div(
                   classes:
@@ -384,7 +386,7 @@ class _NewsPageState extends State<NewsPage> {
                     if (_imageUrl.trim().isNotEmpty)
                       img(src: _imageUrl.trim(), classes: 'w-full h-full object-cover')
                     else
-                      text('No Banner Image Uploaded'),
+                      Component.text('No Banner Image Uploaded'),
 
                     // Web Button Overlay
                     if (_buttonText.trim().isNotEmpty && bX != null && bY != null && bW != null && bH != null)
@@ -399,7 +401,7 @@ class _NewsPageState extends State<NewsPage> {
                               'border-radius: ${_buttonBorderRadius}px; '
                               'padding: ${_buttonPaddingV}px ${_buttonPaddingH}px;',
                         },
-                        [text(_buttonText)],
+                        [Component.text(_buttonText)],
                       ),
                   ],
                 ),
@@ -408,7 +410,7 @@ class _NewsPageState extends State<NewsPage> {
               // Mobile layout card preview
               div(classes: 'space-y-3', [
                 p(classes: 'text-xs font-bold text-zinc-500 uppercase tracking-wider text-center', [
-                  text('📱 Mobile View Preview'),
+                  Component.text('📱 Mobile View Preview'),
                 ]),
                 div(classes: 'flex justify-center', [
                   // Smartphone wrapper mockup frame
@@ -424,7 +426,7 @@ class _NewsPageState extends State<NewsPage> {
                           if (_imageUrl.trim().isNotEmpty)
                             img(src: _imageUrl.trim(), classes: 'w-full h-full object-cover')
                           else
-                            text('No Image'),
+                            Component.text('No Image'),
 
                           // Mobile Button Overlay
                           if (_buttonText.trim().isNotEmpty && bX != null && bY != null && bW != null && bH != null)
@@ -439,7 +441,7 @@ class _NewsPageState extends State<NewsPage> {
                                     'border-radius: ${(double.tryParse(_buttonBorderRadius) ?? 8) * 0.6}px; '
                                     'padding: ${(double.tryParse(_buttonPaddingV) ?? 8) * 0.6}px ${(double.tryParse(_buttonPaddingH) ?? 16) * 0.6}px;',
                               },
-                              [text(_buttonText)],
+                              [Component.text(_buttonText)],
                             ),
                         ],
                       ),
@@ -447,15 +449,15 @@ class _NewsPageState extends State<NewsPage> {
                       div(classes: 'bg-zinc-800 p-2.5 rounded-xl mt-2 space-y-1', [
                         div(classes: 'flex justify-between items-center', [
                           span(classes: 'px-2 py-0.5 rounded text-[8px] font-bold bg-green-500/10 text-green-400', [
-                            text(_category.toUpperCase()),
+                            Component.text(_category.toUpperCase()),
                           ]),
-                          span(classes: 'text-[8px] text-zinc-500', [text('Today')]),
+                          span(classes: 'text-[8px] text-zinc-500', [Component.text('Today')]),
                         ]),
                         p(classes: 'text-[10px] font-bold text-zinc-200 truncate', [
-                          text(_title.isEmpty ? 'Post Title' : _title),
+                          Component.text(_title.isEmpty ? 'Post Title' : _title),
                         ]),
                         p(classes: 'text-[8px] text-zinc-400 line-clamp-2 leading-relaxed', [
-                          text(_content.isEmpty ? 'Post description and content goes here...' : _content),
+                          Component.text(_content.isEmpty ? 'Post description and content goes here...' : _content),
                         ]),
                       ]),
                     ],
@@ -469,7 +471,7 @@ class _NewsPageState extends State<NewsPage> {
           div(classes: 'bg-white rounded-3xl border border-zinc-200/60 overflow-hidden shadow-sm', [
             div(classes: 'px-6 py-4 border-b border-zinc-100 flex justify-between items-center', [
               h2(classes: 'text-sm font-bold text-zinc-800 uppercase tracking-wider', [
-                text('Active Banners & Postings'),
+                Component.text('Active Banners & Postings'),
               ]),
             ]),
 
@@ -477,19 +479,19 @@ class _NewsPageState extends State<NewsPage> {
               data: (posts) {
                 if (posts.isEmpty) {
                   return div(classes: 'p-12 text-center text-zinc-400 text-sm font-semibold', [
-                    text('No promotional banners found. Create one above!'),
+                    Component.text('No promotional banners found. Create one above!'),
                   ]);
                 }
 
                 return table(classes: 'w-full text-left border-collapse text-xs', [
                   thead(classes: 'bg-zinc-50 border-b border-zinc-150/40 text-zinc-500 font-extrabold uppercase', [
                     tr([
-                      th(classes: 'px-6 py-3', [text('Banner')]),
-                      th(classes: 'px-6 py-3', [text('Title')]),
-                      th(classes: 'px-6 py-3', [text('Category')]),
-                      th(classes: 'px-6 py-3', [text('Action Type')]),
-                      th(classes: 'px-6 py-3', [text('Status')]),
-                      th(classes: 'px-6 py-3 text-right', [text('Actions')]),
+                      th(classes: 'px-6 py-3', [Component.text('Banner')]),
+                      th(classes: 'px-6 py-3', [Component.text('Title')]),
+                      th(classes: 'px-6 py-3', [Component.text('Category')]),
+                      th(classes: 'px-6 py-3', [Component.text('Action Type')]),
+                      th(classes: 'px-6 py-3', [Component.text('Status')]),
+                      th(classes: 'px-6 py-3 text-right', [Component.text('Actions')]),
                     ]),
                   ]),
                   tbody(classes: 'divide-y divide-zinc-100 font-medium text-zinc-700', [
@@ -499,9 +501,9 @@ class _NewsPageState extends State<NewsPage> {
                           if (p.imageUrl.isNotEmpty)
                             img(src: p.imageUrl, classes: 'w-16 h-9 rounded object-cover border border-zinc-200')
                           else
-                            span(classes: 'text-zinc-350 italic', [text('No image')]),
+                            span(classes: 'text-zinc-350 italic', [Component.text('No image')]),
                         ]),
-                        td(classes: 'px-6 py-4 font-bold text-zinc-900', [text(p.title)]),
+                        td(classes: 'px-6 py-4 font-bold text-zinc-900', [Component.text(p.title)]),
                         td(classes: 'px-6 py-4', [
                           span(
                             classes:
@@ -512,17 +514,17 @@ class _NewsPageState extends State<NewsPage> {
                                     : p.category == 'announcement'
                                     ? 'bg-amber-50 text-amber-600'
                                     : 'bg-purple-50 text-purple-600'}',
-                            [text(p.category)],
+                            [Component.text(p.category)],
                           ),
                         ]),
                         td(classes: 'px-6 py-4 font-semibold', [
-                          text(p.actionType.toUpperCase() + (p.promoCode != null ? ' (${p.promoCode})' : '')),
+                          Component.text(p.actionType.toUpperCase() + (p.promoCode != null ? ' (${p.promoCode})' : '')),
                         ]),
                         td(classes: 'px-6 py-4', [
                           span(
                             classes:
                                 'px-2 py-0.5 rounded font-bold text-[9px] ${p.isActive ? "bg-green-50 text-green-600" : "bg-zinc-100 text-zinc-400"}',
-                            [text(p.isActive ? 'ACTIVE' : 'DRAFT')],
+                            [Component.text(p.isActive ? 'ACTIVE' : 'DRAFT')],
                           ),
                         ]),
                         td(classes: 'px-6 py-4 text-right space-x-2', [
@@ -530,13 +532,13 @@ class _NewsPageState extends State<NewsPage> {
                             classes:
                                 'px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl font-bold transition-all',
                             events: {'click': (_) => _selectPost(p)},
-                            [text('Edit')],
+                            [Component.text('Edit')],
                           ),
                           button(
                             classes:
                                 'px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold transition-all',
                             events: {'click': (_) => _deletePost(p.id)},
-                            [text('Delete')],
+                            [Component.text('Delete')],
                           ),
                         ]),
                       ]),
@@ -550,7 +552,7 @@ class _NewsPageState extends State<NewsPage> {
                 ),
               ]),
               error: (err, _) => div(classes: 'p-12 text-center text-red-500 font-mono text-xs', [
-                text('Error loading listings: $err'),
+                Component.text('Error loading listings: $err'),
               ]),
             ),
           ]),
@@ -563,13 +565,13 @@ class _NewsPageState extends State<NewsPage> {
           [
             div(classes: 'flex justify-between items-center border-b border-zinc-100 pb-3', [
               h2(classes: 'text-sm font-bold text-zinc-800 uppercase tracking-wider', [
-                text(_editingId.isEmpty ? 'Create Banner' : 'Edit Banner'),
+                Component.text(_editingId.isEmpty ? 'Create Banner' : 'Edit Banner'),
               ]),
               if (_editingId.isNotEmpty)
                 button(
                   classes: 'text-xs font-bold text-zinc-400 hover:text-zinc-600',
                   events: {'click': (_) => _resetForm()},
-                  [text('Cancel')],
+                  [Component.text('Cancel')],
                 ),
             ]),
 
@@ -577,7 +579,7 @@ class _NewsPageState extends State<NewsPage> {
             div(classes: 'space-y-4 text-xs font-semibold text-zinc-500', [
               // Title
               div(classes: 'flex flex-col gap-1.5', [
-                label([text('Banner Title *')]),
+                label([Component.text('Banner Title *')]),
                 input(
                   classes:
                       'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
@@ -589,23 +591,23 @@ class _NewsPageState extends State<NewsPage> {
 
               // Category
               div(classes: 'flex flex-col gap-1.5', [
-                label([text('Category')]),
+                label([Component.text('Category')]),
                 select(
                   classes:
                       'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium bg-white',
                   events: {'change': (e) => _category = (e.target as dynamic).value as String},
                   [
                     option(value: 'news', attributes: _category == 'news' ? {'selected': ''} : {}, [
-                      text('News Announcement'),
+                      Component.text('News Announcement'),
                     ]),
                     option(value: 'promo', attributes: _category == 'promo' ? {'selected': ''} : {}, [
-                      text('Promotion / Discount'),
+                      Component.text('Promotion / Discount'),
                     ]),
                     option(value: 'advertisement', attributes: _category == 'advertisement' ? {'selected': ''} : {}, [
-                      text('Advertisement'),
+                      Component.text('Advertisement'),
                     ]),
                     option(value: 'announcement', attributes: _category == 'announcement' ? {'selected': ''} : {}, [
-                      text('Announcement'),
+                      Component.text('Announcement'),
                     ]),
                   ],
                 ),
@@ -613,19 +615,19 @@ class _NewsPageState extends State<NewsPage> {
 
               // Content / Body
               div(classes: 'flex flex-col gap-1.5', [
-                label([text('Content Description *')]),
+                label([Component.text('Content Description *')]),
                 textarea(
                   placeholder: 'Enter announcement details or promo eligibility requirements...',
                   classes:
                       'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium h-24 resize-none',
                   events: {'input': (e) => _content = (e.target as dynamic).value as String},
-                  [text(_content)],
+                  [Component.text(_content)],
                 ),
               ]),
 
               // Image URL
               div(classes: 'flex flex-col gap-1.5', [
-                label([text('Banner Image URL')]),
+                label([Component.text('Banner Image URL')]),
                 input(
                   classes:
                       'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
@@ -645,8 +647,10 @@ class _NewsPageState extends State<NewsPage> {
                       events: {'change': (e) => _handleImageUpload(e as web.Event)},
                     ),
                     div(classes: 'text-center space-y-1 text-[11px] text-zinc-500 font-bold', [
-                      span([text('📁 Upload directly from computer')]),
-                      p(classes: 'text-[9px] text-zinc-400 font-normal', [text('JPG, PNG, WEBP (auto-compressed)')]),
+                      span([Component.text('📁 Upload directly from computer')]),
+                      p(classes: 'text-[9px] text-zinc-400 font-normal', [
+                        Component.text('JPG, PNG, WEBP (auto-compressed)'),
+                      ]),
                     ]),
                   ],
                 ),
@@ -654,20 +658,20 @@ class _NewsPageState extends State<NewsPage> {
 
               // Action Type
               div(classes: 'flex flex-col gap-1.5', [
-                label([text('Tap Action')]),
+                label([Component.text('Tap Action')]),
                 select(
                   classes:
                       'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium bg-white',
                   events: {'change': (e) => setState(() => _actionType = (e.target as dynamic).value as String)},
                   [
                     option(value: 'none', attributes: _actionType == 'none' ? {'selected': ''} : {}, [
-                      text('No action (Static banner)'),
+                      Component.text('No action (Static banner)'),
                     ]),
                     option(value: 'promo', attributes: _actionType == 'promo' ? {'selected': ''} : {}, [
-                      text('Redeem Promo Code'),
+                      Component.text('Redeem Promo Code'),
                     ]),
                     option(value: 'link', attributes: _actionType == 'link' ? {'selected': ''} : {}, [
-                      text('Open Web/Deep Link'),
+                      Component.text('Open Web/Deep Link'),
                     ]),
                   ],
                 ),
@@ -676,7 +680,7 @@ class _NewsPageState extends State<NewsPage> {
               // Linked Promo (Conditional)
               if (_actionType == 'promo')
                 div(classes: 'flex flex-col gap-1.5', [
-                  label([text('Linked Promo Code')]),
+                  label([Component.text('Linked Promo Code')]),
                   input(
                     classes:
                         'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium uppercase',
@@ -689,7 +693,7 @@ class _NewsPageState extends State<NewsPage> {
               // Action URL (Conditional)
               if (_actionType == 'link' || _actionType == 'promo')
                 div(classes: 'flex flex-col gap-1.5', [
-                  label([text('Action Destination URL (Web link or tranyx:// deep link)')]),
+                  label([Component.text('Action Destination URL (Web link or tranyx:// deep link)')]),
                   input(
                     classes:
                         'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
@@ -702,11 +706,11 @@ class _NewsPageState extends State<NewsPage> {
               // Absolute Button Configurations
               div(classes: 'border-t border-zinc-150/60 pt-4 space-y-4', [
                 p(classes: 'text-xs font-bold text-zinc-700 uppercase tracking-wider', [
-                  text('Embedded Button Overlay'),
+                  Component.text('Embedded Button Overlay'),
                 ]),
 
                 div(classes: 'flex flex-col gap-1.5', [
-                  label([text('Button Text')]),
+                  label([Component.text('Button Text')]),
                   input(
                     classes:
                         'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
@@ -719,7 +723,7 @@ class _NewsPageState extends State<NewsPage> {
                 if (_buttonText.trim().isNotEmpty) ...[
                   div(classes: 'grid grid-cols-2 gap-4', [
                     div(classes: 'flex flex-col gap-1.5', [
-                      label([text('Left (X) %')]),
+                      label([Component.text('Left (X) %')]),
                       input(
                         classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none text-sm font-medium',
                         type: InputType.number,
@@ -728,7 +732,7 @@ class _NewsPageState extends State<NewsPage> {
                       ),
                     ]),
                     div(classes: 'flex flex-col gap-1.5', [
-                      label([text('Top (Y) %')]),
+                      label([Component.text('Top (Y) %')]),
                       input(
                         classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none text-sm font-medium',
                         type: InputType.number,
@@ -740,7 +744,7 @@ class _NewsPageState extends State<NewsPage> {
 
                   div(classes: 'grid grid-cols-2 gap-4', [
                     div(classes: 'flex flex-col gap-1.5', [
-                      label([text('Width %')]),
+                      label([Component.text('Width %')]),
                       input(
                         classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none text-sm font-medium',
                         type: InputType.number,
@@ -751,7 +755,7 @@ class _NewsPageState extends State<NewsPage> {
                       ),
                     ]),
                     div(classes: 'flex flex-col gap-1.5', [
-                      label([text('Height %')]),
+                      label([Component.text('Height %')]),
                       input(
                         classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none text-sm font-medium',
                         type: InputType.number,
@@ -767,12 +771,12 @@ class _NewsPageState extends State<NewsPage> {
                   p(
                     classes:
                         'text-[11px] font-bold text-zinc-700 uppercase tracking-wider mt-2 pt-2 border-t border-zinc-150/40',
-                    [text('Button Colors & Borders')],
+                    [Component.text('Button Colors & Borders')],
                   ),
 
                   div(classes: 'grid grid-cols-2 gap-4', [
                     div(classes: 'flex flex-col gap-1.5', [
-                      label([text('Fill / Background')]),
+                      label([Component.text('Fill / Background')]),
                       div(classes: 'flex gap-2 items-center', [
                         input(
                           classes: 'w-8 h-8 rounded-lg border border-zinc-250 outline-none p-0 cursor-pointer',
@@ -782,11 +786,13 @@ class _NewsPageState extends State<NewsPage> {
                             'input': (e) => setState(() => _buttonBgColor = (e.target as dynamic).value as String),
                           },
                         ),
-                        span(classes: 'text-[10px] uppercase font-mono text-zinc-500', [text(_buttonBgColor)]),
+                        span(classes: 'text-[10px] uppercase font-mono text-zinc-500', [
+                          Component.text(_buttonBgColor),
+                        ]),
                       ]),
                     ]),
                     div(classes: 'flex flex-col gap-1.5', [
-                      label([text('Text Color')]),
+                      label([Component.text('Text Color')]),
                       div(classes: 'flex gap-2 items-center', [
                         input(
                           classes: 'w-8 h-8 rounded-lg border border-zinc-250 outline-none p-0 cursor-pointer',
@@ -796,14 +802,16 @@ class _NewsPageState extends State<NewsPage> {
                             'input': (e) => setState(() => _buttonTextColor = (e.target as dynamic).value as String),
                           },
                         ),
-                        span(classes: 'text-[10px] uppercase font-mono text-zinc-500', [text(_buttonTextColor)]),
+                        span(classes: 'text-[10px] uppercase font-mono text-zinc-500', [
+                          Component.text(_buttonTextColor),
+                        ]),
                       ]),
                     ]),
                   ]),
 
                   div(classes: 'grid grid-cols-2 gap-4', [
                     div(classes: 'flex flex-col gap-1.5', [
-                      label([text('Border Color')]),
+                      label([Component.text('Border Color')]),
                       div(classes: 'flex gap-2 items-center', [
                         input(
                           classes: 'w-8 h-8 rounded-lg border border-zinc-250 outline-none p-0 cursor-pointer',
@@ -813,11 +821,13 @@ class _NewsPageState extends State<NewsPage> {
                             'input': (e) => setState(() => _buttonBorderColor = (e.target as dynamic).value as String),
                           },
                         ),
-                        span(classes: 'text-[10px] uppercase font-mono text-zinc-500', [text(_buttonBorderColor)]),
+                        span(classes: 'text-[10px] uppercase font-mono text-zinc-500', [
+                          Component.text(_buttonBorderColor),
+                        ]),
                       ]),
                     ]),
                     div(classes: 'flex flex-col gap-1.5', [
-                      label([text('Border Width (px)')]),
+                      label([Component.text('Border Width (px)')]),
                       input(
                         classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none text-sm font-medium',
                         type: InputType.number,
@@ -832,12 +842,12 @@ class _NewsPageState extends State<NewsPage> {
                   p(
                     classes:
                         'text-[11px] font-bold text-zinc-700 uppercase tracking-wider mt-2 pt-2 border-t border-zinc-150/40',
-                    [text('Button Dimensions & Corners')],
+                    [Component.text('Button Dimensions & Corners')],
                   ),
 
                   div(classes: 'grid grid-cols-3 gap-2', [
                     div(classes: 'flex flex-col gap-1.5', [
-                      label([text('Corner Radius')]),
+                      label([Component.text('Corner Radius')]),
                       input(
                         classes:
                             'px-2 py-3 rounded-xl border border-zinc-200 outline-none text-sm font-medium text-center',
@@ -849,7 +859,7 @@ class _NewsPageState extends State<NewsPage> {
                       ),
                     ]),
                     div(classes: 'flex flex-col gap-1.5', [
-                      label([text('Padding V')]),
+                      label([Component.text('Padding V')]),
                       input(
                         classes:
                             'px-2 py-3 rounded-xl border border-zinc-200 outline-none text-sm font-medium text-center',
@@ -861,7 +871,7 @@ class _NewsPageState extends State<NewsPage> {
                       ),
                     ]),
                     div(classes: 'flex flex-col gap-1.5', [
-                      label([text('Padding H')]),
+                      label([Component.text('Padding H')]),
                       input(
                         classes:
                             'px-2 py-3 rounded-xl border border-zinc-200 outline-none text-sm font-medium text-center',
@@ -890,7 +900,7 @@ class _NewsPageState extends State<NewsPage> {
                 label(
                   classes: 'text-zinc-800 font-bold cursor-pointer select-none',
                   attributes: {'for': 'post-is-active'},
-                  [text('Publish Banner immediately (Active)')],
+                  [Component.text('Publish Banner immediately (Active)')],
                 ),
               ]),
             ]),
@@ -906,14 +916,14 @@ class _NewsPageState extends State<NewsPage> {
                   if (_isSaving)
                     div(classes: 'animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full', [])
                   else
-                    text(_editingId.isEmpty ? 'Publish Banner' : 'Save Changes'),
+                    Component.text(_editingId.isEmpty ? 'Publish Banner' : 'Save Changes'),
                 ],
               ),
               button(
                 classes:
                     'px-5 py-3 border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 rounded-xl font-bold transition-all text-zinc-650',
                 events: {'click': (_) => _resetForm()},
-                [text('Reset')],
+                [Component.text('Reset')],
               ),
             ]),
           ],
