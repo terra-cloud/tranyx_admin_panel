@@ -22,6 +22,7 @@ class NewsPostItem {
   final String? actionUrl;
   final bool isActive;
   final DateTime createdAt;
+  final DateTime? publishAt;
   final String? buttonText;
   final double? buttonX;
   final double? buttonY;
@@ -47,6 +48,7 @@ class NewsPostItem {
     this.actionUrl,
     required this.isActive,
     required this.createdAt,
+    this.publishAt,
     this.buttonText,
     this.buttonX,
     this.buttonY,
@@ -70,6 +72,14 @@ class NewsPostItem {
       return DateTime.now();
     }
 
+    DateTime? parseNullableDate(dynamic val) {
+      if (val == null) return null;
+      if (val is Timestamp) return val.toDate();
+      if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+      if (val is String) return DateTime.tryParse(val);
+      return null;
+    }
+
     return NewsPostItem(
       id: id,
       title: map['title'] ?? '',
@@ -81,6 +91,7 @@ class NewsPostItem {
       actionUrl: map['actionUrl'],
       isActive: map['isActive'] != false,
       createdAt: parseDate(map['createdAt']),
+      publishAt: parseNullableDate(map['publishAt']),
       buttonText: map['buttonText'],
       buttonX: (map['buttonX'] as num?)?.toDouble(),
       buttonY: (map['buttonY'] as num?)?.toDouble(),
@@ -108,6 +119,7 @@ class NewsPostItem {
       'actionUrl': actionUrl,
       'isActive': isActive,
       'createdAt': createdAt.millisecondsSinceEpoch,
+      'publishAt': publishAt?.millisecondsSinceEpoch,
       'buttonText': buttonText,
       'buttonX': buttonX,
       'buttonY': buttonY,
@@ -166,6 +178,7 @@ class _NewsPageState extends State<NewsPage> {
   String _actionType = 'none';
   String _actionUrl = '';
   bool _isActive = true;
+  String _publishAtDateStr = '';
 
   // Custom button configurations
   String _buttonText = '';
@@ -194,6 +207,7 @@ class _NewsPageState extends State<NewsPage> {
       _actionType = 'none';
       _actionUrl = '';
       _isActive = true;
+      _publishAtDateStr = '';
       _buttonText = '';
       _buttonXStr = '10';
       _buttonYStr = '80';
@@ -221,6 +235,9 @@ class _NewsPageState extends State<NewsPage> {
       _actionType = item.actionType;
       _actionUrl = item.actionUrl ?? '';
       _isActive = item.isActive;
+      _publishAtDateStr = item.publishAt != null
+          ? '${item.publishAt!.year}-${item.publishAt!.month.toString().padLeft(2, '0')}-${item.publishAt!.day.toString().padLeft(2, '0')}T${item.publishAt!.hour.toString().padLeft(2, '0')}:${item.publishAt!.minute.toString().padLeft(2, '0')}'
+          : '';
       _buttonText = item.buttonText ?? '';
       _buttonXStr = item.buttonX?.toStringAsFixed(0) ?? '10';
       _buttonYStr = item.buttonY?.toStringAsFixed(0) ?? '80';
@@ -285,6 +302,11 @@ class _NewsPageState extends State<NewsPage> {
 
     try {
       final firestore = context.read(firestoreProvider);
+      DateTime? publishAt;
+      if (_publishAtDateStr.isNotEmpty) {
+        publishAt = DateTime.tryParse(_publishAtDateStr);
+      }
+
       final data = {
         'title': _title.trim(),
         'content': _content.trim(),
@@ -295,6 +317,7 @@ class _NewsPageState extends State<NewsPage> {
         'actionUrl': _actionUrl.trim().isNotEmpty ? _actionUrl.trim() : null,
         'isActive': _isActive,
         'createdAt': DateTime.now().millisecondsSinceEpoch,
+        'publishAt': publishAt?.millisecondsSinceEpoch,
         'buttonText': _buttonText.trim().isNotEmpty ? _buttonText.trim() : null,
         'buttonX': double.tryParse(_buttonXStr),
         'buttonY': double.tryParse(_buttonYStr),
@@ -521,11 +544,23 @@ class _NewsPageState extends State<NewsPage> {
                           Component.text(p.actionType.toUpperCase() + (p.promoCode != null ? ' (${p.promoCode})' : '')),
                         ]),
                         td(classes: 'px-6 py-4', [
-                          span(
-                            classes:
-                                'px-2 py-0.5 rounded font-bold text-[9px] ${p.isActive ? "bg-green-50 text-green-600" : "bg-zinc-100 text-zinc-400"}',
-                            [Component.text(p.isActive ? 'ACTIVE' : 'DRAFT')],
-                          ),
+                          if (p.isActive && p.publishAt != null && p.publishAt!.isAfter(DateTime.now()))
+                            div(classes: 'flex flex-col gap-0.5', [
+                              span(
+                                classes: 'px-2 py-0.5 rounded font-bold text-[9px] w-max bg-amber-50 text-amber-600',
+                                [Component.text('SCHEDULED')],
+                              ),
+                              span(
+                                classes: 'text-[8px] text-zinc-400 font-semibold',
+                                [Component.text('On: ${p.publishAt!.year}-${p.publishAt!.month.toString().padLeft(2, '0')}-${p.publishAt!.day.toString().padLeft(2, '0')} ${p.publishAt!.hour.toString().padLeft(2, '0')}:${p.publishAt!.minute.toString().padLeft(2, '0')}')],
+                              ),
+                            ])
+                          else
+                            span(
+                              classes:
+                                  'px-2 py-0.5 rounded font-bold text-[9px] ${p.isActive ? "bg-green-50 text-green-600" : "bg-zinc-100 text-zinc-400"}',
+                              [Component.text(p.isActive ? 'ACTIVE' : 'DRAFT')],
+                            ),
                         ]),
                         td(classes: 'px-6 py-4 text-right space-x-2', [
                           button(
@@ -884,6 +919,26 @@ class _NewsPageState extends State<NewsPage> {
                     ]),
                   ]),
                 ],
+              ]),
+
+              // Scheduled Publish Date (Optional)
+              div(classes: 'flex flex-col gap-1.5 pt-2 border-t border-zinc-150/60', [
+                label([Component.text('Scheduled Publish Date & Time (Optional)')]),
+                input(
+                  classes:
+                      'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium bg-white',
+                  attributes: {
+                    'type': 'datetime-local',
+                    'value': _publishAtDateStr,
+                  },
+                  events: {
+                    'input': (e) => setState(() => _publishAtDateStr = (e.target as dynamic).value as String),
+                    'change': (e) => setState(() => _publishAtDateStr = (e.target as dynamic).value as String),
+                  },
+                ),
+                p(classes: 'text-[10px] text-zinc-400 font-semibold leading-relaxed', [
+                  Component.text('Leave empty to publish immediately. Banners scheduled in the future will remain hidden on the mobile app until the scheduled date and time.'),
+                ]),
               ]),
 
               // Active / Inactive Checkbox

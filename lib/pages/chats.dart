@@ -734,7 +734,7 @@ class _ChatsPageState extends State<ChatsPage> {
                               ? u!.displayName!
                               : (u?.email != null ? u!.email!.split('@').first : 'Support Agent');
 
-                          await firestore.collection('support_chats').doc(activeChatId!).collection('messages').add({
+                          await firestore.collection('support_chats').doc(activeChatId).collection('messages').add({
                             'senderId': u?.uid ?? 'agent',
                             'senderName': senderName,
                             'content': textVal,
@@ -743,7 +743,7 @@ class _ChatsPageState extends State<ChatsPage> {
                             'agentEmail': u?.email,
                           });
 
-                          await firestore.collection('support_chats').doc(activeChatId!).set({
+                          await firestore.collection('support_chats').doc(activeChatId).set({
                             'lastMessage': textVal,
                             'updatedAt': DateTime.now().millisecondsSinceEpoch,
                             'status': 'active',

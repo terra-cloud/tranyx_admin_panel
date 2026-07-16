@@ -13,6 +13,7 @@ import '../core/config/firebase_environments.dart';
 import 'dart:async';
 
 final usersTabProvider = StateProvider<String>((ref) => 'platform');
+final usersMainTabProvider = StateProvider<String>((ref) => 'directory');
 
 // Toast notification state: null = hidden, String = message
 final toastMessageProvider = StateProvider<String?>((ref) => null);
@@ -172,6 +173,88 @@ final userActivityHistoryProvider = StreamProvider.family<List<ActivityEvent>, S
   return controller.stream;
 });
 
+class QuestDefinition {
+  final String id;
+  final String title;
+  final String category;
+  final int points;
+
+  const QuestDefinition({
+    required this.id,
+    required this.title,
+    required this.category,
+    required this.points,
+  });
+}
+
+const List<QuestDefinition> standardQuests = [
+  QuestDefinition(id: 'register_account', title: 'Register Account', category: 'Onboarding', points: 500),
+  QuestDefinition(id: 'verify_account', title: 'Verify Account', category: 'Onboarding', points: 500),
+  QuestDefinition(id: 'complete_profile_trust', title: 'Complete Profile Trust & Verification', category: 'Onboarding', points: 2000),
+  QuestDefinition(id: 'add_skills_bio', title: 'Add Skills & Bio', category: 'Onboarding', points: 100),
+  QuestDefinition(id: 'deposit_any_amount', title: 'Deposit any amount to Wallet', category: 'Onboarding', points: 500),
+  QuestDefinition(id: 'connect_solana_wallet', title: 'Connect Any Solana Wallet', category: 'Onboarding', points: 200),
+  QuestDefinition(id: 'post_first_service', title: 'Post First Service', category: 'Services', points: 500),
+  QuestDefinition(id: 'hire_applicant', title: 'Hire an Applicant', category: 'Services', points: 500),
+  QuestDefinition(id: 'employer_complete_transaction', title: 'Complete transaction as employer', category: 'Services', points: 500),
+  QuestDefinition(id: 'apply_first_job', title: 'Apply First Job', category: 'Services', points: 500),
+  QuestDefinition(id: 'be_hired', title: 'Be hired', category: 'Services', points: 500),
+  QuestDefinition(id: 'jobseeker_complete_transaction', title: 'Complete transaction as Nyxian', category: 'Services', points: 500),
+  QuestDefinition(id: 'post_property', title: 'Post Property', category: 'Rental', points: 500),
+  QuestDefinition(id: 'host_complete_transaction', title: 'Complete Transaction as a Lessor/Host', category: 'Rental', points: 500),
+  QuestDefinition(id: 'rent_property', title: 'Rent property', category: 'Rental', points: 500),
+  QuestDefinition(id: 'client_complete_transaction', title: 'Complete transaction as a Lessee/Renter', category: 'Rental', points: 500),
+];
+
+class PointsHistoryModel {
+  final String id;
+  final String uid;
+  final String questId;
+  final int points;
+  final String title;
+  final String category;
+  final int createdAt;
+
+  PointsHistoryModel({
+    required this.id,
+    required this.uid,
+    required this.questId,
+    required this.points,
+    required this.title,
+    required this.category,
+    required this.createdAt,
+  });
+
+  factory PointsHistoryModel.fromMap(String id, Map<String, dynamic> map) {
+    return PointsHistoryModel(
+      id: id,
+      uid: map['uid'] ?? '',
+      questId: map['questId'] ?? '',
+      points: (map['points'] as num?)?.toInt() ?? 0,
+      title: map['title'] ?? '',
+      category: map['category'] ?? '',
+      createdAt: getTimestamp(map['createdAt']),
+    );
+  }
+}
+
+final userPointsHistoryProvider = StreamProvider.family<List<PointsHistoryModel>, String>((ref, uid) {
+  final firestore = ref.watch(firestoreProvider);
+  return firestore
+      .collection('points_history')
+      .where('uid', isEqualTo: uid)
+      .snapshots()
+      .map((snap) {
+        final list = snap.docs.map((doc) => PointsHistoryModel.fromMap(doc.id, doc.data())).toList();
+        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return list;
+      })
+      .handleError((err) {
+        print('[UserPointsHistory] Stream failed: $err');
+        return <PointsHistoryModel>[];
+      });
+});
+
 class UserProfileModel {
   final String uid;
   final String name;
@@ -186,6 +269,7 @@ class UserProfileModel {
   final bool banned;
   final int? suspendedUntil;
   final int terraPoints;
+  final List<String> earnedRewards;
 
   UserProfileModel({
     required this.uid,
@@ -201,6 +285,7 @@ class UserProfileModel {
     required this.banned,
     this.suspendedUntil,
     this.terraPoints = 0,
+    this.earnedRewards = const [],
   });
 
   factory UserProfileModel.fromMap(String uid, Map<String, dynamic> map) {
@@ -218,6 +303,7 @@ class UserProfileModel {
       banned: map['banned'] ?? false,
       suspendedUntil: map['suspendedUntil'] as int?,
       terraPoints: map['terraPoints'] ?? 0,
+      earnedRewards: map['earnedRewards'] != null ? List<String>.from(map['earnedRewards']) : const [],
     );
   }
 }
@@ -328,7 +414,58 @@ class _UsersPageState extends State<UsersPage> {
 
   // User detail modal state
   UserProfileModel? _selectedUser;
-  String _userModalTab = 'details'; // 'details', 'transactions', 'activity'
+  String _userModalTab = 'details'; // 'details', 'transactions', 'activity', 'rewards'
+
+  // Custom rewards form state
+  String _customRewardTitle = '';
+  int _customRewardPoints = 100;
+
+  Future<void> _awardQuest(UserProfileModel user, String questId, String title, String category, int points) async {
+    final firestore = context.read(firestoreProvider);
+    final historyId = '${user.uid}_${questId}_${DateTime.now().millisecondsSinceEpoch}';
+
+    try {
+      // 1. Log to points_history
+      await firestore.collection('points_history').doc(historyId).set({
+        'uid': user.uid,
+        'questId': questId,
+        'points': points,
+        'title': title,
+        'category': category,
+        'createdAt': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      // 2. Update User Profile
+      final updatedRewards = List<String>.from(user.earnedRewards)..add(questId);
+      await firestore.collection('users').doc(user.uid).update({
+        'terraPoints': user.terraPoints + points,
+        'earnedRewards': updatedRewards,
+      });
+
+      setState(() {
+        _selectedUser = UserProfileModel(
+          uid: user.uid,
+          name: user.name,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          idVerified: user.idVerified,
+          bgChecked: user.bgChecked,
+          verificationLevel: user.verificationLevel,
+          walletPublicKey: user.walletPublicKey,
+          connectedWalletType: user.connectedWalletType,
+          role: user.role,
+          banned: user.banned,
+          suspendedUntil: user.suspendedUntil,
+          terraPoints: user.terraPoints + points,
+          earnedRewards: updatedRewards,
+        );
+      });
+
+      _showToast('🪙 Awarded $points TP to ${user.name} for "$title"');
+    } catch (e) {
+      _showToast('❌ Failed to award points: $e');
+    }
+  }
 
   void _showToast(String msg) {
     context.read(toastMessageProvider.notifier).state = msg;
@@ -407,6 +544,7 @@ class _UsersPageState extends State<UsersPage> {
   @override
   Component build(BuildContext context) {
     final currentEnv = context.watch(activeEnvironmentProvider);
+    final mainTab = context.watch(usersMainTabProvider);
     final activeTab = context.watch(usersTabProvider);
     final usersAsync = context.watch(usersStreamProvider);
     final adminUsersAsync = context.watch(adminUsersStreamProvider);
@@ -430,7 +568,22 @@ class _UsersPageState extends State<UsersPage> {
       );
     }
 
-    return div(classes: 'flex-1 p-6 md:p-8 flex flex-col gap-8 max-w-7xl mx-auto w-full bg-[#eff2f0] relative', [
+    return div(classes: 'flex-1 p-6 md:p-8 flex flex-col gap-6 max-w-7xl mx-auto w-full bg-[#eff2f0] relative', [
+      // Top Level Main Tabs Switcher
+      div(classes: 'flex items-center gap-2 border-b border-zinc-200/60 pb-3', [
+        button(
+          onClick: () => context.read(usersMainTabProvider.notifier).state = 'directory',
+          classes: 'px-5 py-2 text-xs font-black transition-all border-b-2 duration-200 '
+              '${mainTab == 'directory' ? 'border-black text-black' : 'border-transparent text-zinc-400 hover:text-zinc-650'}',
+          [Component.text('📇 User Accounts Directory')],
+        ),
+        button(
+          onClick: () => context.read(usersMainTabProvider.notifier).state = 'rewards',
+          classes: 'px-5 py-2 text-xs font-black transition-all border-b-2 duration-200 '
+              '${mainTab == 'rewards' ? 'border-black text-black' : 'border-transparent text-zinc-400 hover:text-zinc-650'}',
+          [Component.text('🪙 User Rewards Center')],
+        ),
+      ]),
       // User details modal overlay
       if (_selectedUser != null)
         div(
@@ -513,6 +666,13 @@ class _UsersPageState extends State<UsersPage> {
                           'px-4 py-1.5 rounded-full text-[10px] font-black transition-all '
                           '${_userModalTab == 'activity' ? "bg-black text-white" : "text-zinc-500 hover:text-zinc-800"}',
                       [Component.text('Activity feed')],
+                    ),
+                    button(
+                      onClick: () => setState(() => _userModalTab = 'rewards'),
+                      classes:
+                          'px-4 py-1.5 rounded-full text-[10px] font-black transition-all '
+                          '${_userModalTab == 'rewards' ? "bg-black text-white" : "text-zinc-500 hover:text-zinc-800"}',
+                      [Component.text('Terra Points & Quests')],
                     ),
                   ],
                 ),
@@ -844,7 +1004,7 @@ class _UsersPageState extends State<UsersPage> {
                           ]),
                         ),
                   ]),
-                ] else ...[
+                ] else if (_userModalTab == 'activity') ...[
                   div(classes: 'flex flex-col gap-4 pt-2', [
                     context
                         .watch(userActivityHistoryProvider(_selectedUser!.uid))
@@ -897,6 +1057,155 @@ class _UsersPageState extends State<UsersPage> {
                           ]),
                         ),
                   ]),
+                ] else ...[
+                  div(classes: 'flex flex-col gap-5 pt-2 text-left', [
+                    // Points Summary Card
+                    div(classes: 'bg-[#fafbfa] p-4.5 rounded-2xl border border-zinc-200/50 flex items-center justify-between', [
+                      div(classes: 'flex flex-col gap-1', [
+                        span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                          Component.text('Total Balance'),
+                        ]),
+                        p(classes: 'text-xl font-black text-amber-600 flex items-center gap-1.5', [
+                          Component.text('🪙 ${_selectedUser!.terraPoints} TP'),
+                        ]),
+                      ]),
+                      div(classes: 'flex flex-col gap-1 text-right', [
+                        span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                          Component.text('Quests Completed'),
+                        ]),
+                        p(classes: 'text-sm font-black text-zinc-800', [
+                          Component.text('${_selectedUser!.earnedRewards.length} Completed'),
+                        ]),
+                      ]),
+                    ]),
+
+                    // Points History Log
+                    div(classes: 'flex flex-col gap-2', [
+                      h4(classes: 'text-xs font-black text-zinc-900', [Component.text('Points History Log')]),
+                      context.watch(userPointsHistoryProvider(_selectedUser!.uid)).when(
+                        data: (history) {
+                          if (history.isEmpty) {
+                            return div(classes: 'py-8 text-center text-xs text-zinc-400 font-semibold bg-zinc-50/50 border border-dashed border-zinc-200 rounded-xl', [
+                              Component.text('No points logged in history yet.'),
+                            ]);
+                          }
+                          return div(classes: 'overflow-x-auto w-full rounded-xl border border-zinc-200/50 bg-white max-h-[220px] overflow-y-auto', [
+                            table(classes: 'w-full text-left text-[11px] border-collapse', [
+                              thead(classes: 'bg-zinc-50 border-b border-zinc-150 text-[9px] font-bold text-zinc-400 uppercase tracking-wider sticky top-0', [
+                                tr([
+                                  th(classes: 'p-3.5', [Component.text('Quest / Title')]),
+                                  th(classes: 'p-3.5', [Component.text('Category')]),
+                                  th(classes: 'p-3.5 text-right', [Component.text('Points')]),
+                                  th(classes: 'p-3.5 text-right', [Component.text('Date')]),
+                                ]),
+                              ]),
+                              tbody(classes: 'divide-y divide-zinc-50', [
+                                for (final log in history)
+                                  tr([
+                                    td(classes: 'p-3 font-bold text-zinc-800', [Component.text(log.title)]),
+                                    td(classes: 'p-3 text-zinc-400 uppercase text-[9px] font-extrabold', [Component.text(log.category)]),
+                                    td(classes: 'p-3 text-right font-black text-[#0fa958]', [Component.text('+${log.points}')]),
+                                    td(classes: 'p-3 text-right text-zinc-400 font-mono text-[9px]', [
+                                      Component.text(DateTime.fromMillisecondsSinceEpoch(log.createdAt).toString().split('.').first),
+                                    ]),
+                                  ]),
+                              ]),
+                            ]),
+                          ]);
+                        },
+                        loading: () => div(classes: 'flex justify-center py-6', [
+                          div(classes: 'animate-spin h-5 w-5 border-2 border-zinc-200 border-t-indigo-500 rounded-full', []),
+                        ]),
+                        error: (e, _) => div(classes: 'p-3 bg-red-50 text-red-500 rounded-xl text-xs font-mono', [
+                          Component.text('Error loading rewards history: $e'),
+                        ]),
+                      ),
+                    ]),
+
+                    // Standard Quests List (Status + Manual Award)
+                    div(classes: 'flex flex-col gap-2.5 border-t border-zinc-100 pt-4', [
+                      h4(classes: 'text-xs font-black text-zinc-900', [Component.text('Quest Milestones Checklist & Admin Actions')]),
+                      p(classes: 'text-[10px] text-zinc-400 font-medium', [
+                        Component.text('View completed status and click on any pending quest to manually award/credit it to this user.'),
+                      ]),
+
+                      div(classes: 'grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[250px] overflow-y-auto pr-1', [
+                        for (final quest in standardQuests)
+                          () {
+                            final isCompleted = _selectedUser!.earnedRewards.contains(quest.id);
+                            return div(
+                              classes: 'p-3 rounded-xl border flex items-center justify-between gap-3 transition-all '
+                                  '${isCompleted ? "bg-[#e2f1e9]/10 border-emerald-100 text-emerald-800" : "bg-[#f8faf9] border-zinc-200 text-zinc-650"}',
+                              [
+                                div(classes: 'flex flex-col gap-0.5 min-w-0', [
+                                  span(classes: 'text-[10px] font-black truncate', [Component.text(quest.title)]),
+                                  span(classes: 'text-[8px] text-zinc-400 font-extrabold uppercase tracking-wider', [
+                                    Component.text('${quest.category} • ${quest.points} TP'),
+                                  ]),
+                                ]),
+                                if (isCompleted)
+                                  span(classes: 'px-2 py-0.5 rounded text-[8px] font-black bg-emerald-50 text-[#0fa958] border border-emerald-100/50 flex-shrink-0', [
+                                    Component.text('COMPLETED'),
+                                  ])
+                                else
+                                  button(
+                                    onClick: () => _awardQuest(_selectedUser!, quest.id, quest.title, quest.category, quest.points),
+                                    classes: 'px-2.5 py-1 bg-black hover:bg-zinc-800 text-white text-[8px] font-black uppercase tracking-wider rounded-lg transition-all flex-shrink-0',
+                                    [Component.text('Award')],
+                                  ),
+                              ],
+                            );
+                          }(),
+                      ]),
+                    ]),
+
+                    // Award Custom Points Section
+                    div(classes: 'flex flex-col gap-3 border-t border-zinc-100 pt-4', [
+                      h4(classes: 'text-xs font-black text-zinc-900', [Component.text('Award Custom Rewards & Bonuses')]),
+                      div(classes: 'grid grid-cols-1 sm:grid-cols-3 gap-2.5', [
+                        div(classes: 'flex flex-col gap-1', [
+                          label(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [Component.text('Reward Title')]),
+                          input(
+                            value: _customRewardTitle,
+                            onInput: (v) => setState(() => _customRewardTitle = v as String),
+                            classes: 'px-3 py-2 bg-[#f3f6f4] border border-zinc-200 rounded-lg text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/20',
+                            attributes: {'placeholder': 'e.g. Community Bonus'},
+                          ),
+                        ]),
+                        div(classes: 'flex flex-col gap-1', [
+                          label(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [Component.text('Points')]),
+                          input(
+                            value: _customRewardPoints.toString(),
+                            onInput: (v) {
+                              final val = int.tryParse(v as String) ?? 0;
+                              setState(() => _customRewardPoints = val);
+                            },
+                            classes: 'px-3 py-2 bg-[#f3f6f4] border border-zinc-200 rounded-lg text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/20',
+                            attributes: {'type': 'number'},
+                          ),
+                        ]),
+                        div(classes: 'flex flex-col gap-1 justify-end', [
+                          button(
+                            onClick: () {
+                              final title = _customRewardTitle.trim();
+                              if (title.isEmpty || _customRewardPoints <= 0) {
+                                _showToast('⚠️ Please enter a title and points value > 0.');
+                                return;
+                              }
+                              final questId = 'custom_${DateTime.now().millisecondsSinceEpoch}';
+                              _awardQuest(_selectedUser!, questId, title, 'Custom', _customRewardPoints);
+                              setState(() {
+                                _customRewardTitle = '';
+                                _customRewardPoints = 100;
+                              });
+                            },
+                            classes: 'w-full py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md shadow-indigo-500/10 transition-all text-center',
+                            [Component.text('Award Custom')],
+                          ),
+                        ]),
+                      ]),
+                    ]),
+                  ]),
                 ],
               ],
             ),
@@ -917,402 +1226,147 @@ class _UsersPageState extends State<UsersPage> {
           [Component.text(toast)],
         ),
 
-      // Modern Header block
-      div(classes: 'flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-200/50 pb-5', [
-        div(classes: 'flex flex-col gap-1', [
-          h1(classes: 'text-xl font-black tracking-tight text-zinc-900', [Component.text('User Accounts Directory')]),
-          p(classes: 'text-xs text-zinc-400 font-medium', [
-            Component.text('Audit user profiles, trust badges, and run background check clearance.'),
-          ]),
-        ]),
-        div(classes: 'flex items-center gap-3', [
-          // Tabs styled in capsules
-          div(classes: 'flex items-center gap-1 bg-white p-1 border border-zinc-200/50 rounded-full shadow-sm', [
-            buildTabButton('👥 Users', 'platform'),
-            buildTabButton('🛡️ Agents / Staff', 'support'),
-            buildTabButton('🔑 Admins', 'admin'),
-          ]),
-          // Add Agent button (only on support tab)
-          if (activeTab == 'support' && isAdmin)
-            button(
-              onClick: () => setState(() => _showAddAgentForm = !_showAddAgentForm),
-              classes:
-                  'px-4 py-2.5 bg-black hover:bg-zinc-800 text-white text-xs font-extrabold rounded-full '
-                  'shadow-md shadow-black/10 transition-all flex items-center gap-2',
-              [
-                span(classes: 'text-sm', [Component.text(_showAddAgentForm ? '✕' : '+')]),
-                Component.text(_showAddAgentForm ? 'Cancel' : 'Add Agent'),
-              ],
-            ),
-        ]),
-      ]),
-
-      // Add Agent Form Card
-      if (_showAddAgentForm && activeTab == 'support')
-        div(classes: 'w-full bg-white border border-zinc-200/50 rounded-[24px] p-6 shadow-sm flex flex-col gap-4', [
-          div(classes: 'flex flex-col gap-0.5', [
-            h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Create Support Agent')]),
-            p(classes: 'text-xs text-zinc-400 font-medium', [
-              Component.text('New agents will be added to the support queue and visible in Live Customer Service.'),
-            ]),
-          ]),
-          div(classes: 'grid grid-cols-1 md:grid-cols-3 gap-3', [
-            div(classes: 'flex flex-col gap-1.5', [
-              label(classes: 'text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider', [
-                Component.text('Full Name'),
-              ]),
-              input(
-                value: _agentName,
-                onInput: (v) => setState(() => _agentName = v as String),
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200 rounded-xl text-xs text-zinc-900 '
-                    'focus:outline-none focus:ring-2 focus:ring-black/10',
-                attributes: {'placeholder': 'e.g. Juan dela Cruz'},
-              ),
-            ]),
-            div(classes: 'flex flex-col gap-1.5', [
-              label(classes: 'text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider', [
-                Component.text('Email Address'),
-              ]),
-              input(
-                value: _agentEmail,
-                onInput: (v) => setState(() => _agentEmail = v as String),
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200 rounded-xl text-xs text-zinc-900 '
-                    'focus:outline-none focus:ring-2 focus:ring-black/10',
-                attributes: {'placeholder': 'agent@tranyx.com', 'type': 'email'},
-              ),
-            ]),
-            div(classes: 'flex flex-col gap-1.5', [
-              label(classes: 'text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider', [
-                Component.text('Temporary Password'),
-              ]),
-              input(
-                value: _agentPassword,
-                onInput: (v) => setState(() => _agentPassword = v as String),
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200 rounded-xl text-xs text-zinc-900 '
-                    'focus:outline-none focus:ring-2 focus:ring-black/10',
-                attributes: {'placeholder': '••••••••', 'type': 'password'},
-              ),
-            ]),
-          ]),
-          div(classes: 'flex justify-end', [
-            button(
-              onClick: _isCreatingAgent ? null : () async => _createAgent(),
-              classes:
-                  'px-6 py-2.5 rounded-xl text-xs font-extrabold transition-all '
-                  '${_isCreatingAgent ? "bg-zinc-300 text-zinc-500 cursor-not-allowed" : "bg-black hover:bg-zinc-800 text-white shadow-md shadow-black/10"}',
-              [
-                if (_isCreatingAgent)
-                  div(classes: 'flex items-center gap-2', [
-                    div(
-                      classes: 'w-3.5 h-3.5 border-2 border-zinc-400 border-t-zinc-200 rounded-full animate-spin',
-                      [],
-                    ),
-                    Component.text('Creating...'),
-                  ])
-                else
-                  Component.text('Create Agent'),
-              ],
-            ),
-          ]),
-        ]),
-
-      // Directory Table Card
-      (activeTab == 'platform' ? usersAsync : adminUsersAsync).when(
-        data: (allUsers) {
-          final users = allUsers.where((u) {
-            final r = u.role?.toLowerCase().trim() ?? '';
-            if (activeTab == 'support') {
-              // Rule: anything that is NOT admin and NOT a plain platform user is an agent
-              return r.isNotEmpty && r != 'admin' && r != 'user';
-            } else if (activeTab == 'admin') {
-              return r == 'admin';
-            } else {
-              // Platform users: no role, or explicitly 'user'
-              return r.isEmpty || r == 'user';
-            }
-          }).toList();
-
-          if (users.isEmpty) {
-            return div(
-              classes:
-                  'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
-              [
-                span(classes: 'text-3xl mb-3', [Component.text(activeTab == 'support' ? '🛡️' : '👥')]),
-                h3(classes: 'text-sm font-bold text-zinc-900', [
-                  Component.text(activeTab == 'support' ? 'No support agents found' : 'No accounts found'),
-                ]),
-                p(classes: 'text-xs text-zinc-500 mt-1', [
-                  Component.text(
-                    activeTab == 'support'
-                        ? 'Click "Add Agent" above to create your first support agent.'
-                        : 'No accounts matching this category exist in this environment.',
-                  ),
-                ]),
-              ],
-            );
-          }
-
-          // Support tab has a different (simpler) table view
-          if (activeTab == 'support') {
-            return div(
-              classes:
-                  'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
-              [
-                table(classes: 'w-full text-left text-xs border-collapse', [
-                  thead(
-                    classes:
-                        'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
-                    [
-                      tr([
-                        th(classes: 'p-5', [Component.text('Agent Name')]),
-                        th(classes: 'p-5', [Component.text('Email')]),
-                        th(classes: 'p-5 text-center', [Component.text('Role')]),
-                        th(classes: 'p-5 text-center', [Component.text('Status')]),
-                        th(classes: 'p-5 text-right', [Component.text('Actions')]),
-                      ]),
-                    ],
-                  ),
-                  tbody(classes: 'divide-y divide-zinc-50', [
-                    for (final u in users)
-                      tr(classes: 'hover:bg-[#fcfdfc] transition-colors', [
-                        td(classes: 'p-5 font-bold text-zinc-900', [
-                          div(classes: 'flex items-center gap-2.5', [
-                            div(
-                              classes:
-                                  'w-7 h-7 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-[10px] font-extrabold text-zinc-700 flex-shrink-0',
-                              [
-                                Component.text(
-                                  u.name.length >= 2 ? u.name.substring(0, 2).toUpperCase() : u.name.toUpperCase(),
-                                ),
-                              ],
-                            ),
-                            div(classes: 'flex flex-col', [
-                              span([Component.text(u.name)]),
-                              span(classes: 'text-[9px] text-zinc-400 font-mono', [
-                                Component.text('UID: ${u.uid.substring(0, mathMin(u.uid.length, 10))}...'),
-                              ]),
-                            ]),
-                          ]),
-                        ]),
-                        td(classes: 'p-5 text-zinc-600 font-medium', [Component.text(u.email)]),
-                        td(classes: 'p-5 text-center', [
-                          span(
-                            classes:
-                                'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border bg-indigo-50 text-indigo-600 border-indigo-100',
-                            [
-                              Component.text((u.role ?? 'support').toUpperCase()),
-                            ],
-                          ),
-                        ]),
-                        td(classes: 'p-5 text-center', [
-                          span(
-                            classes:
-                                'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border bg-[#e2f1e9] text-[#0fa958] border-emerald-100',
-                            [
-                              Component.text('ACTIVE'),
-                            ],
-                          ),
-                        ]),
-                        td(classes: 'p-5 text-right', [
-                          button(
-                            onClick: () async {
-                              final adminFirestore = context.read(adminFirestoreProvider);
-                              await adminFirestore.collection('users').doc(u.uid).delete();
-                              _showToast('🗑️ Agent "${u.name}" removed.');
-                            },
-                            classes:
-                                'px-3 py-1.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-500 text-[10px] font-extrabold rounded-full transition-all',
-                            [Component.text('Remove Agent')],
-                          ),
-                        ]),
-                      ]),
-                  ]),
-                ]),
-              ],
-            );
-          }
-
-          return div(
-            classes:
-                'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
-            [
-              table(classes: 'w-full text-left text-xs border-collapse', [
-                thead(
-                  classes:
-                      'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
-                  [
-                    tr([
-                      th(classes: 'p-5', [Component.text('User / ID')]),
-                      th(classes: 'p-5', [Component.text('Contact Info')]),
-                      th(classes: 'p-5', [Component.text('Web3 Wallet')]),
-                      th(classes: 'p-5 text-center', [Component.text('ID Checked')]),
-                      th(classes: 'p-5 text-center', [Component.text('Background Checked')]),
-                      th(classes: 'p-5 text-center', [Component.text('Verification Level')]),
-                      th(classes: 'p-5 text-right', [Component.text('Clearance Control')]),
-                    ]),
-                  ],
-                ),
-                tbody(classes: 'divide-y divide-zinc-50', [
-                  for (final user in users)
-                    tr(
-                      classes: 'hover:bg-[#fcfdfc] transition-colors cursor-pointer',
-                      events: {
-                        'click': (e) {
-                          setState(() {
-                            _selectedUser = user;
-                            _userModalTab = 'details';
-                          });
-                        },
-                      },
-                      [
-                        td(classes: 'p-5 font-bold text-zinc-900', [
-                          div(classes: 'flex flex-col gap-0.5', [
-                            span([
-                              Component.text(user.name),
-                              if (user.banned)
-                                span(
-                                  classes:
-                                      'ml-2 px-1.5 py-0.5 rounded bg-red-100 text-red-500 font-black text-[8px] uppercase tracking-wider',
-                                  [Component.text('Banned')],
-                                ),
-                            ]),
-                            span(classes: 'text-[9px] text-zinc-400 font-mono', [Component.text('UID: ${user.uid}')]),
-                          ]),
-                        ]),
-                        td(classes: 'p-5 text-zinc-650 font-medium', [
-                          div(classes: 'flex flex-col gap-0.5', [
-                            span([Component.text(user.email)]),
-                            span(classes: 'text-[10px] text-zinc-400', [
-                              Component.text(user.phoneNumber ?? 'No Phone'),
-                            ]),
-                          ]),
-                        ]),
-                        td(classes: 'p-5 text-zinc-650 font-medium', [
-                          div(classes: 'flex flex-col gap-0.5', [
-                            if (user.walletPublicKey != null && user.walletPublicKey!.isNotEmpty) ...[
-                              a(
-                                href: getExplorerUrl(user.walletPublicKey!, false, currentEnv),
-                                classes: 'font-mono text-[10px] text-indigo-500 font-bold hover:underline',
-                                attributes: {'target': '_blank'},
-                                events: {'click': (e) => e.stopPropagation()},
-                                [
-                                  Component.text(
-                                    '${user.walletPublicKey!.substring(0, 6)}...${user.walletPublicKey!.substring(user.walletPublicKey!.length - 4)}',
-                                  ),
-                                ],
-                              ),
-                              span(classes: 'text-[9px] text-zinc-400 uppercase font-black', [
-                                Component.text(user.connectedWalletType ?? 'solana'),
-                              ]),
-                            ] else ...[
-                              span(classes: 'text-zinc-400 font-semibold', [Component.text('Not Linked')]),
-                            ],
-                          ]),
-                        ]),
-                        td(classes: 'p-5 text-center', [
-                          span(
-                            classes:
-                                'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border '
-                                '${user.idVerified ? 'bg-[#e2f1e9] text-[#0fa958] border-emerald-500/10' : 'bg-zinc-100 text-zinc-400 border-zinc-200'}',
-                            [Component.text(user.idVerified ? 'VERIFIED' : 'UNVERIFIED')],
-                          ),
-                        ]),
-                        td(classes: 'p-5 text-center', [
-                          span(
-                            classes:
-                                'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border '
-                                '${user.bgChecked ? 'bg-[#e2f1e9] text-[#0fa958] border-emerald-500/10' : 'bg-zinc-100 text-zinc-400 border-zinc-200'}',
-                            [Component.text(user.bgChecked ? 'CLEARED' : 'UNCLEARED')],
-                          ),
-                        ]),
-                        td(classes: 'p-5 text-center', [
-                          span(
-                            classes:
-                                'px-3 py-1 rounded-full text-[10px] font-extrabold border '
-                                '${user.verificationLevel == 2
-                                    ? 'bg-[#e2f1e9] text-[#0fa958] border-emerald-500/10'
-                                    : user.verificationLevel == 1
-                                    ? 'bg-indigo-50 text-indigo-500 border-indigo-500/10'
-                                    : 'bg-zinc-100 text-zinc-400 border-zinc-200'}',
-                            [Component.text('LEVEL ${user.verificationLevel}')],
-                          ),
-                        ]),
-                        td(classes: 'p-5 text-right', [
-                          if (!user.bgChecked)
-                            button(
-                              onClick: () async {
-                                final firestore = context.read(firestoreProvider);
-                                await firestore.collection('users').doc(user.uid).update({
-                                  'bgChecked': true,
-                                  'verificationLevel': 2,
-                                });
-                              },
-                              events: {'click': (e) => e.stopPropagation()},
-                              classes:
-                                  'px-4 py-2 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold tracking-wide uppercase rounded-full transition-all shadow-md shadow-black/10',
-                              [Component.text('Clear BG Record')],
-                            )
-                          else
-                            button(
-                              onClick: () async {
-                                final firestore = context.read(firestoreProvider);
-                                await firestore.collection('users').doc(user.uid).update({
-                                  'bgChecked': false,
-                                  'verificationLevel': user.idVerified ? 1 : 0,
-                                });
-                              },
-                              events: {'click': (e) => e.stopPropagation()},
-                              classes:
-                                  'px-4 py-2 border border-red-200 bg-red-50 hover:bg-red-100/50 text-red-500 text-[10px] font-extrabold tracking-wide uppercase rounded-full transition-all',
-                              [Component.text('Revoke BG')],
-                            ),
-                        ]),
-                      ],
-                    ),
-                ]),
-              ]),
-            ],
-          );
-        },
-        loading: () => div(
-          classes:
-              'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
-          [div(classes: 'animate-spin h-6 w-6 border-2 border-zinc-200 border-t-indigo-500 rounded-full', [])],
-        ),
-        error: (err, _) => div(
-          classes: 'p-6 bg-red-50/5 border border-red-500/10 text-red-500 text-xs rounded-[20px] font-mono shadow-sm',
-          [Component.text('Error loading users: $err')],
-        ),
-      ),
-
-      // Live Blockchain Ledger Panel (Visible ONLY to Admin accounts)
-      if (isAdmin) ...[
-        div(classes: 'flex flex-col gap-3.5', [
+      if (mainTab == 'directory') ...[
+        // Modern Header block
+        div(classes: 'flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-200/50 pb-5', [
           div(classes: 'flex flex-col gap-1', [
-            h3(classes: 'text-sm font-bold text-zinc-900 flex items-center gap-2', [
-              span([Component.text('⛓️')]),
-              Component.text('Live Blockchain Ledger Transactions'),
+            h1(classes: 'text-xl font-black tracking-tight text-zinc-900', [Component.text('User Accounts Directory')]),
+            p(classes: 'text-xs text-zinc-400 font-medium', [
+              Component.text('Audit user profiles, trust badges, and run background check clearance.'),
             ]),
-            p(classes: 'text-xs text-zinc-400 font-semibold', [
-              Component.text('Real-time updates of digital wallet escrow and settlement hashes.'),
+          ]),
+          div(classes: 'flex items-center gap-3', [
+            // Tabs styled in capsules
+            div(classes: 'flex items-center gap-1 bg-white p-1 border border-zinc-200/50 rounded-full shadow-sm', [
+              buildTabButton('👥 Users', 'platform'),
+              buildTabButton('🛡️ Agents / Staff', 'support'),
+              buildTabButton('🔑 Admins', 'admin'),
+            ]),
+            // Add Agent button (only on support tab)
+            if (activeTab == 'support' && isAdmin)
+              button(
+                onClick: () => setState(() => _showAddAgentForm = !_showAddAgentForm),
+                classes:
+                    'px-4 py-2.5 bg-black hover:bg-zinc-800 text-white text-xs font-extrabold rounded-full '
+                    'shadow-md shadow-black/10 transition-all flex items-center gap-2',
+                [
+                  span(classes: 'text-sm', [Component.text(_showAddAgentForm ? '✕' : '+')]),
+                  Component.text(_showAddAgentForm ? 'Cancel' : 'Add Agent'),
+                ],
+              ),
+          ]),
+        ]),
+
+        // Add Agent Form Card
+        if (_showAddAgentForm && activeTab == 'support')
+          div(classes: 'w-full bg-white border border-zinc-200/50 rounded-[24px] p-6 shadow-sm flex flex-col gap-4', [
+            div(classes: 'flex flex-col gap-0.5', [
+              h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Create Support Agent')]),
+              p(classes: 'text-xs text-zinc-400 font-medium', [
+                Component.text('New agents will be added to the support queue and visible in Live Customer Service.'),
+              ]),
+            ]),
+            div(classes: 'grid grid-cols-1 md:grid-cols-3 gap-3', [
+              div(classes: 'flex flex-col gap-1.5', [
+                label(classes: 'text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider', [
+                  Component.text('Full Name'),
+                ]),
+                input(
+                  value: _agentName,
+                  onInput: (v) => setState(() => _agentName = v as String),
+                  classes:
+                      'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200 rounded-xl text-xs text-zinc-900 '
+                      'focus:outline-none focus:ring-2 focus:ring-black/10',
+                  attributes: {'placeholder': 'e.g. Juan dela Cruz'},
+                ),
+              ]),
+              div(classes: 'flex flex-col gap-1.5', [
+                label(classes: 'text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider', [
+                  Component.text('Email Address'),
+                ]),
+                input(
+                  value: _agentEmail,
+                  onInput: (v) => setState(() => _agentEmail = v as String),
+                  classes:
+                      'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200 rounded-xl text-xs text-zinc-900 '
+                      'focus:outline-none focus:ring-2 focus:ring-black/10',
+                  attributes: {'placeholder': 'agent@tranyx.com', 'type': 'email'},
+                ),
+              ]),
+              div(classes: 'flex flex-col gap-1.5', [
+                label(classes: 'text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider', [
+                  Component.text('Temporary Password'),
+                ]),
+                input(
+                  value: _agentPassword,
+                  onInput: (v) => setState(() => _agentPassword = v as String),
+                  classes:
+                      'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200 rounded-xl text-xs text-zinc-900 '
+                      'focus:outline-none focus:ring-2 focus:ring-black/10',
+                  attributes: {'placeholder': '••••••••', 'type': 'password'},
+                ),
+              ]),
+            ]),
+            div(classes: 'flex justify-end', [
+              button(
+                onClick: _isCreatingAgent ? null : () async => _createAgent(),
+                classes:
+                    'px-6 py-2.5 rounded-xl text-xs font-extrabold transition-all '
+                    '${_isCreatingAgent ? "bg-zinc-300 text-zinc-500 cursor-not-allowed" : "bg-black hover:bg-zinc-800 text-white shadow-md shadow-black/10"}',
+                [
+                  if (_isCreatingAgent)
+                    div(classes: 'flex items-center gap-2', [
+                      div(
+                        classes: 'w-3.5 h-3.5 border-2 border-zinc-400 border-t-zinc-200 rounded-full animate-spin',
+                        [],
+                      ),
+                      Component.text('Creating...'),
+                    ])
+                  else
+                    Component.text('Create Agent'),
+                ],
+              ),
             ]),
           ]),
 
-          txsAsync.when(
-            data: (txs) {
-              if (txs.isEmpty) {
-                return div(classes: 'p-10 bg-white border border-zinc-200/50 rounded-[28px] text-center shadow-sm', [
-                  span(classes: 'text-2xl mb-2', [Component.text('🕸️')]),
-                  h4(classes: 'text-xs font-bold text-zinc-800', [Component.text('No transactions detected')]),
-                  p(classes: 'text-[10px] text-zinc-400 font-semibold mt-1', [
-                    Component.text('Awaiting real-time blocks from the environment database ledger.'),
-                  ]),
-                ]);
+        // Directory Table Card
+        (activeTab == 'platform' ? usersAsync : adminUsersAsync).when(
+          data: (allUsers) {
+            final users = allUsers.where((u) {
+              final r = u.role?.toLowerCase().trim() ?? '';
+              if (activeTab == 'support') {
+                // Rule: anything that is NOT admin and NOT a plain platform user is an agent
+                return r.isNotEmpty && r != 'admin' && r != 'user';
+              } else if (activeTab == 'admin') {
+                return r == 'admin';
+              } else {
+                // Platform users: no role, or explicitly 'user'
+                return r.isEmpty || r == 'user';
               }
+            }).toList();
 
+            if (users.isEmpty) {
+              return div(
+                classes:
+                    'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+                [
+                  span(classes: 'text-3xl mb-3', [Component.text(activeTab == 'support' ? '🛡️' : '👥')]),
+                  h3(classes: 'text-sm font-bold text-zinc-900', [
+                    Component.text(activeTab == 'support' ? 'No support agents found' : 'No accounts found'),
+                  ]),
+                  p(classes: 'text-xs text-zinc-500 mt-1', [
+                    Component.text(
+                      activeTab == 'support'
+                          ? 'Click "Add Agent" above to create your first support agent.'
+                          : 'No accounts matching this category exist in this environment.',
+                    ),
+                  ]),
+                ],
+              );
+            }
+
+            // Support tab has a different (simpler) table view
+            if (activeTab == 'support') {
               return div(
                 classes:
                     'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
@@ -1323,73 +1377,450 @@ class _UsersPageState extends State<UsersPage> {
                           'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
                       [
                         tr([
-                          th(classes: 'p-5', [Component.text('Tx Hash / Signature')]),
-                          th(classes: 'p-5', [Component.text('Account Owner')]),
-                          th(classes: 'p-5', [Component.text('Type')]),
+                          th(classes: 'p-5', [Component.text('Agent Name')]),
+                          th(classes: 'p-5', [Component.text('Email')]),
+                          th(classes: 'p-5 text-center', [Component.text('Role')]),
                           th(classes: 'p-5 text-center', [Component.text('Status')]),
-                          th(classes: 'p-5 text-right', [Component.text('Amount Value')]),
+                          th(classes: 'p-5 text-right', [Component.text('Actions')]),
                         ]),
                       ],
                     ),
-                    tbody(classes: 'divide-y divide-zinc-50 font-medium', [
-                      for (final tx in txs)
+                    tbody(classes: 'divide-y divide-zinc-50', [
+                      for (final u in users)
                         tr(classes: 'hover:bg-[#fcfdfc] transition-colors', [
-                          td(classes: 'p-5 font-mono text-[10px]', [
-                            if (tx.signature.startsWith('0x') && tx.signature.length <= 14)
-                              span(classes: 'text-zinc-500 font-bold', [Component.text(tx.signature)])
-                            else
-                              a(
-                                href: getExplorerUrl(tx.signature, true, currentEnv),
-                                classes: 'text-indigo-500 font-bold hover:underline',
-                                attributes: {'target': '_blank'},
+                          td(classes: 'p-5 font-bold text-zinc-900', [
+                            div(classes: 'flex items-center gap-2.5', [
+                              div(
+                                classes:
+                                    'w-7 h-7 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-[10px] font-extrabold text-zinc-700 flex-shrink-0',
                                 [
                                   Component.text(
-                                    tx.signature.length > 12
-                                        ? '${tx.signature.substring(0, 6)}...${tx.signature.substring(tx.signature.length - 6)}'
-                                        : tx.signature,
+                                    u.name.length >= 2 ? u.name.substring(0, 2).toUpperCase() : u.name.toUpperCase(),
                                   ),
                                 ],
                               ),
+                              div(classes: 'flex flex-col', [
+                                span([Component.text(u.name)]),
+                                span(classes: 'text-[9px] text-zinc-400 font-mono', [
+                                  Component.text('UID: ${u.uid.substring(0, mathMin(u.uid.length, 10))}...'),
+                                ]),
+                              ]),
+                            ]),
                           ]),
-                          td(classes: 'p-5 text-zinc-700', [
-                            span([Component.text('User: ${tx.uid.substring(0, mathMin(tx.uid.length, 12))}')]),
-                          ]),
-                          td(classes: 'p-5 uppercase text-[10px] font-extrabold tracking-wide text-zinc-400', [
-                            Component.text(tx.type),
+                          td(classes: 'p-5 text-zinc-650 font-medium', [Component.text(u.email)]),
+                          td(classes: 'p-5 text-center', [
+                            span(
+                              classes:
+                                  'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border bg-indigo-50 text-indigo-600 border-indigo-100',
+                              [
+                                Component.text((u.role ?? 'support').toUpperCase()),
+                              ],
+                            ),
                           ]),
                           td(classes: 'p-5 text-center', [
                             span(
                               classes:
-                                  "px-2 py-0.5 rounded-full text-[9px] font-black border "
-                                  "${(tx.status.toLowerCase() == 'success' || tx.status.toLowerCase() == 'completed' || tx.status.toLowerCase() == 'approved')
-                                      ? 'bg-[#e2f1e9] text-[#0fa958] border-emerald-500/10'
-                                      : (tx.status.toLowerCase() == 'pending')
-                                      ? 'bg-amber-50 text-amber-600 border-amber-500/10'
-                                      : 'bg-red-50 text-red-500 border-red-500/10'}",
-                              [Component.text(tx.status.toUpperCase())],
+                                  'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border bg-[#e2f1e9] text-[#0fa958] border-emerald-100',
+                              [
+                                Component.text('ACTIVE'),
+                              ],
                             ),
                           ]),
-                          td(classes: 'p-5 text-right font-black text-zinc-800 text-xs', [
-                            Component.text('₱${tx.amount.toStringAsFixed(2)}'),
+                          td(classes: 'p-5 text-right', [
+                            button(
+                              onClick: () async {
+                                final adminFirestore = context.read(adminFirestoreProvider);
+                                await adminFirestore.collection('users').doc(u.uid).delete();
+                                _showToast('🗑️ Agent "${u.name}" removed.');
+                              },
+                              classes:
+                                  'px-3 py-1.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-500 text-[10px] font-extrabold rounded-full transition-all',
+                              [Component.text('Remove Agent')],
+                            ),
                           ]),
                         ]),
                     ]),
                   ]),
                 ],
               );
-            },
-            loading: () => div(
+            }
+
+            return div(
               classes:
-                  'flex justify-center items-center py-10 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
-              [div(classes: 'animate-spin h-5 w-5 border-2 border-zinc-200 border-t-emerald-500 rounded-full', [])],
-            ),
-            error: (err, _) => div(
-              classes:
-                  'p-6 bg-red-50/5 border border-red-500/10 text-red-500 text-xs rounded-[20px] font-mono shadow-sm',
-              [Component.text('Error loading ledger: $err')],
-            ),
+                  'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+              [
+                table(classes: 'w-full text-left text-xs border-collapse', [
+                  thead(
+                    classes:
+                        'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
+                    [
+                      tr([
+                        th(classes: 'p-5', [Component.text('User / ID')]),
+                        th(classes: 'p-5', [Component.text('Contact Info')]),
+                        th(classes: 'p-5', [Component.text('Web3 Wallet')]),
+                        th(classes: 'p-5 text-center', [Component.text('ID Checked')]),
+                        th(classes: 'p-5 text-center', [Component.text('Background Checked')]),
+                        th(classes: 'p-5 text-center', [Component.text('Verification Level')]),
+                        th(classes: 'p-5 text-right', [Component.text('Clearance Control')]),
+                      ]),
+                    ],
+                  ),
+                  tbody(classes: 'divide-y divide-zinc-50', [
+                    for (final user in users)
+                      tr(
+                        classes: 'hover:bg-[#fcfdfc] transition-colors cursor-pointer',
+                        events: {
+                          'click': (e) {
+                            setState(() {
+                              _selectedUser = user;
+                              _userModalTab = 'details';
+                            });
+                          },
+                        },
+                        [
+                          td(classes: 'p-5 font-bold text-zinc-900', [
+                            div(classes: 'flex flex-col gap-0.5', [
+                              span([
+                                Component.text(user.name),
+                                if (user.banned)
+                                  span(
+                                    classes:
+                                        'ml-2 px-1.5 py-0.5 rounded bg-red-100 text-red-500 font-black text-[8px] uppercase tracking-wider',
+                                    [Component.text('Banned')],
+                                  ),
+                              ]),
+                              span(classes: 'text-[9px] text-zinc-400 font-mono', [Component.text('UID: ${user.uid}')]),
+                            ]),
+                          ]),
+                          td(classes: 'p-5 text-zinc-655 font-medium', [
+                            div(classes: 'flex flex-col gap-0.5', [
+                              span([Component.text(user.email)]),
+                              span(classes: 'text-[10px] text-zinc-400', [
+                                Component.text(user.phoneNumber ?? 'No Phone'),
+                              ]),
+                            ]),
+                          ]),
+                          td(classes: 'p-5 text-zinc-655 font-medium', [
+                            div(classes: 'flex flex-col gap-0.5', [
+                              if (user.walletPublicKey != null && user.walletPublicKey!.isNotEmpty) ...[
+                                a(
+                                  href: getExplorerUrl(user.walletPublicKey!, false, currentEnv),
+                                  classes: 'font-mono text-[10px] text-indigo-500 font-bold hover:underline',
+                                  attributes: {'target': '_blank'},
+                                  events: {'click': (e) => e.stopPropagation()},
+                                  [
+                                    Component.text(
+                                      '${user.walletPublicKey!.substring(0, 6)}...${user.walletPublicKey!.substring(user.walletPublicKey!.length - 4)}',
+                                    ),
+                                  ],
+                                ),
+                                span(classes: 'text-[9px] text-zinc-400 uppercase font-black', [
+                                  Component.text(user.connectedWalletType ?? 'solana'),
+                                ]),
+                              ] else ...[
+                                span(classes: 'text-zinc-400 font-semibold', [Component.text('Not Linked')]),
+                              ],
+                            ]),
+                          ]),
+                          td(classes: 'p-5 text-center', [
+                            span(
+                              classes:
+                                  'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border '
+                                  '${user.idVerified ? 'bg-[#e2f1e9] text-[#0fa958] border-emerald-500/10' : 'bg-zinc-100 text-zinc-400 border-zinc-200'}',
+                              [Component.text(user.idVerified ? 'VERIFIED' : 'UNVERIFIED')],
+                            ),
+                          ]),
+                          td(classes: 'p-5 text-center', [
+                            span(
+                              classes:
+                                  'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border '
+                                  '${user.bgChecked ? 'bg-[#e2f1e9] text-[#0fa958] border-emerald-500/10' : 'bg-zinc-100 text-zinc-400 border-zinc-200'}',
+                              [Component.text(user.bgChecked ? 'CLEARED' : 'UNCLEARED')],
+                            ),
+                          ]),
+                          td(classes: 'p-5 text-center', [
+                            span(
+                              classes:
+                                  'px-3 py-1 rounded-full text-[10px] font-extrabold border '
+                                  '${user.verificationLevel == 2
+                                      ? 'bg-[#e2f1e9] text-[#0fa958] border-emerald-500/10'
+                                      : user.verificationLevel == 1
+                                      ? 'bg-indigo-50 text-indigo-500 border-indigo-500/10'
+                                      : 'bg-zinc-100 text-zinc-400 border-zinc-200'}',
+                              [Component.text('LEVEL ${user.verificationLevel}')],
+                            ),
+                          ]),
+                          td(classes: 'p-5 text-right', [
+                            if (!user.bgChecked)
+                              button(
+                                onClick: () async {
+                                  final firestore = context.read(firestoreProvider);
+                                  await firestore.collection('users').doc(user.uid).update({
+                                    'bgChecked': true,
+                                    'verificationLevel': 2,
+                                  });
+                                },
+                                events: {'click': (e) => e.stopPropagation()},
+                                classes:
+                                    'px-4 py-2 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold tracking-wide uppercase rounded-full transition-all shadow-md shadow-black/10',
+                                [Component.text('Clear BG Record')],
+                              )
+                            else
+                              button(
+                                onClick: () async {
+                                  final firestore = context.read(firestoreProvider);
+                                  await firestore.collection('users').doc(user.uid).update({
+                                    'bgChecked': false,
+                                    'verificationLevel': user.idVerified ? 1 : 0,
+                                  });
+                                },
+                                events: {'click': (e) => e.stopPropagation()},
+                                classes:
+                                    'px-4 py-2 border border-red-200 bg-red-50 hover:bg-red-100/50 text-red-500 text-[10px] font-extrabold tracking-wide uppercase rounded-full transition-all',
+                                [Component.text('Revoke BG')],
+                              ),
+                          ]),
+                        ],
+                      ),
+                  ]),
+                ]),
+              ],
+            );
+          },
+          loading: () => div(
+            classes:
+                'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+            [div(classes: 'animate-spin h-6 w-6 border-2 border-zinc-200 border-t-indigo-500 rounded-full', [])],
           ),
+          error: (err, _) => div(
+            classes: 'p-6 bg-red-50/5 border border-red-500/10 text-red-500 text-xs rounded-[20px] font-mono shadow-sm',
+            [Component.text('Error loading users: $err')],
+          ),
+        ),
+
+        // Live Blockchain Ledger Panel (Visible ONLY to Admin accounts)
+        if (isAdmin) ...[
+          div(classes: 'flex flex-col gap-3.5', [
+            div(classes: 'flex flex-col gap-1', [
+              h3(classes: 'text-sm font-bold text-zinc-900 flex items-center gap-2', [
+                span([Component.text('⛓️')]),
+                Component.text('Live Blockchain Ledger Transactions'),
+              ]),
+              p(classes: 'text-xs text-zinc-400 font-semibold', [
+                Component.text('Real-time updates of digital wallet escrow and settlement hashes.'),
+              ]),
+            ]),
+
+            txsAsync.when(
+              data: (txs) {
+                if (txs.isEmpty) {
+                  return div(classes: 'p-10 bg-white border border-zinc-200/50 rounded-[28px] text-center shadow-sm', [
+                    span(classes: 'text-2xl mb-2', [Component.text('🕸️')]),
+                    h4(classes: 'text-xs font-bold text-zinc-800', [Component.text('No transactions detected')]),
+                    p(classes: 'text-[10px] text-zinc-400 font-semibold mt-1', [
+                      Component.text('Awaiting real-time blocks from the environment database ledger.'),
+                    ]),
+                  ]);
+                }
+
+                return div(
+                  classes:
+                      'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+                  [
+                    table(classes: 'w-full text-left text-xs border-collapse', [
+                      thead(
+                        classes:
+                            'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
+                        [
+                          tr([
+                            th(classes: 'p-5', [Component.text('Tx Hash / Signature')]),
+                            th(classes: 'p-5', [Component.text('Account Owner')]),
+                            th(classes: 'p-5', [Component.text('Type')]),
+                            th(classes: 'p-5 text-center', [Component.text('Status')]),
+                            th(classes: 'p-5 text-right', [Component.text('Amount Value')]),
+                          ]),
+                        ],
+                      ),
+                      tbody(classes: 'divide-y divide-zinc-50 font-medium', [
+                        for (final tx in txs)
+                          tr(classes: 'hover:bg-[#fcfdfc] transition-colors', [
+                            td(classes: 'p-5 font-mono text-[10px]', [
+                              if (tx.signature.startsWith('0x') && tx.signature.length <= 14)
+                                span(classes: 'text-zinc-500 font-bold', [Component.text(tx.signature)])
+                              else
+                                a(
+                                  href: getExplorerUrl(tx.signature, true, currentEnv),
+                                  classes: 'text-indigo-500 font-bold hover:underline',
+                                  attributes: {'target': '_blank'},
+                                  [
+                                    Component.text(
+                                      tx.signature.length > 12
+                                          ? '${tx.signature.substring(0, 6)}...${tx.signature.substring(tx.signature.length - 6)}'
+                                          : tx.signature,
+                                    ),
+                                  ],
+                                ),
+                            ]),
+                            td(classes: 'p-5 text-zinc-700', [
+                              span([Component.text('User: ${tx.uid.substring(0, mathMin(tx.uid.length, 12))}')]),
+                            ]),
+                            td(classes: 'p-5 uppercase text-[10px] font-extrabold tracking-wide text-zinc-400', [
+                              Component.text(tx.type),
+                            ]),
+                            td(classes: 'p-5 text-center', [
+                              span(
+                                classes:
+                                    "px-2 py-0.5 rounded-full text-[9px] font-black border "
+                                    "${(tx.status.toLowerCase() == 'success' || tx.status.toLowerCase() == 'completed' || tx.status.toLowerCase() == 'approved')
+                                        ? 'bg-[#e2f1e9] text-[#0fa958] border-emerald-500/10'
+                                        : (tx.status.toLowerCase() == 'pending')
+                                        ? 'bg-amber-50 text-amber-600 border-amber-500/10'
+                                        : 'bg-red-50 text-red-500 border-red-500/10'}",
+                                [Component.text(tx.status.toUpperCase())],
+                              ),
+                            ]),
+                            td(classes: 'p-5 text-right font-black text-zinc-800 text-xs', [
+                              Component.text('₱${tx.amount.toStringAsFixed(2)}'),
+                            ]),
+                          ]),
+                      ]),
+                    ]),
+                  ],
+                );
+              },
+              loading: () => div(
+                classes:
+                    'flex justify-center items-center py-10 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+                [div(classes: 'animate-spin h-5 w-5 border-2 border-zinc-200 border-t-emerald-500 rounded-full', [])],
+              ),
+              error: (err, _) => div(
+                classes:
+                    'p-6 bg-red-50/5 border border-red-500/10 text-red-500 text-xs rounded-[20px] font-mono shadow-sm',
+                [Component.text('Error loading ledger: $err')],
+              ),
+            ),
+          ]),
+        ],
+      ] else ...[
+        // User Rewards View
+        div(classes: 'flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-200/50 pb-5', [
+          div(classes: 'flex flex-col gap-1', [
+            h1(classes: 'text-xl font-black tracking-tight text-zinc-900', [Component.text('User Rewards Center')]),
+            p(classes: 'text-xs text-zinc-400 font-medium', [
+              Component.text('Track user quest milestones, total Terra Points (TP) balances, and award points manually.'),
+            ]),
+          ]),
         ]),
+
+        // Rewards Leaderboard Table
+        usersAsync.when(
+          data: (allUsers) {
+            final rewardUsers = allUsers.where((u) {
+              final r = u.role?.toLowerCase().trim() ?? '';
+              return r.isEmpty || r == 'user';
+            }).toList()..sort((a, b) => b.terraPoints.compareTo(a.terraPoints));
+
+            if (rewardUsers.isEmpty) {
+              return div(
+                classes:
+                    'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+                [
+                  span(classes: 'text-3xl mb-3', [Component.text('🪙')]),
+                  h3(classes: 'text-sm font-bold text-zinc-900', [Component.text('No user rewards profiles found')]),
+                  p(classes: 'text-xs text-zinc-500 mt-1', [
+                    Component.text('User rewards accounts will appear here once they register and earn points.'),
+                  ]),
+                ],
+              );
+            }
+
+            return div(
+              classes:
+                  'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+              [
+                table(classes: 'w-full text-left text-xs border-collapse', [
+                  thead(
+                    classes:
+                        'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
+                    [
+                      tr([
+                        th(classes: 'p-5 w-16 text-center', [Component.text('Rank')]),
+                        th(classes: 'p-5', [Component.text('User / ID')]),
+                        th(classes: 'p-5', [Component.text('Contact Info')]),
+                        th(classes: 'p-5 text-center', [Component.text('Quests Completed')]),
+                        th(classes: 'p-5 text-center', [Component.text('Terra Points')]),
+                        th(classes: 'p-5 text-right', [Component.text('Actions')]),
+                      ]),
+                    ],
+                  ),
+                  tbody(classes: 'divide-y divide-zinc-50', [
+                    ...rewardUsers.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final u = entry.value;
+                      final rankStr = (i == 0) ? '🥇 1' : (i == 1) ? '🥈 2' : (i == 2) ? '🥉 3' : '${i + 1}';
+                      return tr(
+                        classes: 'hover:bg-[#fcfdfc] transition-colors cursor-pointer',
+                        events: {
+                          'click': (e) {
+                            setState(() {
+                              _selectedUser = u;
+                              _userModalTab = 'rewards';
+                            });
+                          },
+                        },
+                        [
+                          td(classes: 'p-5 text-center font-black text-zinc-550 text-[13px]', [Component.text(rankStr)]),
+                          td(classes: 'p-5 font-bold text-zinc-900', [
+                            div(classes: 'flex flex-col gap-0.5', [
+                              span([Component.text(u.name)]),
+                              span(classes: 'text-[9px] text-zinc-400 font-mono', [Component.text('UID: ${u.uid}')]),
+                            ]),
+                          ]),
+                          td(classes: 'p-5 text-zinc-650 font-medium', [
+                            div(classes: 'flex flex-col gap-0.5', [
+                              span([Component.text(u.email)]),
+                              span(classes: 'text-[10px] text-zinc-400', [Component.text(u.phoneNumber ?? 'No Phone')]),
+                            ]),
+                          ]),
+                          td(classes: 'p-5 text-center font-bold text-zinc-700', [
+                            Component.text('${u.earnedRewards.length} / ${standardQuests.length}'),
+                          ]),
+                          td(classes: 'p-5 text-center', [
+                            span(classes: 'px-3 py-1.5 rounded-full text-xs font-black bg-amber-50 text-amber-700 border border-amber-500/10 flex items-center gap-1 w-max mx-auto', [
+                              Component.text('🪙 ${u.terraPoints} TP'),
+                            ]),
+                          ]),
+                          td(classes: 'p-5 text-right', [
+                            button(
+                              onClick: () {
+                                setState(() {
+                                    _selectedUser = u;
+                                    _userModalTab = 'rewards';
+                                });
+                              },
+                              events: {'click': (e) => e.stopPropagation()},
+                              classes: 'px-4 py-2 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold tracking-wide uppercase rounded-full transition-all shadow-md shadow-black/10',
+                              [Component.text('View Quest History')],
+                            ),
+                          ]),
+                        ],
+                      );
+                    }),
+                  ]),
+                ]),
+              ],
+            );
+          },
+          loading: () => div(
+            classes:
+                'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+            [div(classes: 'animate-spin h-6 w-6 border-2 border-zinc-200 border-t-indigo-500 rounded-full', [])],
+          ),
+          error: (err, _) => div(
+            classes: 'p-6 bg-red-50/5 border border-red-500/10 text-red-500 text-xs rounded-[20px] font-mono shadow-sm',
+            [Component.text('Error loading users: $err')],
+          ),
+        ),
       ],
     ]);
   }
