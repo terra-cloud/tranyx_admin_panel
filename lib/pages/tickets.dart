@@ -47,6 +47,10 @@ class TicketModel {
 }
 
 final ticketsStreamProvider = StreamProvider<List<TicketModel>>((ref) {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  if (userAsync.value == null) {
+    return Stream.value(<TicketModel>[]);
+  }
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('supportTickets')

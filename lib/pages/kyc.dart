@@ -87,8 +87,11 @@ class KycSubmission {
 }
 
 final kycQueueStreamProvider = StreamProvider<List<KycSubmission>>((ref) {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  if (userAsync.value == null) {
+    return Stream.value(<KycSubmission>[]);
+  }
   final firestore = ref.watch(firestoreProvider);
-  ref.watch(activeEnvAuthUserProvider);
   return firestore
       .collection('kyc_submissions')
       .snapshots()

@@ -166,6 +166,10 @@ final supportAgentsProvider = StreamProvider<List<UserProfileModel>>((ref) {
 });
 
 final supportChatsStreamProvider = StreamProvider<List<SupportChat>>((ref) {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  if (userAsync.value == null) {
+    return Stream.value(<SupportChat>[]);
+  }
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('support_chats')
@@ -181,6 +185,10 @@ final supportChatsStreamProvider = StreamProvider<List<SupportChat>>((ref) {
 final activeChatRoomIdProvider = StateProvider<String?>((ref) => null);
 
 final activeChatMessagesStreamProvider = StreamProvider<List<ChatMessage>>((ref) {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  if (userAsync.value == null) {
+    return Stream.value(<ChatMessage>[]);
+  }
   final firestore = ref.watch(firestoreProvider);
   final activeChatId = ref.watch(activeChatRoomIdProvider);
   if (activeChatId == null) return const Stream.empty();

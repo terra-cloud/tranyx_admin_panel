@@ -159,6 +159,10 @@ final dbStaffCountProvider = StreamProvider<int>((ref) {
 
 /// Detailed revenue split by timeframe and category fees
 final detailedRevenueProvider = StreamProvider<DetailedRevenue>((ref) {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  if (userAsync.value == null) {
+    return Stream.value(DetailedRevenue.empty());
+  }
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('transactions')
@@ -550,6 +554,10 @@ final newListings24hProvider = StreamProvider<NewListingsStats>((ref) {
 
 /// Revenue in past 24H from transactions collection
 final revenue24hProvider = StreamProvider<RevenueStats>((ref) {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  if (userAsync.value == null) {
+    return Stream.value(RevenueStats(blockchainFees: 0.0, totalVolume: 0.0));
+  }
   final firestore = ref.watch(firestoreProvider);
   final cutoff = _oneDayAgo();
   return firestore
@@ -575,6 +583,10 @@ final revenue24hProvider = StreamProvider<RevenueStats>((ref) {
 
 /// KYC verification breakdown
 final kycStatsProvider = StreamProvider<KycStats>((ref) {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  if (userAsync.value == null) {
+    return Stream.value(KycStats(approved: 0, pending: 0, rejected: 0));
+  }
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('kyc_submissions')
@@ -598,6 +610,10 @@ final kycStatsProvider = StreamProvider<KycStats>((ref) {
 
 /// Monthly revenue for current year (total volume + 3% fee breakdown)
 final monthlyRevenueProvider = StreamProvider<List<double>>((ref) {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  if (userAsync.value == null) {
+    return Stream.value(List<double>.filled(12, 0.0));
+  }
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('transactions')

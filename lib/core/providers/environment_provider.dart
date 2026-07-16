@@ -50,9 +50,22 @@ final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
   try {
     final email = web.window.localStorage.getItem('tranyx_staff_email');
     final password = web.window.localStorage.getItem('tranyx_staff_password');
-    if (email != null && password != null && auth.currentUser == null) {
+    if (email == null || password == null) {
+      if (auth.currentUser != null) {
+        Future.microtask(() async {
+          try {
+            await auth.signOut();
+          } catch (e) {
+            print('[AuthSync] Failed to sign out for ${auth.app.name}: $e');
+          }
+        });
+      }
+    } else if (auth.currentUser == null || auth.currentUser!.email != email) {
       Future.microtask(() async {
         try {
+          if (auth.currentUser != null) {
+            await auth.signOut();
+          }
           await auth.signInWithEmailAndPassword(email: email, password: password);
         } on FirebaseAuthException catch (e) {
           if (e.code == 'user-not-found' || e.code == 'invalid-credential' || e.code == 'wrong-password') {

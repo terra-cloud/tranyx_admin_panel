@@ -33,6 +33,10 @@ class ActivityEvent {
 }
 
 final userTransactionsProvider = StreamProvider.family<List<TxModel>, String>((ref, uid) {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  if (userAsync.value == null) {
+    return Stream.value(<TxModel>[]);
+  }
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('transactions')
@@ -45,6 +49,10 @@ final userTransactionsProvider = StreamProvider.family<List<TxModel>, String>((r
 });
 
 final userActivityHistoryProvider = StreamProvider.family<List<ActivityEvent>, String>((ref, uid) {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  if (userAsync.value == null) {
+    return Stream.value(<ActivityEvent>[]);
+  }
   final firestore = ref.watch(firestoreProvider);
   final controller = StreamController<List<ActivityEvent>>();
 
@@ -239,6 +247,10 @@ class PointsHistoryModel {
 }
 
 final userPointsHistoryProvider = StreamProvider.family<List<PointsHistoryModel>, String>((ref, uid) {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  if (userAsync.value == null) {
+    return Stream.value(<PointsHistoryModel>[]);
+  }
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('points_history')
@@ -384,6 +396,10 @@ final adminUsersStreamProvider = StreamProvider<List<UserProfileModel>>((ref) {
 });
 
 final blockchainTxStreamProvider = StreamProvider<List<TxModel>>((ref) {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  if (userAsync.value == null) {
+    return Stream.value(<TxModel>[]);
+  }
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('transactions')
