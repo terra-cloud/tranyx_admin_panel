@@ -282,6 +282,7 @@ class UserProfileModel {
   final int? suspendedUntil;
   final int terraPoints;
   final List<String> earnedRewards;
+  final double availableBalance;
 
   UserProfileModel({
     required this.uid,
@@ -298,6 +299,7 @@ class UserProfileModel {
     this.suspendedUntil,
     this.terraPoints = 0,
     this.earnedRewards = const [],
+    this.availableBalance = 0.0,
   });
 
   factory UserProfileModel.fromMap(String uid, Map<String, dynamic> map) {
@@ -316,6 +318,11 @@ class UserProfileModel {
       suspendedUntil: map['suspendedUntil'] as int?,
       terraPoints: map['terraPoints'] ?? 0,
       earnedRewards: map['earnedRewards'] != null ? List<String>.from(map['earnedRewards']) : const [],
+      availableBalance: (map['tyxBalance'] as num?)?.toDouble() ??
+          (map['availableBalance'] as num?)?.toDouble() ??
+          (map['walletBalance'] as num?)?.toDouble() ??
+          (map['balance'] as num?)?.toDouble() ??
+          0.0,
     );
   }
 }

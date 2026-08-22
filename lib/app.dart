@@ -19,6 +19,7 @@ import 'pages/tickets.dart';
 import 'pages/promos.dart';
 import 'pages/news.dart';
 import 'pages/reports.dart';
+import 'pages/deposits.dart';
 
 /// Provider that streams the currently logged-in Admin staff member.
 final adminCurrentUserProvider = StreamProvider<User?>((ref) {
@@ -103,6 +104,8 @@ class AppShell extends StatelessComponent {
                 },
                 routes: [
                   Route(path: '/', title: 'Dashboard', builder: (context, state) => const Dashboard()),
+                  Route(path: '/deposits', title: 'Payment Verification', builder: (context, state) => const DepositsPage()),
+                  Route(path: '/payment-verification', title: 'Payment Verification', builder: (context, state) => const DepositsPage()),
                   Route(path: '/listings', title: 'Listings', builder: (context, state) => const ListingsPage()),
                   Route(path: '/bookings', title: 'Bookings', builder: (context, state) => const BookingsPage()),
                   Route(path: '/kyc', title: 'KYC queue', builder: (context, state) => const KycPage()),

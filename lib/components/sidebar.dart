@@ -10,6 +10,7 @@ import '../core/providers/environment_provider.dart';
 import '../pages/kyc.dart';
 import '../pages/tickets.dart';
 import '../pages/reports.dart';
+import '../pages/deposits.dart';
 
 class Sidebar extends StatefulComponent {
   const Sidebar({super.key});
@@ -43,6 +44,13 @@ class _SidebarState extends State<Sidebar> {
         .watch(kycQueueStreamProvider)
         .maybeWhen(
           data: (list) => list.where((k) => k.status.toLowerCase() == 'pending').length,
+          orElse: () => 0,
+        );
+
+    final pendingDepositsCount = context
+        .watch(depositRequestsStreamProvider)
+        .maybeWhen(
+          data: (list) => list.where((d) => d.status == 'PENDING_VERIFICATION').length,
           orElse: () => 0,
         );
 
@@ -157,10 +165,10 @@ class _SidebarState extends State<Sidebar> {
                   '${_isCollapsed ? "justify-center" : "px-2"}',
               [
                 div(classes: 'flex items-center gap-3', [
-                  span(
-                    classes:
-                        'w-10 h-10 rounded-full bg-[#0fa958] text-white flex items-center justify-center font-black text-sm tracking-wider shadow-sm shadow-[#0fa958]/20 flex-shrink-0',
-                    [Component.text('T')],
+                  img(
+                    src: '/images/logo.png',
+                    alt: 'Tranyx Logo',
+                    classes: 'w-10 h-10 object-contain flex-shrink-0 drop-shadow-sm',
                   ),
                   if (!_isCollapsed)
                     h2(classes: 'text-sm font-black tracking-wide text-zinc-900 uppercase', [
@@ -173,6 +181,7 @@ class _SidebarState extends State<Sidebar> {
             // Menu list
             ul(classes: 'flex flex-col gap-1.5 list-none p-0 m-0 w-full', [
               buildMenuItem('Dashboard', '/', '/images/icon_dashboard.png'),
+              buildMenuItem('Payment Queue', '/deposits', '💳', badgeCount: pendingDepositsCount),
               buildMenuItem('Listings', '/listings', '/images/icon_listings.png'),
               buildMenuItem('Bookings', '/bookings', '/images/icon_bookings.png'),
               buildMenuItem('KYC Verification', '/kyc', '/images/icon_kyc.png', badgeCount: pendingKycCount),
@@ -263,10 +272,10 @@ class _SidebarState extends State<Sidebar> {
             'flex md:hidden items-center justify-between px-6 py-4 bg-white border-b border-zinc-200 sticky top-0 z-50 shadow-sm',
         [
           div(classes: 'flex items-center gap-2.5', [
-            span(
-              classes:
-                  'w-7.5 h-7.5 rounded-full bg-[#0fa958] text-white flex items-center justify-center font-black text-xs shadow-sm',
-              [Component.text('T')],
+            img(
+              src: '/images/logo.png',
+              alt: 'Tranyx Logo',
+              classes: 'w-8 h-8 object-contain flex-shrink-0 drop-shadow-sm',
             ),
             h2(classes: 'text-xs font-black tracking-wider text-zinc-900 uppercase', [Component.text('Tranyx Admin')]),
           ]),
@@ -286,6 +295,7 @@ class _SidebarState extends State<Sidebar> {
           [
             ul(classes: 'flex flex-col gap-2.5 list-none p-0 m-0', [
               buildMobileMenuItem('Dashboard', '/', '/images/icon_dashboard.png'),
+              buildMobileMenuItem('Payment Queue', '/deposits', '💳', badgeCount: pendingDepositsCount),
               buildMobileMenuItem('Listings', '/listings', '/images/icon_listings.png'),
               buildMobileMenuItem('Bookings', '/bookings', '/images/icon_bookings.png'),
               buildMobileMenuItem('KYC Verification', '/kyc', '/images/icon_kyc.png', badgeCount: pendingKycCount),
