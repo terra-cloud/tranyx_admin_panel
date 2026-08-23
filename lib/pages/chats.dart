@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
@@ -194,7 +195,7 @@ final activeChatMessagesStreamProvider = StreamProvider<List<ChatMessage>>((ref)
   if (activeChatId == null) return const Stream.empty();
   return firestore
       .collection('support_chats')
-      .doc(activeChatId!)
+      .doc(activeChatId)
       .collection('messages')
       .orderBy('createdAt', descending: false)
       .snapshots()
@@ -365,28 +366,24 @@ class _ChatsPageState extends State<ChatsPage> {
     Component buildStatusBadge(SupportChat chat) {
       if (chat.isPending) {
         return span(
-          classes:
-              'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-amber-100 text-amber-700 border border-amber-200',
+          classes: 'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-amber-100 text-amber-700 border border-amber-200',
           [Component.text('Pending')],
         );
       }
       if (chat.isAssigned) {
         return span(
-          classes:
-              'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-blue-100 text-blue-700 border border-blue-200',
+          classes: 'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-blue-100 text-blue-700 border border-blue-200',
           [Component.text('Assigned')],
         );
       }
       if (chat.isActive) {
         return span(
-          classes:
-              'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-[#e6f7ef] text-[#0fa958] border border-[#b7e6d0]',
+          classes: 'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-[#e6f7ef] text-[#0fa958] border border-[#b7e6d0]',
           [Component.text('Active')],
         );
       }
       return span(
-        classes:
-            'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-zinc-100 text-zinc-500 border border-zinc-200',
+        classes: 'px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-full bg-zinc-100 text-zinc-500 border border-zinc-200',
         [Component.text('Resolved')],
       );
     }
@@ -453,8 +450,7 @@ class _ChatsPageState extends State<ChatsPage> {
             return div(classes: 'flex items-center gap-2', [
               if (pending > 0)
                 div(
-                  classes:
-                      'flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 border border-amber-200 rounded-full text-[10px] font-extrabold text-amber-700',
+                  classes: 'flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 border border-amber-200 rounded-full text-[10px] font-extrabold text-amber-700',
                   [
                     span(classes: 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse', []),
                     Component.text('$pending Pending'),
@@ -462,14 +458,12 @@ class _ChatsPageState extends State<ChatsPage> {
                 ),
               if (assigned > 0)
                 div(
-                  classes:
-                      'flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 border border-blue-200 rounded-full text-[10px] font-extrabold text-blue-700',
+                  classes: 'flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 border border-blue-200 rounded-full text-[10px] font-extrabold text-blue-700',
                   [Component.text('$assigned Assigned')],
                 ),
               if (active > 0)
                 div(
-                  classes:
-                      'flex items-center gap-1.5 px-3 py-1.5 bg-[#e6f7ef] border border-[#b7e6d0] rounded-full text-[10px] font-extrabold text-[#0fa958]',
+                  classes: 'flex items-center gap-1.5 px-3 py-1.5 bg-[#e6f7ef] border border-[#b7e6d0] rounded-full text-[10px] font-extrabold text-[#0fa958]',
                   [Component.text('$active Active')],
                 ),
             ]);
@@ -482,8 +476,7 @@ class _ChatsPageState extends State<ChatsPage> {
       // New request alert banner
       if (alerts.isNotEmpty)
         div(
-          classes:
-              'w-full p-3 bg-amber-50 border border-amber-300 rounded-2xl flex items-center gap-3 animate-pulse shadow-sm',
+          classes: 'w-full p-3 bg-amber-50 border border-amber-300 rounded-2xl flex items-center gap-3 animate-pulse shadow-sm',
           [
             span(classes: 'text-xl flex-shrink-0', [Component.text('🔔')]),
             div(classes: 'flex flex-col gap-0.5 flex-1', [
@@ -498,8 +491,7 @@ class _ChatsPageState extends State<ChatsPage> {
             ]),
             button(
               onClick: () => context.read(newChatAlertProvider.notifier).state = [],
-              classes:
-                  'text-amber-500 hover:text-amber-800 font-bold text-xs px-2 py-1 rounded-lg hover:bg-amber-100 transition-colors flex-shrink-0',
+              classes: 'text-amber-500 hover:text-amber-800 font-bold text-xs px-2 py-1 rounded-lg hover:bg-amber-100 transition-colors flex-shrink-0',
               [Component.text('Dismiss')],
             ),
           ],
@@ -509,8 +501,7 @@ class _ChatsPageState extends State<ChatsPage> {
       div(classes: 'flex-grow flex gap-5 overflow-hidden min-h-0', [
         // Left: Chat Room List
         div(
-          classes:
-              'w-80 flex flex-col gap-2 bg-white border border-zinc-200/50 rounded-[24px] p-4 overflow-y-auto no-scrollbar shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+          classes: 'w-80 flex flex-col gap-2 bg-white border border-zinc-200/50 rounded-[24px] p-4 overflow-y-auto no-scrollbar shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
           [
             span(classes: 'text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-2 mb-1', [
               Component.text('Support Queue'),
@@ -549,8 +540,7 @@ class _ChatsPageState extends State<ChatsPage> {
 
         // Right: Chat Pane
         div(
-          classes:
-              'flex-1 bg-white border border-zinc-200/50 rounded-[28px] overflow-hidden flex flex-col shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+          classes: 'flex-1 bg-white border border-zinc-200/50 rounded-[28px] overflow-hidden flex flex-col shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
           [
             if (activeChatId == null)
               div(classes: 'flex-grow flex flex-col items-center justify-center text-center p-8 text-zinc-450', [
@@ -564,81 +554,83 @@ class _ChatsPageState extends State<ChatsPage> {
               // Find the selected chat
               ...() {
                 final chat = (chatsAsync.value ?? []).where((c) => c.id == activeChatId).firstOrNull;
-                if (chat == null)
+                if (chat == null) {
                   return [
                     div(classes: 'flex-grow flex items-center justify-center', [Component.text('Loading...')]),
                   ];
+                }
 
                 final isMyChat = chat.assignedAgentId == currentUserId;
                 final canReply = !isAdmin && (chat.assignedAgentId == null || isMyChat);
 
                 return [
                   // Chat header with agent assignment info
-                  div(classes: 'bg-[#f8faf9] px-5 py-3.5 border-b border-zinc-100 flex justify-between items-center gap-3', [
-                    div(classes: 'flex flex-col gap-0.5 min-w-0', [
-                      div(classes: 'flex items-center gap-2', [
+                  div(
+                    classes:
+                        'bg-[#f8faf9] px-5 py-3.5 border-b border-zinc-100 flex justify-between items-center gap-3',
+                    [
+                      div(classes: 'flex flex-col gap-0.5 min-w-0', [
+                        div(classes: 'flex items-center gap-2', [
+                          span(
+                            classes:
+                                'w-2 h-2 rounded-full ${chat.isPending
+                                    ? "bg-amber-500"
+                                    : chat.isResolved
+                                    ? "bg-zinc-400"
+                                    : "bg-[#0fa958]"} ${chat.isPending ? "animate-pulse" : ""}',
+                            [],
+                          ),
+                          span(classes: 'text-xs font-black text-zinc-800 truncate', [
+                            Component.text(getCustomerName(chat.userIds)),
+                          ]),
+                        ]),
+                        if (chat.assignedAgentName != null)
+                          span(classes: 'text-[10px] text-zinc-400 font-medium truncate', [
+                            Component.text(
+                              'Agent: ${chat.assignedAgentName!}${chat.assignedAgentEmail != null ? " (${chat.assignedAgentEmail})" : ""}',
+                            ),
+                          ])
+                        else
+                          span(classes: 'text-[10px] text-amber-600 font-bold', [
+                            Component.text('Unassigned — waiting for agent'),
+                          ]),
+                      ]),
+                      div(classes: 'flex items-center gap-2 flex-shrink-0', [
+                        // Waiting time chip
                         span(
                           classes:
-                              'w-2 h-2 rounded-full ${chat.isPending
-                                  ? "bg-amber-500"
-                                  : chat.isResolved
-                                  ? "bg-zinc-400"
-                                  : "bg-[#0fa958]"} ${chat.isPending ? "animate-pulse" : ""}',
-                          [],
+                              'text-[9px] px-2 py-1 rounded-full font-extrabold uppercase tracking-wide '
+                              '${chat.waitingTime.inMinutes >= 5 ? "bg-amber-100 text-amber-700" : "bg-zinc-100 text-zinc-500"}',
+                          [Component.text(_formatWaiting(chat.waitingTime))],
                         ),
-                        span(classes: 'text-xs font-black text-zinc-800 truncate', [
-                          Component.text(getCustomerName(chat.userIds)),
-                        ]),
-                      ]),
-                      if (chat.assignedAgentName != null)
-                        span(classes: 'text-[10px] text-zinc-400 font-medium truncate', [
-                          Component.text(
-                            'Agent: ${chat.assignedAgentName!}${chat.assignedAgentEmail != null ? " (${chat.assignedAgentEmail})" : ""}',
+                        if (chat.reassignCount > 0)
+                          span(classes: 'text-[9px] px-2 py-1 rounded-full font-extrabold bg-rose-100 text-rose-600', [
+                            Component.text('↺ ${chat.reassignCount}× reassigned'),
+                          ]),
+                        // Claim button (for non-admin agents when chat is pending or timed out)
+                        if (!isAdmin && !chat.isResolved && !isMyChat)
+                          button(
+                            onClick: () => _claimChat(chat),
+                            classes: 'px-3 py-1.5 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold rounded-lg transition-colors',
+                            [Component.text(chat.isPending ? 'Claim Chat' : 'Take Over')],
                           ),
-                        ])
-                      else
-                        span(classes: 'text-[10px] text-amber-600 font-bold', [
-                          Component.text('Unassigned — waiting for agent'),
-                        ]),
-                    ]),
-                    div(classes: 'flex items-center gap-2 flex-shrink-0', [
-                      // Waiting time chip
-                      span(
-                        classes:
-                            'text-[9px] px-2 py-1 rounded-full font-extrabold uppercase tracking-wide '
-                            '${chat.waitingTime.inMinutes >= 5 ? "bg-amber-100 text-amber-700" : "bg-zinc-100 text-zinc-500"}',
-                        [Component.text(_formatWaiting(chat.waitingTime))],
-                      ),
-                      if (chat.reassignCount > 0)
-                        span(classes: 'text-[9px] px-2 py-1 rounded-full font-extrabold bg-rose-100 text-rose-600', [
-                          Component.text('↺ ${chat.reassignCount}× reassigned'),
-                        ]),
-                      // Claim button (for non-admin agents when chat is pending or timed out)
-                      if (!isAdmin && !chat.isResolved && !isMyChat)
-                        button(
-                          onClick: () => _claimChat(chat),
-                          classes:
-                              'px-3 py-1.5 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold rounded-lg transition-colors',
-                          [Component.text(chat.isPending ? 'Claim Chat' : 'Take Over')],
-                        ),
-                      // Force reassign (admin only)
-                      if (isAdmin && !chat.isPending && !chat.isResolved)
-                        button(
-                          onClick: () => _forceReassign(chat),
-                          classes:
-                              'px-3 py-1.5 bg-zinc-100 hover:bg-amber-100 hover:text-amber-800 text-zinc-600 text-[10px] font-extrabold rounded-lg transition-colors border border-zinc-200',
-                          [Component.text('Force Reassign')],
-                        ),
-                      // Resolve button
-                      if (!chat.isResolved && (isAdmin || isMyChat))
-                        button(
-                          onClick: () => _resolveChat(chat),
-                          classes:
-                              'px-3 py-1.5 bg-[#0fa958]/10 hover:bg-[#0fa958]/20 text-[#0fa958] text-[10px] font-extrabold rounded-lg transition-colors border border-[#0fa958]/20',
-                          [Component.text('Resolve')],
-                        ),
-                    ]),
-                  ]),
+                        // Force reassign (admin only)
+                        if (isAdmin && !chat.isPending && !chat.isResolved)
+                          button(
+                            onClick: () => _forceReassign(chat),
+                            classes: 'px-3 py-1.5 bg-zinc-100 hover:bg-amber-100 hover:text-amber-800 text-zinc-600 text-[10px] font-extrabold rounded-lg transition-colors border border-zinc-200',
+                            [Component.text('Force Reassign')],
+                          ),
+                        // Resolve button
+                        if (!chat.isResolved && (isAdmin || isMyChat))
+                          button(
+                            onClick: () => _resolveChat(chat),
+                            classes: 'px-3 py-1.5 bg-[#0fa958]/10 hover:bg-[#0fa958]/20 text-[#0fa958] text-[10px] font-extrabold rounded-lg transition-colors border border-[#0fa958]/20',
+                            [Component.text('Resolve')],
+                          ),
+                      ]),
+                    ],
+                  ),
 
                   // Messages area
                   div(classes: 'flex-grow p-5 flex flex-col gap-4 overflow-y-auto no-scrollbar bg-[#fafbfa]', [
@@ -691,8 +683,7 @@ class _ChatsPageState extends State<ChatsPage> {
                     )
                   else if (isAdmin)
                     div(
-                      classes:
-                          'p-4 bg-zinc-50 border-t border-zinc-100 text-center text-xs text-zinc-500 font-bold flex items-center justify-center gap-2',
+                      classes: 'p-4 bg-zinc-50 border-t border-zinc-100 text-center text-xs text-zinc-500 font-bold flex items-center justify-center gap-2',
                       [
                         span(classes: 'text-sm', [Component.text('🔒')]),
                         Component.text('Read-Only Mode: Only assigned support agents can send messages.'),
@@ -705,8 +696,7 @@ class _ChatsPageState extends State<ChatsPage> {
                       ]),
                       button(
                         onClick: () => _claimChat(chat),
-                        classes:
-                            'px-3 py-1.5 bg-zinc-900 hover:bg-black text-white text-[10px] font-extrabold rounded-lg transition-colors',
+                        classes: 'px-3 py-1.5 bg-zinc-900 hover:bg-black text-white text-[10px] font-extrabold rounded-lg transition-colors',
                         [Component.text('Take Over Chat')],
                       ),
                     ])
@@ -717,8 +707,7 @@ class _ChatsPageState extends State<ChatsPage> {
                       ]),
                       button(
                         onClick: () => _claimChat(chat),
-                        classes:
-                            'px-3 py-1.5 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold rounded-lg transition-colors shadow-sm',
+                        classes: 'px-3 py-1.5 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold rounded-lg transition-colors shadow-sm',
                         [Component.text('Claim & Start')],
                       ),
                     ])
@@ -727,8 +716,7 @@ class _ChatsPageState extends State<ChatsPage> {
                       input(
                         value: replyText,
                         onInput: (v) => context.read(chatReplyTextProvider.notifier).state = v as String,
-                        classes:
-                            'flex-1 bg-[#f3f6f4] border border-zinc-200 rounded-lg px-4 py-2.5 text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black',
+                        classes: 'flex-1 bg-[#f3f6f4] border border-zinc-200 rounded-lg px-4 py-2.5 text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black',
                         attributes: {'placeholder': 'Type support response...'},
                       ),
                       button(
@@ -760,8 +748,7 @@ class _ChatsPageState extends State<ChatsPage> {
 
                           context.read(chatReplyTextProvider.notifier).state = '';
                         },
-                        classes:
-                            'px-5 py-2.5 bg-black hover:bg-zinc-800 text-white text-xs font-bold rounded-lg transition-colors shadow-sm',
+                        classes: 'px-5 py-2.5 bg-black hover:bg-zinc-800 text-white text-xs font-bold rounded-lg transition-colors shadow-sm',
                         [Component.text('Send')],
                       ),
                     ]),

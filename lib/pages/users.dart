@@ -10,6 +10,7 @@ import 'package:jaspr_riverpod/legacy.dart';
 import '../app.dart';
 import '../core/providers/environment_provider.dart';
 import '../core/config/firebase_environments.dart';
+
 import 'dart:async';
 
 final usersTabProvider = StateProvider<String>((ref) => 'platform');
@@ -198,20 +199,45 @@ class QuestDefinition {
 const List<QuestDefinition> standardQuests = [
   QuestDefinition(id: 'register_account', title: 'Register Account', category: 'Onboarding', points: 500),
   QuestDefinition(id: 'verify_account', title: 'Verify Account', category: 'Onboarding', points: 500),
-  QuestDefinition(id: 'complete_profile_trust', title: 'Complete Profile Trust & Verification', category: 'Onboarding', points: 2000),
+  QuestDefinition(
+    id: 'complete_profile_trust',
+    title: 'Complete Profile Trust & Verification',
+    category: 'Onboarding',
+    points: 2000,
+  ),
   QuestDefinition(id: 'add_skills_bio', title: 'Add Skills & Bio', category: 'Onboarding', points: 100),
   QuestDefinition(id: 'deposit_any_amount', title: 'Deposit any amount to Wallet', category: 'Onboarding', points: 500),
   QuestDefinition(id: 'connect_solana_wallet', title: 'Connect Any Solana Wallet', category: 'Onboarding', points: 200),
   QuestDefinition(id: 'post_first_service', title: 'Post First Service', category: 'Services', points: 500),
   QuestDefinition(id: 'hire_applicant', title: 'Hire an Applicant', category: 'Services', points: 500),
-  QuestDefinition(id: 'employer_complete_transaction', title: 'Complete transaction as employer', category: 'Services', points: 500),
+  QuestDefinition(
+    id: 'employer_complete_transaction',
+    title: 'Complete transaction as employer',
+    category: 'Services',
+    points: 500,
+  ),
   QuestDefinition(id: 'apply_first_job', title: 'Apply First Job', category: 'Services', points: 500),
   QuestDefinition(id: 'be_hired', title: 'Be hired', category: 'Services', points: 500),
-  QuestDefinition(id: 'jobseeker_complete_transaction', title: 'Complete transaction as Nyxian', category: 'Services', points: 500),
+  QuestDefinition(
+    id: 'jobseeker_complete_transaction',
+    title: 'Complete transaction as Nyxian',
+    category: 'Services',
+    points: 500,
+  ),
   QuestDefinition(id: 'post_property', title: 'Post Property', category: 'Rental', points: 500),
-  QuestDefinition(id: 'host_complete_transaction', title: 'Complete Transaction as a Lessor/Host', category: 'Rental', points: 500),
+  QuestDefinition(
+    id: 'host_complete_transaction',
+    title: 'Complete Transaction as a Lessor/Host',
+    category: 'Rental',
+    points: 500,
+  ),
   QuestDefinition(id: 'rent_property', title: 'Rent property', category: 'Rental', points: 500),
-  QuestDefinition(id: 'client_complete_transaction', title: 'Complete transaction as a Lessee/Renter', category: 'Rental', points: 500),
+  QuestDefinition(
+    id: 'client_complete_transaction',
+    title: 'Complete transaction as a Lessee/Renter',
+    category: 'Rental',
+    points: 500,
+  ),
 ];
 
 class PointsHistoryModel {
@@ -318,7 +344,8 @@ class UserProfileModel {
       suspendedUntil: map['suspendedUntil'] as int?,
       terraPoints: map['terraPoints'] ?? 0,
       earnedRewards: map['earnedRewards'] != null ? List<String>.from(map['earnedRewards']) : const [],
-      availableBalance: (map['tyxBalance'] as num?)?.toDouble() ??
+      availableBalance:
+          (map['tyxBalance'] as num?)?.toDouble() ??
           (map['availableBalance'] as num?)?.toDouble() ??
           (map['walletBalance'] as num?)?.toDouble() ??
           (map['balance'] as num?)?.toDouble() ??
@@ -366,7 +393,7 @@ class TxModel {
       type: map['type'] ?? 'payment',
       amount: (map['amount'] as num?)?.toDouble() ?? (map['totalCost'] as num?)?.toDouble() ?? 0.0,
       status: map['status'] ?? 'success',
-      signature: map['signature'] ?? map['txHash'] ?? '0x' + id.substring(0, mathMin(id.length, 12)),
+      signature: map['signature'] ?? map['txHash'] ?? '0x${id.substring(0, mathMin(id.length, 12))}',
       createdAt: parseDateTime(map['createdAt'] ?? map['timestamp']),
     );
   }
@@ -596,13 +623,15 @@ class _UsersPageState extends State<UsersPage> {
       div(classes: 'flex items-center gap-2 border-b border-zinc-200/60 pb-3', [
         button(
           onClick: () => context.read(usersMainTabProvider.notifier).state = 'directory',
-          classes: 'px-5 py-2 text-xs font-black transition-all border-b-2 duration-200 '
+          classes:
+              'px-5 py-2 text-xs font-black transition-all border-b-2 duration-200 '
               '${mainTab == 'directory' ? 'border-black text-black' : 'border-transparent text-zinc-400 hover:text-zinc-650'}',
           [Component.text('📇 User Accounts Directory')],
         ),
         button(
           onClick: () => context.read(usersMainTabProvider.notifier).state = 'rewards',
-          classes: 'px-5 py-2 text-xs font-black transition-all border-b-2 duration-200 '
+          classes:
+              'px-5 py-2 text-xs font-black transition-all border-b-2 duration-200 '
               '${mainTab == 'rewards' ? 'border-black text-black' : 'border-transparent text-zinc-400 hover:text-zinc-650'}',
           [Component.text('🪙 User Rewards Center')],
         ),
@@ -619,8 +648,7 @@ class _UsersPageState extends State<UsersPage> {
           },
           [
             div(
-              classes:
-                  'bg-white rounded-[28px] max-w-2xl w-full max-h-[85vh] overflow-y-auto p-7 shadow-2xl flex flex-col gap-5 border border-zinc-200/50 transform scale-100 transition-all',
+              classes: 'bg-white rounded-[28px] max-w-2xl w-full max-h-[85vh] overflow-y-auto p-7 shadow-2xl flex flex-col gap-5 border border-zinc-200/50 transform scale-100 transition-all',
               events: {
                 'click': (e) {
                   e.stopPropagation();
@@ -631,8 +659,7 @@ class _UsersPageState extends State<UsersPage> {
                 div(classes: 'flex items-start justify-between border-b border-zinc-100 pb-4', [
                   div(classes: 'flex items-center gap-3', [
                     div(
-                      classes:
-                          'w-11 h-11 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center font-bold text-zinc-700 text-sm flex-shrink-0',
+                      classes: 'w-11 h-11 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center font-bold text-zinc-700 text-sm flex-shrink-0',
                       [
                         Component.text(
                           _selectedUser!.name.length >= 2
@@ -646,8 +673,7 @@ class _UsersPageState extends State<UsersPage> {
                         Component.text(_selectedUser!.name),
                         if (_selectedUser!.banned)
                           span(
-                            classes:
-                                'ml-2 px-2 py-0.5 rounded bg-red-100 text-red-500 font-extrabold text-[8px] tracking-wider uppercase align-middle',
+                            classes: 'ml-2 px-2 py-0.5 rounded bg-red-100 text-red-500 font-extrabold text-[8px] tracking-wider uppercase align-middle',
                             [Component.text('Banned')],
                           ),
                       ]),
@@ -658,16 +684,14 @@ class _UsersPageState extends State<UsersPage> {
                   ]),
                   button(
                     onClick: () => setState(() => _selectedUser = null),
-                    classes:
-                        'w-7 h-7 rounded-full bg-zinc-100 text-zinc-500 font-bold hover:bg-zinc-200 text-xs flex items-center justify-center',
+                    classes: 'w-7 h-7 rounded-full bg-zinc-100 text-zinc-500 font-bold hover:bg-zinc-200 text-xs flex items-center justify-center',
                     [Component.text('✕')],
                   ),
                 ]),
 
                 // Modal Tabs Selector
                 div(
-                  classes:
-                      'flex items-center gap-1 bg-zinc-50 p-1 border border-zinc-200/50 rounded-full shadow-inner w-max',
+                  classes: 'flex items-center gap-1 bg-zinc-50 p-1 border border-zinc-200/50 rounded-full shadow-inner w-max',
                   [
                     button(
                       onClick: () => setState(() => _userModalTab = 'details'),
@@ -768,8 +792,7 @@ class _UsersPageState extends State<UsersPage> {
                       if (_selectedUser!.walletPublicKey != null && _selectedUser!.walletPublicKey!.isNotEmpty) ...[
                         a(
                           href: getExplorerUrl(_selectedUser!.walletPublicKey!, false, currentEnv),
-                          classes:
-                              'font-mono text-[11px] text-indigo-500 font-black hover:underline mt-1 bg-indigo-50/30 p-2.5 rounded-xl border border-indigo-100/50 w-max',
+                          classes: 'font-mono text-[11px] text-indigo-500 font-black hover:underline mt-1 bg-indigo-50/30 p-2.5 rounded-xl border border-indigo-100/50 w-max',
                           attributes: {'target': '_blank'},
                           events: {'click': (e) => e.stopPropagation()},
                           [Component.text(_selectedUser!.walletPublicKey!)],
@@ -790,15 +813,13 @@ class _UsersPageState extends State<UsersPage> {
                         final nowMs = DateTime.now().millisecondsSinceEpoch;
                         if (_selectedUser!.banned) {
                           return span(
-                            classes:
-                                'px-2 py-0.5 rounded text-[10px] font-black w-max bg-red-50 text-red-500 border border-red-200',
+                            classes: 'px-2 py-0.5 rounded text-[10px] font-black w-max bg-red-50 text-red-500 border border-red-200',
                             [Component.text('🚫 Permanent Ban')],
                           );
                         } else if (_selectedUser!.suspendedUntil != null && _selectedUser!.suspendedUntil! > nowMs) {
                           final date = DateTime.fromMillisecondsSinceEpoch(_selectedUser!.suspendedUntil!);
                           return span(
-                            classes:
-                                'px-2 py-0.5 rounded text-[10px] font-black w-max bg-amber-50 text-amber-600 border border-amber-200',
+                            classes: 'px-2 py-0.5 rounded text-[10px] font-black w-max bg-amber-50 text-amber-600 border border-amber-200',
                             [
                               Component.text(
                                 '⏳ Suspended until ${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}',
@@ -807,152 +828,153 @@ class _UsersPageState extends State<UsersPage> {
                           );
                         } else {
                           return span(
-                            classes:
-                                'px-2 py-0.5 rounded text-[10px] font-black w-max bg-emerald-50 text-[#0fa958] border border-emerald-200',
+                            classes: 'px-2 py-0.5 rounded text-[10px] font-black w-max bg-emerald-50 text-[#0fa958] border border-emerald-200',
                             [Component.text('✅ Active')],
                           );
                         }
                       }()),
                     ]),
 
-                    div(classes: 'flex flex-wrap gap-4 border-t border-zinc-100 pt-4 mt-2 justify-between items-center', [
-                      div(classes: 'flex gap-2.5 items-center', [
-                        if (!_selectedUser!.idVerified)
-                          button(
-                            onClick: () async {
-                              final firestore = context.read(firestoreProvider);
-                              await firestore.collection('users').doc(_selectedUser!.uid).update({
-                                'idVerified': true,
-                                'verificationLevel': _selectedUser!.bgChecked ? 2 : 1,
-                              });
-                              _showToast('✅ Identity approved.');
-                              setState(() => _selectedUser = null);
-                            },
-                            classes:
-                                'px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wide rounded-xl shadow-sm transition-all',
-                            [Component.text('Approve KYC ID')],
-                          )
-                        else
-                          button(
-                            onClick: () async {
-                              final firestore = context.read(firestoreProvider);
-                              await firestore.collection('users').doc(_selectedUser!.uid).update({
-                                'idVerified': false,
-                                'verificationLevel': 0,
-                              });
-                              _showToast('⚠️ Identity revoked.');
-                              setState(() => _selectedUser = null);
-                            },
-                            classes:
-                                'px-4 py-2 border border-zinc-200 hover:bg-zinc-50 text-zinc-700 text-[10px] font-black uppercase tracking-wide rounded-xl transition-all',
-                            [Component.text('Revoke KYC ID')],
-                          ),
-
-                        // Manage Penalty Dropdown
-                        div(
-                          classes: 'flex items-center gap-2 bg-[#fafbfa] border border-zinc-200 rounded-xl px-3 py-1.5',
-                          [
-                            span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
-                              Component.text('Penalty:'),
-                            ]),
-                            select(
-                              classes:
-                                  'bg-transparent border-0 text-[10px] font-black text-zinc-700 focus:outline-none cursor-pointer',
-                              onChange: (v) async {
-                                if (v.isEmpty) return;
+                    div(
+                      classes: 'flex flex-wrap gap-4 border-t border-zinc-100 pt-4 mt-2 justify-between items-center',
+                      [
+                        div(classes: 'flex gap-2.5 items-center', [
+                          if (!_selectedUser!.idVerified)
+                            button(
+                              onClick: () async {
                                 final firestore = context.read(firestoreProvider);
-                                final selection = v.first;
-
-                                bool isBanned = false;
-                                int? suspendUntil;
-                                String msg = 'Status updated.';
-
-                                final nowMs = DateTime.now().millisecondsSinceEpoch;
-                                if (selection == 'ban') {
-                                  isBanned = true;
-                                  msg = '🚫 User permanently banned.';
-                                } else if (selection == '3d') {
-                                  suspendUntil = nowMs + (3 * 24 * 60 * 60 * 1000);
-                                  msg = '⏳ User suspended for 3 days.';
-                                } else if (selection == '7d') {
-                                  suspendUntil = nowMs + (7 * 24 * 60 * 60 * 1000);
-                                  msg = '⏳ User suspended for 7 days.';
-                                } else if (selection == '14d') {
-                                  suspendUntil = nowMs + (14 * 24 * 60 * 60 * 1000);
-                                  msg = '⏳ User suspended for 14 days.';
-                                } else {
-                                  msg = '✅ User account activated.';
-                                }
-
                                 await firestore.collection('users').doc(_selectedUser!.uid).update({
-                                  'banned': isBanned,
-                                  'suspendedUntil': suspendUntil,
+                                  'idVerified': true,
+                                  'verificationLevel': _selectedUser!.bgChecked ? 2 : 1,
                                 });
-
-                                _showToast(msg);
+                                _showToast('✅ Identity approved.');
                                 setState(() => _selectedUser = null);
                               },
-                              [
-                                option(
-                                  value: 'active',
-                                  selected:
-                                      !_selectedUser!.banned &&
-                                      (_selectedUser!.suspendedUntil == null ||
-                                          _selectedUser!.suspendedUntil! <= DateTime.now().millisecondsSinceEpoch),
-                                  [Component.text('Active')],
-                                ),
-                                option(
-                                  value: '3d',
-                                  selected:
-                                      _selectedUser!.suspendedUntil != null &&
-                                      _selectedUser!.suspendedUntil! > DateTime.now().millisecondsSinceEpoch &&
-                                      _selectedUser!.suspendedUntil! <=
-                                          DateTime.now().millisecondsSinceEpoch + (4 * 24 * 60 * 60 * 1000),
-                                  [Component.text('Suspend 3 Days')],
-                                ),
-                                option(
-                                  value: '7d',
-                                  selected:
-                                      _selectedUser!.suspendedUntil != null &&
-                                      _selectedUser!.suspendedUntil! >
-                                          DateTime.now().millisecondsSinceEpoch + (4 * 24 * 60 * 60 * 1000) &&
-                                      _selectedUser!.suspendedUntil! <=
-                                          DateTime.now().millisecondsSinceEpoch + (8 * 24 * 60 * 60 * 1000),
-                                  [Component.text('Suspend 1 Week')],
-                                ),
-                                option(
-                                  value: '14d',
-                                  selected:
-                                      _selectedUser!.suspendedUntil != null &&
-                                      _selectedUser!.suspendedUntil! >
-                                          DateTime.now().millisecondsSinceEpoch + (8 * 24 * 60 * 60 * 1000) &&
-                                      _selectedUser!.suspendedUntil! <=
-                                          DateTime.now().millisecondsSinceEpoch + (15 * 24 * 60 * 60 * 1000),
-                                  [Component.text('Suspend 2 Weeks')],
-                                ),
-                                option(value: 'ban', selected: _selectedUser!.banned, [Component.text('Ban Account')]),
-                              ],
+                              classes: 'px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wide rounded-xl shadow-sm transition-all',
+                              [Component.text('Approve KYC ID')],
+                            )
+                          else
+                            button(
+                              onClick: () async {
+                                final firestore = context.read(firestoreProvider);
+                                await firestore.collection('users').doc(_selectedUser!.uid).update({
+                                  'idVerified': false,
+                                  'verificationLevel': 0,
+                                });
+                                _showToast('⚠️ Identity revoked.');
+                                setState(() => _selectedUser = null);
+                              },
+                              classes: 'px-4 py-2 border border-zinc-200 hover:bg-zinc-50 text-zinc-700 text-[10px] font-black uppercase tracking-wide rounded-xl transition-all',
+                              [Component.text('Revoke KYC ID')],
                             ),
-                          ],
-                        ),
-                      ]),
 
-                      button(
-                        onClick: () async {
-                          if (web.window.confirm(
-                            'PERMANENTLY DELETE account for ${_selectedUser!.name}? This cannot be undone.',
-                          )) {
-                            final firestore = context.read(firestoreProvider);
-                            await firestore.collection('users').doc(_selectedUser!.uid).delete();
-                            _showToast('🗑️ User account deleted.');
-                            setState(() => _selectedUser = null);
-                          }
-                        },
-                        classes:
-                            'px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-wide rounded-xl shadow-md shadow-red-500/10 transition-all',
-                        [Component.text('Delete Account')],
-                      ),
-                    ]),
+                          // Manage Penalty Dropdown
+                          div(
+                            classes:
+                                'flex items-center gap-2 bg-[#fafbfa] border border-zinc-200 rounded-xl px-3 py-1.5',
+                            [
+                              span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                                Component.text('Penalty:'),
+                              ]),
+                              select(
+                                classes: 'bg-transparent border-0 text-[10px] font-black text-zinc-700 focus:outline-none cursor-pointer',
+                                onChange: (v) async {
+                                  if (v.isEmpty) return;
+                                  final firestore = context.read(firestoreProvider);
+                                  final selection = v.first;
+
+                                  bool isBanned = false;
+                                  int? suspendUntil;
+                                  String msg = 'Status updated.';
+
+                                  final nowMs = DateTime.now().millisecondsSinceEpoch;
+                                  if (selection == 'ban') {
+                                    isBanned = true;
+                                    msg = '🚫 User permanently banned.';
+                                  } else if (selection == '3d') {
+                                    suspendUntil = nowMs + (3 * 24 * 60 * 60 * 1000);
+                                    msg = '⏳ User suspended for 3 days.';
+                                  } else if (selection == '7d') {
+                                    suspendUntil = nowMs + (7 * 24 * 60 * 60 * 1000);
+                                    msg = '⏳ User suspended for 7 days.';
+                                  } else if (selection == '14d') {
+                                    suspendUntil = nowMs + (14 * 24 * 60 * 60 * 1000);
+                                    msg = '⏳ User suspended for 14 days.';
+                                  } else {
+                                    msg = '✅ User account activated.';
+                                  }
+
+                                  await firestore.collection('users').doc(_selectedUser!.uid).update({
+                                    'banned': isBanned,
+                                    'suspendedUntil': suspendUntil,
+                                  });
+
+                                  _showToast(msg);
+                                  setState(() => _selectedUser = null);
+                                },
+                                [
+                                  option(
+                                    value: 'active',
+                                    selected:
+                                        !_selectedUser!.banned &&
+                                        (_selectedUser!.suspendedUntil == null ||
+                                            _selectedUser!.suspendedUntil! <= DateTime.now().millisecondsSinceEpoch),
+                                    [Component.text('Active')],
+                                  ),
+                                  option(
+                                    value: '3d',
+                                    selected:
+                                        _selectedUser!.suspendedUntil != null &&
+                                        _selectedUser!.suspendedUntil! > DateTime.now().millisecondsSinceEpoch &&
+                                        _selectedUser!.suspendedUntil! <=
+                                            DateTime.now().millisecondsSinceEpoch + (4 * 24 * 60 * 60 * 1000),
+                                    [Component.text('Suspend 3 Days')],
+                                  ),
+                                  option(
+                                    value: '7d',
+                                    selected:
+                                        _selectedUser!.suspendedUntil != null &&
+                                        _selectedUser!.suspendedUntil! >
+                                            DateTime.now().millisecondsSinceEpoch + (4 * 24 * 60 * 60 * 1000) &&
+                                        _selectedUser!.suspendedUntil! <=
+                                            DateTime.now().millisecondsSinceEpoch + (8 * 24 * 60 * 60 * 1000),
+                                    [Component.text('Suspend 1 Week')],
+                                  ),
+                                  option(
+                                    value: '14d',
+                                    selected:
+                                        _selectedUser!.suspendedUntil != null &&
+                                        _selectedUser!.suspendedUntil! >
+                                            DateTime.now().millisecondsSinceEpoch + (8 * 24 * 60 * 60 * 1000) &&
+                                        _selectedUser!.suspendedUntil! <=
+                                            DateTime.now().millisecondsSinceEpoch + (15 * 24 * 60 * 60 * 1000),
+                                    [Component.text('Suspend 2 Weeks')],
+                                  ),
+                                  option(value: 'ban', selected: _selectedUser!.banned, [
+                                    Component.text('Ban Account'),
+                                  ]),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ]),
+
+                        button(
+                          onClick: () async {
+                            if (web.window.confirm(
+                              'PERMANENTLY DELETE account for ${_selectedUser!.name}? This cannot be undone.',
+                            )) {
+                              final firestore = context.read(firestoreProvider);
+                              await firestore.collection('users').doc(_selectedUser!.uid).delete();
+                              _showToast('🗑️ User account deleted.');
+                              setState(() => _selectedUser = null);
+                            }
+                          },
+                          classes: 'px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-wide rounded-xl shadow-md shadow-red-500/10 transition-all',
+                          [Component.text('Delete Account')],
+                        ),
+                      ],
+                    ),
                   ]),
                 ] else if (_userModalTab == 'transactions') ...[
                   div(classes: 'flex flex-col gap-3.5 pt-2', [
@@ -968,8 +990,7 @@ class _UsersPageState extends State<UsersPage> {
                             return div(classes: 'overflow-x-auto w-full rounded-2xl border border-zinc-150', [
                               table(classes: 'w-full text-left text-[11px] border-collapse', [
                                 thead(
-                                  classes:
-                                      'bg-zinc-50 border-b border-zinc-150 text-[9px] font-bold text-zinc-400 uppercase tracking-wider',
+                                  classes: 'bg-zinc-50 border-b border-zinc-150 text-[9px] font-bold text-zinc-400 uppercase tracking-wider',
                                   [
                                     tr([
                                       th(classes: 'p-3.5', [Component.text('Tx Hash')]),
@@ -1044,8 +1065,7 @@ class _UsersPageState extends State<UsersPage> {
                                 for (final ev in events)
                                   div(classes: 'relative flex flex-col gap-1 pb-1 text-left', [
                                     div(
-                                      classes:
-                                          'absolute -left-[21.5px] top-1 w-2.5 h-2.5 rounded-full border-2 border-white bg-indigo-500 shadow-sm',
+                                      classes: 'absolute -left-[21.5px] top-1 w-2.5 h-2.5 rounded-full border-2 border-white bg-indigo-500 shadow-sm',
                                       [],
                                     ),
                                     div(classes: 'flex justify-between items-start text-[10px] text-left', [
@@ -1083,73 +1103,105 @@ class _UsersPageState extends State<UsersPage> {
                 ] else ...[
                   div(classes: 'flex flex-col gap-5 pt-2 text-left', [
                     // Points Summary Card
-                    div(classes: 'bg-[#fafbfa] p-4.5 rounded-2xl border border-zinc-200/50 flex items-center justify-between', [
-                      div(classes: 'flex flex-col gap-1', [
-                        span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
-                          Component.text('Total Balance'),
+                    div(
+                      classes:
+                          'bg-[#fafbfa] p-4.5 rounded-2xl border border-zinc-200/50 flex items-center justify-between',
+                      [
+                        div(classes: 'flex flex-col gap-1', [
+                          span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                            Component.text('Total Balance'),
+                          ]),
+                          p(classes: 'text-xl font-black text-amber-600 flex items-center gap-1.5', [
+                            Component.text('🪙 ${_selectedUser!.terraPoints} TP'),
+                          ]),
                         ]),
-                        p(classes: 'text-xl font-black text-amber-600 flex items-center gap-1.5', [
-                          Component.text('🪙 ${_selectedUser!.terraPoints} TP'),
+                        div(classes: 'flex flex-col gap-1 text-right', [
+                          span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                            Component.text('Quests Completed'),
+                          ]),
+                          p(classes: 'text-sm font-black text-zinc-800', [
+                            Component.text('${_selectedUser!.earnedRewards.length} Completed'),
+                          ]),
                         ]),
-                      ]),
-                      div(classes: 'flex flex-col gap-1 text-right', [
-                        span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
-                          Component.text('Quests Completed'),
-                        ]),
-                        p(classes: 'text-sm font-black text-zinc-800', [
-                          Component.text('${_selectedUser!.earnedRewards.length} Completed'),
-                        ]),
-                      ]),
-                    ]),
+                      ],
+                    ),
 
                     // Points History Log
                     div(classes: 'flex flex-col gap-2', [
                       h4(classes: 'text-xs font-black text-zinc-900', [Component.text('Points History Log')]),
-                      context.watch(userPointsHistoryProvider(_selectedUser!.uid)).when(
-                        data: (history) {
-                          if (history.isEmpty) {
-                            return div(classes: 'py-8 text-center text-xs text-zinc-400 font-semibold bg-zinc-50/50 border border-dashed border-zinc-200 rounded-xl', [
-                              Component.text('No points logged in history yet.'),
-                            ]);
-                          }
-                          return div(classes: 'overflow-x-auto w-full rounded-xl border border-zinc-200/50 bg-white max-h-[220px] overflow-y-auto', [
-                            table(classes: 'w-full text-left text-[11px] border-collapse', [
-                              thead(classes: 'bg-zinc-50 border-b border-zinc-150 text-[9px] font-bold text-zinc-400 uppercase tracking-wider sticky top-0', [
-                                tr([
-                                  th(classes: 'p-3.5', [Component.text('Quest / Title')]),
-                                  th(classes: 'p-3.5', [Component.text('Category')]),
-                                  th(classes: 'p-3.5 text-right', [Component.text('Points')]),
-                                  th(classes: 'p-3.5 text-right', [Component.text('Date')]),
-                                ]),
-                              ]),
-                              tbody(classes: 'divide-y divide-zinc-50', [
-                                for (final log in history)
-                                  tr([
-                                    td(classes: 'p-3 font-bold text-zinc-800', [Component.text(log.title)]),
-                                    td(classes: 'p-3 text-zinc-400 uppercase text-[9px] font-extrabold', [Component.text(log.category)]),
-                                    td(classes: 'p-3 text-right font-black text-[#0fa958]', [Component.text('+${log.points}')]),
-                                    td(classes: 'p-3 text-right text-zinc-400 font-mono text-[9px]', [
-                                      Component.text(DateTime.fromMillisecondsSinceEpoch(log.createdAt).toString().split('.').first),
+                      context
+                          .watch(userPointsHistoryProvider(_selectedUser!.uid))
+                          .when(
+                            data: (history) {
+                              if (history.isEmpty) {
+                                return div(
+                                  classes: 'py-8 text-center text-xs text-zinc-400 font-semibold bg-zinc-50/50 border border-dashed border-zinc-200 rounded-xl',
+                                  [
+                                    Component.text('No points logged in history yet.'),
+                                  ],
+                                );
+                              }
+                              return div(
+                                classes: 'overflow-x-auto w-full rounded-xl border border-zinc-200/50 bg-white max-h-[220px] overflow-y-auto',
+                                [
+                                  table(classes: 'w-full text-left text-[11px] border-collapse', [
+                                    thead(
+                                      classes: 'bg-zinc-50 border-b border-zinc-150 text-[9px] font-bold text-zinc-400 uppercase tracking-wider sticky top-0',
+                                      [
+                                        tr([
+                                          th(classes: 'p-3.5', [Component.text('Quest / Title')]),
+                                          th(classes: 'p-3.5', [Component.text('Category')]),
+                                          th(classes: 'p-3.5 text-right', [Component.text('Points')]),
+                                          th(classes: 'p-3.5 text-right', [Component.text('Date')]),
+                                        ]),
+                                      ],
+                                    ),
+                                    tbody(classes: 'divide-y divide-zinc-50', [
+                                      for (final log in history)
+                                        tr([
+                                          td(classes: 'p-3 font-bold text-zinc-800', [Component.text(log.title)]),
+                                          td(classes: 'p-3 text-zinc-400 uppercase text-[9px] font-extrabold', [
+                                            Component.text(log.category),
+                                          ]),
+                                          td(classes: 'p-3 text-right font-black text-[#0fa958]', [
+                                            Component.text('+${log.points}'),
+                                          ]),
+                                          td(classes: 'p-3 text-right text-zinc-400 font-mono text-[9px]', [
+                                            Component.text(
+                                              DateTime.fromMillisecondsSinceEpoch(log.createdAt)
+                                                  .toString()
+                                                  .split('.')
+                                                  .first,
+                                            ),
+                                          ]),
+                                        ]),
                                     ]),
                                   ]),
-                              ]),
+                                ],
+                              );
+                            },
+                            loading: () => div(classes: 'flex justify-center py-6', [
+                              div(
+                                classes:
+                                    'animate-spin h-5 w-5 border-2 border-zinc-200 border-t-indigo-500 rounded-full',
+                                [],
+                              ),
                             ]),
-                          ]);
-                        },
-                        loading: () => div(classes: 'flex justify-center py-6', [
-                          div(classes: 'animate-spin h-5 w-5 border-2 border-zinc-200 border-t-indigo-500 rounded-full', []),
-                        ]),
-                        error: (e, _) => div(classes: 'p-3 bg-red-50 text-red-500 rounded-xl text-xs font-mono', [
-                          Component.text('Error loading rewards history: $e'),
-                        ]),
-                      ),
+                            error: (e, _) => div(classes: 'p-3 bg-red-50 text-red-500 rounded-xl text-xs font-mono', [
+                              Component.text('Error loading rewards history: $e'),
+                            ]),
+                          ),
                     ]),
 
                     // Standard Quests List (Status + Manual Award)
                     div(classes: 'flex flex-col gap-2.5 border-t border-zinc-100 pt-4', [
-                      h4(classes: 'text-xs font-black text-zinc-900', [Component.text('Quest Milestones Checklist & Admin Actions')]),
+                      h4(classes: 'text-xs font-black text-zinc-900', [
+                        Component.text('Quest Milestones Checklist & Admin Actions'),
+                      ]),
                       p(classes: 'text-[10px] text-zinc-400 font-medium', [
-                        Component.text('View completed status and click on any pending quest to manually award/credit it to this user.'),
+                        Component.text(
+                          'View completed status and click on any pending quest to manually award/credit it to this user.',
+                        ),
                       ]),
 
                       div(classes: 'grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[250px] overflow-y-auto pr-1', [
@@ -1157,7 +1209,8 @@ class _UsersPageState extends State<UsersPage> {
                           () {
                             final isCompleted = _selectedUser!.earnedRewards.contains(quest.id);
                             return div(
-                              classes: 'p-3 rounded-xl border flex items-center justify-between gap-3 transition-all '
+                              classes:
+                                  'p-3 rounded-xl border flex items-center justify-between gap-3 transition-all '
                                   '${isCompleted ? "bg-[#e2f1e9]/10 border-emerald-100 text-emerald-800" : "bg-[#f8faf9] border-zinc-200 text-zinc-650"}',
                               [
                                 div(classes: 'flex flex-col gap-0.5 min-w-0', [
@@ -1167,12 +1220,21 @@ class _UsersPageState extends State<UsersPage> {
                                   ]),
                                 ]),
                                 if (isCompleted)
-                                  span(classes: 'px-2 py-0.5 rounded text-[8px] font-black bg-emerald-50 text-[#0fa958] border border-emerald-100/50 flex-shrink-0', [
-                                    Component.text('COMPLETED'),
-                                  ])
+                                  span(
+                                    classes: 'px-2 py-0.5 rounded text-[8px] font-black bg-emerald-50 text-[#0fa958] border border-emerald-100/50 flex-shrink-0',
+                                    [
+                                      Component.text('COMPLETED'),
+                                    ],
+                                  )
                                 else
                                   button(
-                                    onClick: () => _awardQuest(_selectedUser!, quest.id, quest.title, quest.category, quest.points),
+                                    onClick: () => _awardQuest(
+                                      _selectedUser!,
+                                      quest.id,
+                                      quest.title,
+                                      quest.category,
+                                      quest.points,
+                                    ),
                                     classes: 'px-2.5 py-1 bg-black hover:bg-zinc-800 text-white text-[8px] font-black uppercase tracking-wider rounded-lg transition-all flex-shrink-0',
                                     [Component.text('Award')],
                                   ),
@@ -1184,10 +1246,14 @@ class _UsersPageState extends State<UsersPage> {
 
                     // Award Custom Points Section
                     div(classes: 'flex flex-col gap-3 border-t border-zinc-100 pt-4', [
-                      h4(classes: 'text-xs font-black text-zinc-900', [Component.text('Award Custom Rewards & Bonuses')]),
+                      h4(classes: 'text-xs font-black text-zinc-900', [
+                        Component.text('Award Custom Rewards & Bonuses'),
+                      ]),
                       div(classes: 'grid grid-cols-1 sm:grid-cols-3 gap-2.5', [
                         div(classes: 'flex flex-col gap-1', [
-                          label(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [Component.text('Reward Title')]),
+                          label(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                            Component.text('Reward Title'),
+                          ]),
                           input(
                             value: _customRewardTitle,
                             onInput: (v) => setState(() => _customRewardTitle = v as String),
@@ -1196,7 +1262,9 @@ class _UsersPageState extends State<UsersPage> {
                           ),
                         ]),
                         div(classes: 'flex flex-col gap-1', [
-                          label(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [Component.text('Points')]),
+                          label(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                            Component.text('Points'),
+                          ]),
                           input(
                             value: _customRewardPoints.toString(),
                             onInput: (v) {
@@ -1251,34 +1319,39 @@ class _UsersPageState extends State<UsersPage> {
 
       if (mainTab == 'directory') ...[
         // Modern Header block
-        div(classes: 'flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-200/50 pb-5', [
-          div(classes: 'flex flex-col gap-1', [
-            h1(classes: 'text-xl font-black tracking-tight text-zinc-900', [Component.text('User Accounts Directory')]),
-            p(classes: 'text-xs text-zinc-400 font-medium', [
-              Component.text('Audit user profiles, trust badges, and run background check clearance.'),
+        div(
+          classes: 'flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-200/50 pb-5',
+          [
+            div(classes: 'flex flex-col gap-1', [
+              h1(classes: 'text-xl font-black tracking-tight text-zinc-900', [
+                Component.text('User Accounts Directory'),
+              ]),
+              p(classes: 'text-xs text-zinc-400 font-medium', [
+                Component.text('Audit user profiles, trust badges, and run background check clearance.'),
+              ]),
             ]),
-          ]),
-          div(classes: 'flex items-center gap-3', [
-            // Tabs styled in capsules
-            div(classes: 'flex items-center gap-1 bg-white p-1 border border-zinc-200/50 rounded-full shadow-sm', [
-              buildTabButton('👥 Users', 'platform'),
-              buildTabButton('🛡️ Agents / Staff', 'support'),
-              buildTabButton('🔑 Admins', 'admin'),
+            div(classes: 'flex items-center gap-3', [
+              // Tabs styled in capsules
+              div(classes: 'flex items-center gap-1 bg-white p-1 border border-zinc-200/50 rounded-full shadow-sm', [
+                buildTabButton('👥 Users', 'platform'),
+                buildTabButton('🛡️ Agents / Staff', 'support'),
+                buildTabButton('🔑 Admins', 'admin'),
+              ]),
+              // Add Agent button (only on support tab)
+              if (activeTab == 'support' && isAdmin)
+                button(
+                  onClick: () => setState(() => _showAddAgentForm = !_showAddAgentForm),
+                  classes:
+                      'px-4 py-2.5 bg-black hover:bg-zinc-800 text-white text-xs font-extrabold rounded-full '
+                      'shadow-md shadow-black/10 transition-all flex items-center gap-2',
+                  [
+                    span(classes: 'text-sm', [Component.text(_showAddAgentForm ? '✕' : '+')]),
+                    Component.text(_showAddAgentForm ? 'Cancel' : 'Add Agent'),
+                  ],
+                ),
             ]),
-            // Add Agent button (only on support tab)
-            if (activeTab == 'support' && isAdmin)
-              button(
-                onClick: () => setState(() => _showAddAgentForm = !_showAddAgentForm),
-                classes:
-                    'px-4 py-2.5 bg-black hover:bg-zinc-800 text-white text-xs font-extrabold rounded-full '
-                    'shadow-md shadow-black/10 transition-all flex items-center gap-2',
-                [
-                  span(classes: 'text-sm', [Component.text(_showAddAgentForm ? '✕' : '+')]),
-                  Component.text(_showAddAgentForm ? 'Cancel' : 'Add Agent'),
-                ],
-              ),
-          ]),
-        ]),
+          ],
+        ),
 
         // Add Agent Form Card
         if (_showAddAgentForm && activeTab == 'support')
@@ -1370,8 +1443,7 @@ class _UsersPageState extends State<UsersPage> {
 
             if (users.isEmpty) {
               return div(
-                classes:
-                    'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+                classes: 'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
                 [
                   span(classes: 'text-3xl mb-3', [Component.text(activeTab == 'support' ? '🛡️' : '👥')]),
                   h3(classes: 'text-sm font-bold text-zinc-900', [
@@ -1391,13 +1463,11 @@ class _UsersPageState extends State<UsersPage> {
             // Support tab has a different (simpler) table view
             if (activeTab == 'support') {
               return div(
-                classes:
-                    'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+                classes: 'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
                 [
                   table(classes: 'w-full text-left text-xs border-collapse', [
                     thead(
-                      classes:
-                          'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
+                      classes: 'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
                       [
                         tr([
                           th(classes: 'p-5', [Component.text('Agent Name')]),
@@ -1414,8 +1484,7 @@ class _UsersPageState extends State<UsersPage> {
                           td(classes: 'p-5 font-bold text-zinc-900', [
                             div(classes: 'flex items-center gap-2.5', [
                               div(
-                                classes:
-                                    'w-7 h-7 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-[10px] font-extrabold text-zinc-700 flex-shrink-0',
+                                classes: 'w-7 h-7 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-[10px] font-extrabold text-zinc-700 flex-shrink-0',
                                 [
                                   Component.text(
                                     u.name.length >= 2 ? u.name.substring(0, 2).toUpperCase() : u.name.toUpperCase(),
@@ -1433,8 +1502,7 @@ class _UsersPageState extends State<UsersPage> {
                           td(classes: 'p-5 text-zinc-650 font-medium', [Component.text(u.email)]),
                           td(classes: 'p-5 text-center', [
                             span(
-                              classes:
-                                  'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border bg-indigo-50 text-indigo-600 border-indigo-100',
+                              classes: 'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border bg-indigo-50 text-indigo-600 border-indigo-100',
                               [
                                 Component.text((u.role ?? 'support').toUpperCase()),
                               ],
@@ -1442,8 +1510,7 @@ class _UsersPageState extends State<UsersPage> {
                           ]),
                           td(classes: 'p-5 text-center', [
                             span(
-                              classes:
-                                  'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border bg-[#e2f1e9] text-[#0fa958] border-emerald-100',
+                              classes: 'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border bg-[#e2f1e9] text-[#0fa958] border-emerald-100',
                               [
                                 Component.text('ACTIVE'),
                               ],
@@ -1456,8 +1523,7 @@ class _UsersPageState extends State<UsersPage> {
                                 await adminFirestore.collection('users').doc(u.uid).delete();
                                 _showToast('🗑️ Agent "${u.name}" removed.');
                               },
-                              classes:
-                                  'px-3 py-1.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-500 text-[10px] font-extrabold rounded-full transition-all',
+                              classes: 'px-3 py-1.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-500 text-[10px] font-extrabold rounded-full transition-all',
                               [Component.text('Remove Agent')],
                             ),
                           ]),
@@ -1469,13 +1535,11 @@ class _UsersPageState extends State<UsersPage> {
             }
 
             return div(
-              classes:
-                  'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+              classes: 'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
               [
                 table(classes: 'w-full text-left text-xs border-collapse', [
                   thead(
-                    classes:
-                        'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
+                    classes: 'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
                     [
                       tr([
                         th(classes: 'p-5', [Component.text('User / ID')]),
@@ -1507,8 +1571,7 @@ class _UsersPageState extends State<UsersPage> {
                                 Component.text(user.name),
                                 if (user.banned)
                                   span(
-                                    classes:
-                                        'ml-2 px-1.5 py-0.5 rounded bg-red-100 text-red-500 font-black text-[8px] uppercase tracking-wider',
+                                    classes: 'ml-2 px-1.5 py-0.5 rounded bg-red-100 text-red-500 font-black text-[8px] uppercase tracking-wider',
                                     [Component.text('Banned')],
                                   ),
                               ]),
@@ -1584,8 +1647,7 @@ class _UsersPageState extends State<UsersPage> {
                                   });
                                 },
                                 events: {'click': (e) => e.stopPropagation()},
-                                classes:
-                                    'px-4 py-2 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold tracking-wide uppercase rounded-full transition-all shadow-md shadow-black/10',
+                                classes: 'px-4 py-2 bg-black hover:bg-zinc-800 text-white text-[10px] font-extrabold tracking-wide uppercase rounded-full transition-all shadow-md shadow-black/10',
                                 [Component.text('Clear BG Record')],
                               )
                             else
@@ -1598,8 +1660,7 @@ class _UsersPageState extends State<UsersPage> {
                                   });
                                 },
                                 events: {'click': (e) => e.stopPropagation()},
-                                classes:
-                                    'px-4 py-2 border border-red-200 bg-red-50 hover:bg-red-100/50 text-red-500 text-[10px] font-extrabold tracking-wide uppercase rounded-full transition-all',
+                                classes: 'px-4 py-2 border border-red-200 bg-red-50 hover:bg-red-100/50 text-red-500 text-[10px] font-extrabold tracking-wide uppercase rounded-full transition-all',
                                 [Component.text('Revoke BG')],
                               ),
                           ]),
@@ -1611,8 +1672,7 @@ class _UsersPageState extends State<UsersPage> {
             );
           },
           loading: () => div(
-            classes:
-                'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+            classes: 'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
             [div(classes: 'animate-spin h-6 w-6 border-2 border-zinc-200 border-t-indigo-500 rounded-full', [])],
           ),
           error: (err, _) => div(
@@ -1647,13 +1707,11 @@ class _UsersPageState extends State<UsersPage> {
                 }
 
                 return div(
-                  classes:
-                      'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+                  classes: 'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
                   [
                     table(classes: 'w-full text-left text-xs border-collapse', [
                       thead(
-                        classes:
-                            'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
+                        classes: 'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
                         [
                           tr([
                             th(classes: 'p-5', [Component.text('Tx Hash / Signature')]),
@@ -1712,8 +1770,7 @@ class _UsersPageState extends State<UsersPage> {
                 );
               },
               loading: () => div(
-                classes:
-                    'flex justify-center items-center py-10 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+                classes: 'flex justify-center items-center py-10 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
                 [div(classes: 'animate-spin h-5 w-5 border-2 border-zinc-200 border-t-emerald-500 rounded-full', [])],
               ),
               error: (err, _) => div(
@@ -1726,14 +1783,19 @@ class _UsersPageState extends State<UsersPage> {
         ],
       ] else ...[
         // User Rewards View
-        div(classes: 'flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-200/50 pb-5', [
-          div(classes: 'flex flex-col gap-1', [
-            h1(classes: 'text-xl font-black tracking-tight text-zinc-900', [Component.text('User Rewards Center')]),
-            p(classes: 'text-xs text-zinc-400 font-medium', [
-              Component.text('Track user quest milestones, total Terra Points (TP) balances, and award points manually.'),
+        div(
+          classes: 'flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-200/50 pb-5',
+          [
+            div(classes: 'flex flex-col gap-1', [
+              h1(classes: 'text-xl font-black tracking-tight text-zinc-900', [Component.text('User Rewards Center')]),
+              p(classes: 'text-xs text-zinc-400 font-medium', [
+                Component.text(
+                  'Track user quest milestones, total Terra Points (TP) balances, and award points manually.',
+                ),
+              ]),
             ]),
-          ]),
-        ]),
+          ],
+        ),
 
         // Rewards Leaderboard Table
         usersAsync.when(
@@ -1745,8 +1807,7 @@ class _UsersPageState extends State<UsersPage> {
 
             if (rewardUsers.isEmpty) {
               return div(
-                classes:
-                    'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+                classes: 'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
                 [
                   span(classes: 'text-3xl mb-3', [Component.text('🪙')]),
                   h3(classes: 'text-sm font-bold text-zinc-900', [Component.text('No user rewards profiles found')]),
@@ -1758,13 +1819,11 @@ class _UsersPageState extends State<UsersPage> {
             }
 
             return div(
-              classes:
-                  'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+              classes: 'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
               [
                 table(classes: 'w-full text-left text-xs border-collapse', [
                   thead(
-                    classes:
-                        'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
+                    classes: 'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
                     [
                       tr([
                         th(classes: 'p-5 w-16 text-center', [Component.text('Rank')]),
@@ -1780,7 +1839,13 @@ class _UsersPageState extends State<UsersPage> {
                     ...rewardUsers.asMap().entries.map((entry) {
                       final i = entry.key;
                       final u = entry.value;
-                      final rankStr = (i == 0) ? '🥇 1' : (i == 1) ? '🥈 2' : (i == 2) ? '🥉 3' : '${i + 1}';
+                      final rankStr = (i == 0)
+                          ? '🥇 1'
+                          : (i == 1)
+                          ? '🥈 2'
+                          : (i == 2)
+                          ? '🥉 3'
+                          : '${i + 1}';
                       return tr(
                         classes: 'hover:bg-[#fcfdfc] transition-colors cursor-pointer',
                         events: {
@@ -1792,7 +1857,9 @@ class _UsersPageState extends State<UsersPage> {
                           },
                         },
                         [
-                          td(classes: 'p-5 text-center font-black text-zinc-550 text-[13px]', [Component.text(rankStr)]),
+                          td(classes: 'p-5 text-center font-black text-zinc-550 text-[13px]', [
+                            Component.text(rankStr),
+                          ]),
                           td(classes: 'p-5 font-bold text-zinc-900', [
                             div(classes: 'flex flex-col gap-0.5', [
                               span([Component.text(u.name)]),
@@ -1809,16 +1876,19 @@ class _UsersPageState extends State<UsersPage> {
                             Component.text('${u.earnedRewards.length} / ${standardQuests.length}'),
                           ]),
                           td(classes: 'p-5 text-center', [
-                            span(classes: 'px-3 py-1.5 rounded-full text-xs font-black bg-amber-50 text-amber-700 border border-amber-500/10 flex items-center gap-1 w-max mx-auto', [
-                              Component.text('🪙 ${u.terraPoints} TP'),
-                            ]),
+                            span(
+                              classes: 'px-3 py-1.5 rounded-full text-xs font-black bg-amber-50 text-amber-700 border border-amber-500/10 flex items-center gap-1 w-max mx-auto',
+                              [
+                                Component.text('🪙 ${u.terraPoints} TP'),
+                              ],
+                            ),
                           ]),
                           td(classes: 'p-5 text-right', [
                             button(
                               onClick: () {
                                 setState(() {
-                                    _selectedUser = u;
-                                    _userModalTab = 'rewards';
+                                  _selectedUser = u;
+                                  _userModalTab = 'rewards';
                                 });
                               },
                               events: {'click': (e) => e.stopPropagation()},
@@ -1835,8 +1905,7 @@ class _UsersPageState extends State<UsersPage> {
             );
           },
           loading: () => div(
-            classes:
-                'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+            classes: 'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
             [div(classes: 'animate-spin h-6 w-6 border-2 border-zinc-200 border-t-indigo-500 rounded-full', [])],
           ),
           error: (err, _) => div(

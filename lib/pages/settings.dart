@@ -197,8 +197,7 @@ class _SettingsPageState extends State<SettingsPage> {
         div(classes: 'flex flex-col gap-8', [
           // Panel 1: Environmental features/limits
           div(
-            classes:
-                'p-6 rounded-[28px] border border-zinc-200/50 bg-white flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+            classes: 'p-6 rounded-[28px] border border-zinc-200/50 bg-white flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
             [
               h4(classes: 'text-sm font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-50 pb-3', [
                 span([Component.text('⚡')]),
@@ -235,8 +234,7 @@ class _SettingsPageState extends State<SettingsPage> {
           // Panel 3: Admin Profile Settings
           if (user != null)
             div(
-              classes:
-                  'p-6 rounded-[28px] border border-zinc-200/50 bg-white flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+              classes: 'p-6 rounded-[28px] border border-zinc-200/50 bg-white flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
               [
                 h4(classes: 'text-sm font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-50 pb-3', [
                   span([Component.text('👤')]),
@@ -264,8 +262,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ]),
                     input(
                       value: _profileName,
-                      classes:
-                          'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
+                      classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
                       attributes: {'type': 'text', 'placeholder': user.displayName ?? 'Staff Agent'},
                       onInput: (value) => _profileName = value as String,
                     ),
@@ -276,8 +273,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ]),
                     input(
                       value: user.email ?? '',
-                      classes:
-                          'bg-zinc-100 border border-zinc-200 rounded-xl px-4 py-2.5 text-xs text-zinc-400 cursor-not-allowed focus:outline-none',
+                      classes: 'bg-zinc-100 border border-zinc-200 rounded-xl px-4 py-2.5 text-xs text-zinc-400 cursor-not-allowed focus:outline-none',
                       attributes: {'type': 'email', 'disabled': 'true'},
                     ),
                   ]),
@@ -287,8 +283,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ]),
                     input(
                       value: _newPassword,
-                      classes:
-                          'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
+                      classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
                       attributes: {'type': 'password', 'placeholder': '••••••••'},
                       onInput: (value) => _newPassword = value as String,
                     ),
@@ -296,14 +291,12 @@ class _SettingsPageState extends State<SettingsPage> {
 
                   button(
                     onClick: _profileLoading ? null : () => _updateProfile(context, user),
-                    classes:
-                        'w-full py-3 bg-black hover:bg-zinc-800 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-black/10 flex items-center justify-center gap-2 mt-1',
+                    classes: 'w-full py-3 bg-black hover:bg-zinc-800 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-black/10 flex items-center justify-center gap-2 mt-1',
                     attributes: _profileLoading ? {'disabled': 'true'} : {},
                     [
                       if (_profileLoading)
                         span(
-                          classes:
-                              'inline-block animate-spin h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full',
+                          classes: 'inline-block animate-spin h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full',
                           [],
                         )
                       else
@@ -318,8 +311,7 @@ class _SettingsPageState extends State<SettingsPage> {
         // Panel 2: staff creation (visible only to Admin emails)
         if (isAdmin)
           div(
-            classes:
-                'p-6 rounded-[28px] border border-zinc-200/50 bg-white flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+            classes: 'p-6 rounded-[28px] border border-zinc-200/50 bg-white flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
             [
               h4(classes: 'text-sm font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-50 pb-3', [
                 span([Component.text('👤')]),
@@ -350,8 +342,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ]),
                   input(
                     value: _newStaffName,
-                    classes:
-                        'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
+                    classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
                     attributes: {'type': 'text', 'placeholder': 'Jane Doe'},
                     onInput: (value) => _newStaffName = value as String,
                   ),
@@ -362,8 +353,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ]),
                   input(
                     value: _newStaffEmail,
-                    classes:
-                        'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
+                    classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
                     attributes: {'type': 'email', 'placeholder': 'agent@tranyx.com'},
                     onInput: (value) => _newStaffEmail = value as String,
                   ),
@@ -374,8 +364,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ]),
                   input(
                     value: _newStaffPassword,
-                    classes:
-                        'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
+                    classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
                     attributes: {'type': 'password', 'placeholder': '••••••••'},
                     onInput: (value) => _newStaffPassword = value as String,
                   ),
@@ -385,10 +374,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     Component.text('Access Role'),
                   ]),
                   select(
-                    classes:
-                        'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-850 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
-                    onChange: (value) =>
-                        _newStaffRole = (value as List<String>).isNotEmpty ? (value as List<String>).first : 'staff',
+                    classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-850 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
+                    onChange: (value) => _newStaffRole = (value).isNotEmpty ? (value).first : 'staff',
                     [
                       option(value: 'staff', selected: _newStaffRole == 'staff', [
                         Component.text('Staff (Customer Service)'),
@@ -400,14 +387,12 @@ class _SettingsPageState extends State<SettingsPage> {
 
                 button(
                   onClick: _staffLoading ? null : () => _createStaffAccount(context),
-                  classes:
-                      'w-full py-3 bg-black hover:bg-zinc-800 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-black/10 flex items-center justify-center gap-2 mt-1',
+                  classes: 'w-full py-3 bg-black hover:bg-zinc-800 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-black/10 flex items-center justify-center gap-2 mt-1',
                   attributes: _staffLoading ? {'disabled': 'true'} : {},
                   [
                     if (_staffLoading)
                       span(
-                        classes:
-                            'inline-block animate-spin h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full',
+                        classes: 'inline-block animate-spin h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full',
                         [],
                       )
                     else
@@ -420,8 +405,7 @@ class _SettingsPageState extends State<SettingsPage> {
         else
           // Privilege Info for non-admins
           div(
-            classes:
-                'p-6 rounded-[28px] border border-zinc-200/50 bg-white flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+            classes: 'p-6 rounded-[28px] border border-zinc-200/50 bg-white flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
             [
               h4(classes: 'text-sm font-bold text-zinc-900 flex items-center gap-2 border-b border-zinc-50 pb-3', [
                 span([Component.text('🔒')]),

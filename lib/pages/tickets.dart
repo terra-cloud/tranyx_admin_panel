@@ -126,8 +126,7 @@ class TicketsPage extends StatelessComponent {
         data: (tickets) {
           if (tickets.isEmpty) {
             return div(
-              classes:
-                  'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+              classes: 'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
               [
                 span(classes: 'text-3xl mb-3', [Component.text('🎟️')]),
                 h3(classes: 'text-sm font-bold text-zinc-900', [Component.text('No tickets submitted')]),
@@ -139,13 +138,11 @@ class TicketsPage extends StatelessComponent {
           }
 
           return div(
-            classes:
-                'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+            classes: 'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
             [
               table(classes: 'w-full text-left text-xs border-collapse', [
                 thead(
-                  classes:
-                      'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
+                  classes: 'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
                   [
                     tr([
                       th(classes: 'p-5', [Component.text('Ticket ID')]),
@@ -176,8 +173,7 @@ class TicketsPage extends StatelessComponent {
                         div(classes: 'flex flex-col gap-0.5', [
                           span(classes: 'font-bold text-zinc-800', [Component.text(ticket.subject)]),
                           span(
-                            classes:
-                                'text-[8px] font-black uppercase tracking-wider text-indigo-500 bg-indigo-50 border border-indigo-500/10 px-1.5 py-0.5 rounded w-max mt-0.5',
+                            classes: 'text-[8px] font-black uppercase tracking-wider text-indigo-500 bg-indigo-50 border border-indigo-500/10 px-1.5 py-0.5 rounded w-max mt-0.5',
                             [Component.text(ticket.category)],
                           ),
                         ]),
@@ -195,7 +191,7 @@ class TicketsPage extends StatelessComponent {
                                   ? 'text-blue-600 bg-blue-50'
                                   : 'text-[#0fa958] bg-[#e2f1e9]'}',
                           onChange: (value) async {
-                            final list = value as List<String>;
+                            final list = value;
                             final statusVal = list.isNotEmpty ? list.first : 'Open';
                             final firestore = context.read(firestoreProvider);
                             await firestore.collection('supportTickets').doc(ticket.id).update({
@@ -227,8 +223,7 @@ class TicketsPage extends StatelessComponent {
                               final firestore = context.read(firestoreProvider);
                               await firestore.collection('supportTickets').doc(ticket.id).delete();
                             },
-                            classes:
-                                'px-3 py-1.5 bg-red-50 hover:bg-red-100/50 border border-red-200 text-red-500 text-[10px] font-extrabold uppercase rounded-full transition-all shadow-sm',
+                            classes: 'px-3 py-1.5 bg-red-50 hover:bg-red-100/50 border border-red-200 text-red-500 text-[10px] font-extrabold uppercase rounded-full transition-all shadow-sm',
                             [Component.text('Delete')],
                           ),
                         ]),
@@ -239,8 +234,7 @@ class TicketsPage extends StatelessComponent {
           );
         },
         loading: () => div(
-          classes:
-              'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+          classes: 'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
           [div(classes: 'animate-spin h-6 w-6 border-2 border-zinc-200 border-t-indigo-500 rounded-full', [])],
         ),
         error: (err, _) => div(

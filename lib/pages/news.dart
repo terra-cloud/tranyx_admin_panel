@@ -8,6 +8,7 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 
 import 'package:web/web.dart' as web;
+
 import '../app.dart';
 import '../core/providers/environment_provider.dart';
 
@@ -403,8 +404,7 @@ class _NewsPageState extends State<NewsPage> {
                   Component.text('💻 Web View Preview'),
                 ]),
                 div(
-                  classes:
-                      'rounded-2xl border border-zinc-200 overflow-hidden bg-zinc-950 relative aspect-video flex items-center justify-center text-zinc-400',
+                  classes: 'rounded-2xl border border-zinc-200 overflow-hidden bg-zinc-950 relative aspect-video flex items-center justify-center text-zinc-400',
                   [
                     if (_imageUrl.trim().isNotEmpty)
                       img(src: _imageUrl.trim(), classes: 'w-full h-full object-cover')
@@ -414,8 +414,7 @@ class _NewsPageState extends State<NewsPage> {
                     // Web Button Overlay
                     if (_buttonText.trim().isNotEmpty && bX != null && bY != null && bW != null && bH != null)
                       button(
-                        classes:
-                            'absolute text-center flex items-center justify-center shadow-lg text-[10px] md:text-xs pointer-events-none',
+                        classes: 'absolute text-center flex items-center justify-center shadow-lg text-[10px] md:text-xs pointer-events-none',
                         attributes: {
                           'style':
                               'left: $bX%; top: $bY%; width: $bW%; height: $bH%; box-sizing: border-box; '
@@ -438,13 +437,11 @@ class _NewsPageState extends State<NewsPage> {
                 div(classes: 'flex justify-center', [
                   // Smartphone wrapper mockup frame
                   div(
-                    classes:
-                        'w-64 border-[6px] border-zinc-800 rounded-[32px] overflow-hidden bg-zinc-900 shadow-xl relative aspect-[9/16] flex flex-col justify-end p-2',
+                    classes: 'w-64 border-[6px] border-zinc-800 rounded-[32px] overflow-hidden bg-zinc-900 shadow-xl relative aspect-[9/16] flex flex-col justify-end p-2',
                     [
                       // Image banner container inside card
                       div(
-                        classes:
-                            'w-full aspect-video rounded-xl border border-zinc-800 overflow-hidden bg-zinc-950 relative flex items-center justify-center text-zinc-400',
+                        classes: 'w-full aspect-video rounded-xl border border-zinc-800 overflow-hidden bg-zinc-950 relative flex items-center justify-center text-zinc-400',
                         [
                           if (_imageUrl.trim().isNotEmpty)
                             img(src: _imageUrl.trim(), classes: 'w-full h-full object-cover')
@@ -454,8 +451,7 @@ class _NewsPageState extends State<NewsPage> {
                           // Mobile Button Overlay
                           if (_buttonText.trim().isNotEmpty && bX != null && bY != null && bW != null && bH != null)
                             button(
-                              classes:
-                                  'absolute text-center flex items-center justify-center shadow-md text-[8px] pointer-events-none',
+                              classes: 'absolute text-center flex items-center justify-center shadow-md text-[8px] pointer-events-none',
                               attributes: {
                                 'style':
                                     'left: $bX%; top: $bY%; width: $bW%; height: $bH%; box-sizing: border-box; '
@@ -552,7 +548,11 @@ class _NewsPageState extends State<NewsPage> {
                               ),
                               span(
                                 classes: 'text-[8px] text-zinc-400 font-semibold',
-                                [Component.text('On: ${p.publishAt!.year}-${p.publishAt!.month.toString().padLeft(2, '0')}-${p.publishAt!.day.toString().padLeft(2, '0')} ${p.publishAt!.hour.toString().padLeft(2, '0')}:${p.publishAt!.minute.toString().padLeft(2, '0')}')],
+                                [
+                                  Component.text(
+                                    'On: ${p.publishAt!.year}-${p.publishAt!.month.toString().padLeft(2, '0')}-${p.publishAt!.day.toString().padLeft(2, '0')} ${p.publishAt!.hour.toString().padLeft(2, '0')}:${p.publishAt!.minute.toString().padLeft(2, '0')}',
+                                  ),
+                                ],
                               ),
                             ])
                           else
@@ -564,14 +564,12 @@ class _NewsPageState extends State<NewsPage> {
                         ]),
                         td(classes: 'px-6 py-4 text-right space-x-2', [
                           button(
-                            classes:
-                                'px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl font-bold transition-all',
+                            classes: 'px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl font-bold transition-all',
                             events: {'click': (_) => _selectPost(p)},
                             [Component.text('Edit')],
                           ),
                           button(
-                            classes:
-                                'px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold transition-all',
+                            classes: 'px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold transition-all',
                             events: {'click': (_) => _deletePost(p.id)},
                             [Component.text('Delete')],
                           ),
@@ -616,8 +614,7 @@ class _NewsPageState extends State<NewsPage> {
               div(classes: 'flex flex-col gap-1.5', [
                 label([Component.text('Banner Title *')]),
                 input(
-                  classes:
-                      'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
+                  classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
                   type: InputType.text,
                   attributes: {'placeholder': 'e.g. 50% Off First Transit Ride!', 'value': _title},
                   events: {'input': (e) => _title = (e.target as dynamic).value as String},
@@ -628,8 +625,7 @@ class _NewsPageState extends State<NewsPage> {
               div(classes: 'flex flex-col gap-1.5', [
                 label([Component.text('Category')]),
                 select(
-                  classes:
-                      'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium bg-white',
+                  classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium bg-white',
                   events: {'change': (e) => _category = (e.target as dynamic).value as String},
                   [
                     option(value: 'news', attributes: _category == 'news' ? {'selected': ''} : {}, [
@@ -653,8 +649,7 @@ class _NewsPageState extends State<NewsPage> {
                 label([Component.text('Content Description *')]),
                 textarea(
                   placeholder: 'Enter announcement details or promo eligibility requirements...',
-                  classes:
-                      'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium h-24 resize-none',
+                  classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium h-24 resize-none',
                   events: {'input': (e) => _content = (e.target as dynamic).value as String},
                   [Component.text(_content)],
                 ),
@@ -664,22 +659,20 @@ class _NewsPageState extends State<NewsPage> {
               div(classes: 'flex flex-col gap-1.5', [
                 label([Component.text('Banner Image URL')]),
                 input(
-                  classes:
-                      'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
+                  classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
                   type: InputType.text,
                   attributes: {'placeholder': 'e.g. https://images.unsplash.com/...', 'value': _imageUrl},
                   events: {'input': (e) => setState(() => _imageUrl = (e.target as dynamic).value as String)},
                 ),
                 // File picker for direct computer uploads
                 div(
-                  classes:
-                      'mt-1 flex items-center justify-center border border-dashed border-zinc-250 rounded-2xl p-4 bg-zinc-50 hover:bg-zinc-100 transition-colors relative cursor-pointer',
+                  classes: 'mt-1 flex items-center justify-center border border-dashed border-zinc-250 rounded-2xl p-4 bg-zinc-50 hover:bg-zinc-100 transition-colors relative cursor-pointer',
                   [
                     input(
                       classes: 'absolute inset-0 opacity-0 cursor-pointer w-full h-full',
                       type: InputType.file,
                       attributes: {'accept': 'image/*'},
-                      events: {'change': (e) => _handleImageUpload(e as web.Event)},
+                      events: {'change': (e) => _handleImageUpload(e)},
                     ),
                     div(classes: 'text-center space-y-1 text-[11px] text-zinc-500 font-bold', [
                       span([Component.text('📁 Upload directly from computer')]),
@@ -695,8 +688,7 @@ class _NewsPageState extends State<NewsPage> {
               div(classes: 'flex flex-col gap-1.5', [
                 label([Component.text('Tap Action')]),
                 select(
-                  classes:
-                      'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium bg-white',
+                  classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium bg-white',
                   events: {'change': (e) => setState(() => _actionType = (e.target as dynamic).value as String)},
                   [
                     option(value: 'none', attributes: _actionType == 'none' ? {'selected': ''} : {}, [
@@ -717,8 +709,7 @@ class _NewsPageState extends State<NewsPage> {
                 div(classes: 'flex flex-col gap-1.5', [
                   label([Component.text('Linked Promo Code')]),
                   input(
-                    classes:
-                        'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium uppercase',
+                    classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium uppercase',
                     type: InputType.text,
                     attributes: {'placeholder': 'e.g. TRANSIT50', 'value': _promoCode},
                     events: {'input': (e) => _promoCode = (e.target as dynamic).value as String},
@@ -730,8 +721,7 @@ class _NewsPageState extends State<NewsPage> {
                 div(classes: 'flex flex-col gap-1.5', [
                   label([Component.text('Action Destination URL (Web link or tranyx:// deep link)')]),
                   input(
-                    classes:
-                        'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
+                    classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
                     type: InputType.text,
                     attributes: {'placeholder': 'e.g. https://external.com or tranyx://transit', 'value': _actionUrl},
                     events: {'input': (e) => _actionUrl = (e.target as dynamic).value as String},
@@ -747,8 +737,7 @@ class _NewsPageState extends State<NewsPage> {
                 div(classes: 'flex flex-col gap-1.5', [
                   label([Component.text('Button Text')]),
                   input(
-                    classes:
-                        'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
+                    classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
                     type: InputType.text,
                     attributes: {'placeholder': 'e.g. Claim Now, Visit Site', 'value': _buttonText},
                     events: {'input': (e) => setState(() => _buttonText = (e.target as dynamic).value as String)},
@@ -804,8 +793,7 @@ class _NewsPageState extends State<NewsPage> {
 
                   // Styling configurations
                   p(
-                    classes:
-                        'text-[11px] font-bold text-zinc-700 uppercase tracking-wider mt-2 pt-2 border-t border-zinc-150/40',
+                    classes: 'text-[11px] font-bold text-zinc-700 uppercase tracking-wider mt-2 pt-2 border-t border-zinc-150/40',
                     [Component.text('Button Colors & Borders')],
                   ),
 
@@ -875,8 +863,7 @@ class _NewsPageState extends State<NewsPage> {
                   ]),
 
                   p(
-                    classes:
-                        'text-[11px] font-bold text-zinc-700 uppercase tracking-wider mt-2 pt-2 border-t border-zinc-150/40',
+                    classes: 'text-[11px] font-bold text-zinc-700 uppercase tracking-wider mt-2 pt-2 border-t border-zinc-150/40',
                     [Component.text('Button Dimensions & Corners')],
                   ),
 
@@ -925,8 +912,7 @@ class _NewsPageState extends State<NewsPage> {
               div(classes: 'flex flex-col gap-1.5 pt-2 border-t border-zinc-150/60', [
                 label([Component.text('Scheduled Publish Date & Time (Optional)')]),
                 input(
-                  classes:
-                      'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium bg-white',
+                  classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium bg-white',
                   attributes: {
                     'type': 'datetime-local',
                     'value': _publishAtDateStr,
@@ -937,7 +923,9 @@ class _NewsPageState extends State<NewsPage> {
                   },
                 ),
                 p(classes: 'text-[10px] text-zinc-400 font-semibold leading-relaxed', [
-                  Component.text('Leave empty to publish immediately. Banners scheduled in the future will remain hidden on the mobile app until the scheduled date and time.'),
+                  Component.text(
+                    'Leave empty to publish immediately. Banners scheduled in the future will remain hidden on the mobile app until the scheduled date and time.',
+                  ),
                 ]),
               ]),
 
@@ -975,8 +963,7 @@ class _NewsPageState extends State<NewsPage> {
                 ],
               ),
               button(
-                classes:
-                    'px-5 py-3 border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 rounded-xl font-bold transition-all text-zinc-650',
+                classes: 'px-5 py-3 border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 rounded-xl font-bold transition-all text-zinc-650',
                 events: {'click': (_) => _resetForm()},
                 [Component.text('Reset')],
               ),

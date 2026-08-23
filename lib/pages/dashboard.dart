@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
@@ -894,25 +895,24 @@ class _DashboardState extends State<Dashboard> {
         div(classes: 'flex items-center gap-3 self-end md:self-auto', [
           div(classes: 'relative hidden sm:block', [
             input(
-              classes:
-                  'bg-white border border-zinc-200/50 rounded-full px-5 py-2 text-xs text-zinc-800 placeholder-zinc-400 w-60 focus:outline-none focus:border-black transition-all shadow-sm',
+              classes: 'bg-white border border-zinc-200/50 rounded-full px-5 py-2 text-xs text-zinc-800 placeholder-zinc-400 w-60 focus:outline-none focus:border-black transition-all shadow-sm',
               value: _searchQuery,
               attributes: {'placeholder': 'Search users, listings...'},
               onInput: (val) => setState(() => _searchQuery = val as String),
             ),
             if (_searchQuery.isNotEmpty)
               div(
-                classes:
-                    'absolute top-11 left-0 bg-white border border-zinc-200/80 rounded-2xl shadow-xl z-50 max-h-80 overflow-y-auto p-3 flex flex-col gap-1 w-72',
+                classes: 'absolute top-11 left-0 bg-white border border-zinc-200/80 rounded-2xl shadow-xl z-50 max-h-80 overflow-y-auto p-3 flex flex-col gap-1 w-72',
                 [
                   context
                       .watch(globalSearchResultsProvider(_searchQuery))
                       .when(
                         data: (results) {
-                          if (results.isEmpty)
+                          if (results.isEmpty) {
                             return div(classes: 'text-center p-4 text-[11px] text-zinc-400', [
                               Component.text('No results found'),
                             ]);
+                          }
                           return Component.fragment([
                             for (final res in results)
                               a(
@@ -940,16 +940,14 @@ class _DashboardState extends State<Dashboard> {
                                   setState(() => _searchQuery = '');
                                   Router.of(context).push(res.path);
                                 },
-                                classes:
-                                    'flex flex-col p-2.5 rounded-xl hover:bg-zinc-50 transition-all no-underline border-b border-zinc-50 last:border-0',
+                                classes: 'flex flex-col p-2.5 rounded-xl hover:bg-zinc-50 transition-all no-underline border-b border-zinc-50 last:border-0',
                                 [
                                   div(classes: 'flex justify-between items-center', [
                                     span(classes: 'text-[11px] font-black text-zinc-800 truncate max-w-[70%]', [
                                       Component.text(res.title),
                                     ]),
                                     span(
-                                      classes:
-                                          'text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 tracking-wider',
+                                      classes: 'text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 tracking-wider',
                                       [Component.text(res.category)],
                                     ),
                                   ]),
@@ -970,8 +968,7 @@ class _DashboardState extends State<Dashboard> {
             classes: 'flex items-center gap-2.5 bg-white px-3 py-1.5 border border-zinc-200/50 rounded-full shadow-sm',
             [
               div(
-                classes:
-                    'w-7 h-7 rounded-full bg-zinc-200 flex items-center justify-center font-black text-xs text-zinc-700',
+                classes: 'w-7 h-7 rounded-full bg-zinc-200 flex items-center justify-center font-black text-xs text-zinc-700',
                 [
                   Component.text(
                     user?.displayName?.isNotEmpty == true ? user!.displayName!.substring(0, 1).toUpperCase() : 'A',
@@ -989,8 +986,7 @@ class _DashboardState extends State<Dashboard> {
 
       if (pendingChatsCount > 0 && !isAdmin)
         div(
-          classes:
-              'p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center justify-between shadow-lg shadow-rose-500/5 animate-pulse relative overflow-hidden',
+          classes: 'p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center justify-between shadow-lg shadow-rose-500/5 animate-pulse relative overflow-hidden',
           [
             div(classes: 'absolute top-0 left-0 w-1.5 h-full bg-rose-600', []),
             div(classes: 'flex items-center gap-3.5 pl-2', [
@@ -1010,8 +1006,7 @@ class _DashboardState extends State<Dashboard> {
               onClick: () {
                 Router.of(context).push('/chats');
               },
-              classes:
-                  'px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md shadow-rose-600/10 cursor-pointer border-0 outline-none',
+              classes: 'px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-md shadow-rose-600/10 cursor-pointer border-0 outline-none',
               [Component.text('Respond Now')],
             ),
           ],
@@ -1044,8 +1039,7 @@ class _DashboardState extends State<Dashboard> {
       div(classes: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4', [
         // 1. Total Revenue Card (with timeframe dropdown and fee details)
         div(
-          classes:
-              'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)] lg:col-span-1',
+          classes: 'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)] lg:col-span-1',
           [
             div(classes: 'flex items-start justify-between', [
               div(classes: 'flex flex-col gap-0.5 min-w-0', [
@@ -1068,8 +1062,7 @@ class _DashboardState extends State<Dashboard> {
                 ]),
               ]),
               select(
-                classes:
-                    'bg-zinc-100 hover:bg-zinc-200 border-0 rounded-lg px-2 py-1 text-[9px] font-black text-zinc-700 focus:outline-none transition-all cursor-pointer',
+                classes: 'bg-zinc-100 hover:bg-zinc-200 border-0 rounded-lg px-2 py-1 text-[9px] font-black text-zinc-700 focus:outline-none transition-all cursor-pointer',
                 onChange: (v) => setState(() => _revenueTimeframe = v.isNotEmpty ? v.first : '24h'),
                 [
                   option(value: '24h', selected: _revenueTimeframe == '24h', [Component.text('24h')]),
@@ -1150,8 +1143,7 @@ class _DashboardState extends State<Dashboard> {
 
         // 2. Active Users Card (breakdown by type)
         div(
-          classes:
-              'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)]',
+          classes: 'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)]',
           [
             div(classes: 'flex items-start justify-between', [
               div(classes: 'flex flex-col gap-0.5', [
@@ -1163,8 +1155,7 @@ class _DashboardState extends State<Dashboard> {
                 ]),
               ]),
               div(
-                classes:
-                    'w-8 h-8 rounded-2xl flex items-center justify-center text-lg bg-indigo-50 text-indigo-500 flex-shrink-0',
+                classes: 'w-8 h-8 rounded-2xl flex items-center justify-center text-lg bg-indigo-50 text-indigo-500 flex-shrink-0',
                 [Component.text('👥')],
               ),
             ]),
@@ -1193,8 +1184,7 @@ class _DashboardState extends State<Dashboard> {
 
         // 3. Live Listings Card (active posts breakdown)
         div(
-          classes:
-              'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)]',
+          classes: 'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)]',
           [
             div(classes: 'flex items-start justify-between', [
               div(classes: 'flex flex-col gap-0.5', [
@@ -1206,8 +1196,7 @@ class _DashboardState extends State<Dashboard> {
                 ]),
               ]),
               div(
-                classes:
-                    'w-8 h-8 rounded-2xl flex items-center justify-center text-lg bg-emerald-50 text-emerald-500 flex-shrink-0',
+                classes: 'w-8 h-8 rounded-2xl flex items-center justify-center text-lg bg-emerald-50 text-emerald-500 flex-shrink-0',
                 [Component.text('📋')],
               ),
             ]),
@@ -1234,8 +1223,7 @@ class _DashboardState extends State<Dashboard> {
 
         // 4. Pending KYC Approvals Card (verification queue + reported posts alert)
         div(
-          classes:
-              'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)]',
+          classes: 'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)]',
           [
             div(classes: 'flex items-start justify-between', [
               div(classes: 'flex flex-col gap-0.5', [
@@ -1247,8 +1235,7 @@ class _DashboardState extends State<Dashboard> {
                 ]),
               ]),
               div(
-                classes:
-                    'w-8 h-8 rounded-2xl flex items-center justify-center text-lg bg-amber-50 text-amber-500 flex-shrink-0',
+                classes: 'w-8 h-8 rounded-2xl flex items-center justify-center text-lg bg-amber-50 text-amber-500 flex-shrink-0',
                 [Component.text('🪪')],
               ),
             ]),
@@ -1263,8 +1250,7 @@ class _DashboardState extends State<Dashboard> {
               ]),
               if (reportedListingsCount > 0)
                 div(
-                  classes:
-                      'mt-1.5 px-2 py-1 bg-red-50 text-red-600 rounded-lg font-black text-[8px] flex items-center justify-between animate-pulse',
+                  classes: 'mt-1.5 px-2 py-1 bg-red-50 text-red-600 rounded-lg font-black text-[8px] flex items-center justify-between animate-pulse',
                   [
                     Component.text('🚨 FLAG: $reportedListingsCount REPORTED POSTS'),
                   ],
@@ -1279,8 +1265,7 @@ class _DashboardState extends State<Dashboard> {
 
         // 5. Open Tickets / Reported Postings Card
         div(
-          classes:
-              'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)]',
+          classes: 'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)]',
           [
             div(classes: 'flex items-start justify-between', [
               div(classes: 'flex flex-col gap-0.5', [
@@ -1308,8 +1293,7 @@ class _DashboardState extends State<Dashboard> {
               ]),
               a(
                 href: '/tickets',
-                classes:
-                    'mt-1.5 text-center text-[8px] font-black uppercase text-indigo-500 hover:text-indigo-600 transition-colors',
+                classes: 'mt-1.5 text-center text-[8px] font-black uppercase text-indigo-500 hover:text-indigo-600 transition-colors',
                 [Component.text('RESOLVE PENDING ISSUES →')],
               ),
             ]),
@@ -1322,8 +1306,7 @@ class _DashboardState extends State<Dashboard> {
         div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5', [
           // Monthly Revenue Bar Chart (2/3 width)
           div(
-            classes:
-                'lg:col-span-2 bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+            classes: 'lg:col-span-2 bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
             [
               div(classes: 'flex justify-between items-start border-b border-zinc-50 pb-4', [
                 div([
@@ -1333,8 +1316,7 @@ class _DashboardState extends State<Dashboard> {
                   ]),
                 ]),
                 span(
-                  classes:
-                      'text-[9px] font-extrabold px-3 py-1.5 bg-[#e6f7ef] text-[#0fa958] rounded-full border border-emerald-100',
+                  classes: 'text-[9px] font-extrabold px-3 py-1.5 bg-[#e6f7ef] text-[#0fa958] rounded-full border border-emerald-100',
                   [
                     Component.text('₱${monthlyRevenue[now.month - 1].toStringAsFixed(0)} this month'),
                   ],
@@ -1377,8 +1359,7 @@ class _DashboardState extends State<Dashboard> {
           div(classes: 'flex flex-col gap-5', [
             // KYC Pie Chart (CSS conic-gradient)
             div(
-              classes:
-                  'bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+              classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
               [
                 div([
                   h3(classes: 'text-sm font-black text-zinc-900', [Component.text('KYC Verifications')]),
@@ -1420,8 +1401,7 @@ class _DashboardState extends State<Dashboard> {
 
             // New User Acquisitions mini chart
             div(
-              classes:
-                  'flex-1 bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+              classes: 'flex-1 bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
               [
                 div([
                   h3(classes: 'text-sm font-black text-zinc-900', [Component.text('User Acquisitions')]),
@@ -1455,8 +1435,7 @@ class _DashboardState extends State<Dashboard> {
         div(classes: 'grid grid-cols-1 lg:grid-cols-2 gap-5', [
           // KYC Pie Chart (1/2 width)
           div(
-            classes:
-                'bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+            classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
             [
               div([
                 h3(classes: 'text-sm font-black text-zinc-900', [Component.text('KYC Verifications')]),
@@ -1498,8 +1477,7 @@ class _DashboardState extends State<Dashboard> {
 
           // New User Acquisitions mini chart (1/2 width)
           div(
-            classes:
-                'bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+            classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
             [
               div([
                 h3(classes: 'text-sm font-black text-zinc-900', [Component.text('User Acquisitions')]),
@@ -1533,8 +1511,7 @@ class _DashboardState extends State<Dashboard> {
       div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5', [
         // Top Performing Agents (2/3)
         div(
-          classes:
-              'lg:col-span-2 bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+          classes: 'lg:col-span-2 bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
           [
             div(classes: 'flex justify-between items-center border-b border-zinc-50 pb-4', [
               div([
@@ -1569,8 +1546,7 @@ class _DashboardState extends State<Dashboard> {
               ),
               for (var i = 0; i < staffList.length && i < 8; i++)
                 div(
-                  classes:
-                      'grid grid-cols-12 items-center py-3 border-b border-zinc-50 last:border-0 hover:bg-zinc-50/50 rounded-xl px-1 transition-colors',
+                  classes: 'grid grid-cols-12 items-center py-3 border-b border-zinc-50 last:border-0 hover:bg-zinc-50/50 rounded-xl px-1 transition-colors',
                   [
                     div(classes: 'col-span-1 flex justify-center', [
                       if (i == 0)
@@ -1584,8 +1560,7 @@ class _DashboardState extends State<Dashboard> {
                     ]),
                     div(classes: 'col-span-5 flex items-center gap-2.5', [
                       div(
-                        classes:
-                            'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-extrabold text-zinc-700 text-[10px] flex-shrink-0',
+                        classes: 'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-extrabold text-zinc-700 text-[10px] flex-shrink-0',
                         [
                           Component.text(
                             staffList[i].name.length >= 2
@@ -1631,8 +1606,7 @@ class _DashboardState extends State<Dashboard> {
 
         // Platform Config
         div(
-          classes:
-              'bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+          classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
           [
             div(classes: 'border-b border-zinc-50 pb-4', [
               h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Platform Config')]),

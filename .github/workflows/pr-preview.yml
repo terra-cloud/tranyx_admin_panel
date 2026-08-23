@@ -30,6 +30,10 @@ jobs:
           chmod +x tailwindcss-linux-x64
           sudo mv tailwindcss-linux-x64 /usr/local/bin/tailwindcss
 
+      - name: Compile Tailwind CSS
+        run: |
+          tailwindcss -i web/styles.tw.css -o web/styles.css --minify
+
       - name: Install Jaspr CLI
         run: |
           flutter pub global activate jaspr_cli

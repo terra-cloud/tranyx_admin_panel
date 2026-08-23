@@ -170,7 +170,7 @@ final paginatedListingsProvider = FutureProvider<List<ListingData>>((ref) async 
         id: doc.id,
         title: data['title'] ?? 'Gig Service',
         owner: data['creatorName'] ?? 'Client',
-        priceLabel: '₱${price.toStringAsFixed(2)} (${type})',
+        priceLabel: '₱${price.toStringAsFixed(2)} ($type)',
         status: data['status'] ?? 'Open',
         createdAt: DateTime.fromMillisecondsSinceEpoch(data['createdAt'] ?? 0),
         icon: '💼',
@@ -362,8 +362,7 @@ class _ListingsPageState extends State<ListingsPage> {
           },
           [
             div(
-              classes:
-                  'bg-white rounded-[28px] max-w-xl w-full max-h-[85vh] overflow-y-auto p-7 shadow-2xl flex flex-col gap-5 border border-zinc-200/50 transform scale-100 transition-all',
+              classes: 'bg-white rounded-[28px] max-w-xl w-full max-h-[85vh] overflow-y-auto p-7 shadow-2xl flex flex-col gap-5 border border-zinc-200/50 transform scale-100 transition-all',
               events: {
                 'click': (e) {
                   e.stopPropagation();
@@ -390,8 +389,7 @@ class _ListingsPageState extends State<ListingsPage> {
                       context.read(selectedListingIdProvider.notifier).state = null;
                       setState(() => _detailsModalItem = null);
                     },
-                    classes:
-                        'w-7 h-7 rounded-full bg-zinc-100 text-zinc-500 font-bold hover:bg-zinc-200 text-xs flex items-center justify-center',
+                    classes: 'w-7 h-7 rounded-full bg-zinc-100 text-zinc-500 font-bold hover:bg-zinc-200 text-xs flex items-center justify-center',
                     [Component.text('✕')],
                   ),
                 ]),
@@ -473,8 +471,7 @@ class _ListingsPageState extends State<ListingsPage> {
                         for (final imgUrl in imageUrls)
                           img(
                             src: imgUrl,
-                            classes:
-                                'w-28 h-28 rounded-2xl object-cover border border-zinc-200/50 hover:scale-105 transition-all shadow-sm flex-shrink-0',
+                            classes: 'w-28 h-28 rounded-2xl object-cover border border-zinc-200/50 hover:scale-105 transition-all shadow-sm flex-shrink-0',
                             alt: 'Listing image',
                           ),
                       ]),
@@ -489,8 +486,7 @@ class _ListingsPageState extends State<ListingsPage> {
                         Component.text('Description Details'),
                       ]),
                       p(
-                        classes:
-                            'text-zinc-650 leading-relaxed font-medium mt-1 bg-zinc-50/50 p-3 rounded-xl border border-zinc-100',
+                        classes: 'text-zinc-650 leading-relaxed font-medium mt-1 bg-zinc-50/50 p-3 rounded-xl border border-zinc-100',
                         [Component.text(_detailsModalItem!.rawData['description'].toString())],
                       ),
                     ]),
@@ -501,8 +497,7 @@ class _ListingsPageState extends State<ListingsPage> {
                       Component.text('Technical Specifications'),
                     ]),
                     div(
-                      classes:
-                          'grid grid-cols-2 gap-2 bg-[#f8faf9] p-3 rounded-xl border border-zinc-200/20 text-[11px] font-medium text-zinc-600',
+                      classes: 'grid grid-cols-2 gap-2 bg-[#f8faf9] p-3 rounded-xl border border-zinc-200/20 text-[11px] font-medium text-zinc-600',
                       [
                         if (activeTab == 'vehicles') ...[
                           span([
@@ -564,8 +559,7 @@ class _ListingsPageState extends State<ListingsPage> {
                       div(classes: 'flex flex-col gap-2 max-h-52 overflow-y-auto pr-1 no-scrollbar', [
                         for (final qna in qnaList)
                           div(
-                            classes:
-                                'p-3 bg-zinc-50 border border-zinc-200/50 rounded-2xl flex flex-col gap-1.5 text-[10px]',
+                            classes: 'p-3 bg-zinc-50 border border-zinc-200/50 rounded-2xl flex flex-col gap-1.5 text-[10px]',
                             [
                               div(classes: 'flex justify-between items-start', [
                                 div(classes: 'flex items-center gap-1.5', [
@@ -614,8 +608,7 @@ class _ListingsPageState extends State<ListingsPage> {
                               else
                                 div(classes: 'flex gap-2 mt-1.5 items-center', [
                                   input(
-                                    classes:
-                                        'flex-1 px-3 py-1 bg-white border border-zinc-200 rounded-xl text-[10px] focus:outline-none focus:border-indigo-400',
+                                    classes: 'flex-1 px-3 py-1 bg-white border border-zinc-200 rounded-xl text-[10px] focus:outline-none focus:border-indigo-400',
                                     attributes: {'placeholder': 'Write response...'},
                                     onInput: (val) => setState(() => _activeReplies[qna.id] = val as String),
                                   ),
@@ -642,8 +635,7 @@ class _ListingsPageState extends State<ListingsPage> {
                                             });
                                       }
                                     },
-                                    classes:
-                                        'px-3 py-1 bg-indigo-500 hover:bg-indigo-600 text-white font-extrabold rounded-lg text-[9px] transition-colors shadow-sm',
+                                    classes: 'px-3 py-1 bg-indigo-500 hover:bg-indigo-600 text-white font-extrabold rounded-lg text-[9px] transition-colors shadow-sm',
                                     [Component.text('Reply')],
                                   ),
                                 ]),
@@ -652,8 +644,7 @@ class _ListingsPageState extends State<ListingsPage> {
                       ]),
                     div(classes: 'flex gap-2 items-center mt-2 border-t border-zinc-150/60 pt-2', [
                       input(
-                        classes:
-                            'flex-1 px-3.5 py-1.5 bg-[#f3f6f4] border border-zinc-200 rounded-xl text-[10px] focus:outline-none focus:border-indigo-400',
+                        classes: 'flex-1 px-3.5 py-1.5 bg-[#f3f6f4] border border-zinc-200 rounded-xl text-[10px] focus:outline-none focus:border-indigo-400',
                         attributes: {'placeholder': 'Post new announcement/question...'},
                         onInput: (val) => _newQuestionText = val as String,
                       ),
@@ -674,8 +665,7 @@ class _ListingsPageState extends State<ListingsPage> {
                           });
                           setState(() => _newQuestionText = '');
                         },
-                        classes:
-                            'px-4.5 py-1.5 bg-black hover:bg-zinc-800 text-white font-extrabold rounded-xl text-[9px] transition-colors',
+                        classes: 'px-4.5 py-1.5 bg-black hover:bg-zinc-800 text-white font-extrabold rounded-xl text-[9px] transition-colors',
                         [Component.text('Post')],
                       ),
                     ]),
@@ -690,8 +680,7 @@ class _ListingsPageState extends State<ListingsPage> {
                       div(classes: 'flex flex-col gap-1.5', [
                         for (final r in _detailsModalItem!.reports)
                           div(
-                            classes:
-                                'p-2.5 bg-red-50/50 border border-red-200/30 rounded-xl flex flex-col gap-0.5 text-[10px]',
+                            classes: 'p-2.5 bg-red-50/50 border border-red-200/30 rounded-xl flex flex-col gap-0.5 text-[10px]',
                             [
                               p(classes: 'text-red-600 font-bold', [
                                 Component.text('Reason: ${r is Map ? r['reason'] : r}'),
@@ -718,8 +707,7 @@ class _ListingsPageState extends State<ListingsPage> {
                         Component.text('Apply account suspension directly to the creator of this listing.'),
                       ]),
                       select(
-                        classes:
-                            'bg-red-50/30 border border-red-200/50 rounded-xl px-3 py-2 text-[10px] font-black text-red-700 focus:outline-none cursor-pointer w-full mt-1',
+                        classes: 'bg-red-50/30 border border-red-200/50 rounded-xl px-3 py-2 text-[10px] font-black text-red-700 focus:outline-none cursor-pointer w-full mt-1',
                         onChange: (v) async {
                           if (v.isEmpty || v.first.isEmpty) return;
 
@@ -784,8 +772,7 @@ class _ListingsPageState extends State<ListingsPage> {
                         setState(() => _detailsModalItem = null);
                       }
                     },
-                    classes:
-                        'px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-[10px] font-extrabold tracking-wide uppercase rounded-xl transition-all shadow-md shadow-red-500/10',
+                    classes: 'px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-[10px] font-extrabold tracking-wide uppercase rounded-xl transition-all shadow-md shadow-red-500/10',
                     [Component.text('Delete Listing')],
                   ),
                   button(
@@ -793,8 +780,7 @@ class _ListingsPageState extends State<ListingsPage> {
                       context.read(selectedListingIdProvider.notifier).state = null;
                       setState(() => _detailsModalItem = null);
                     },
-                    classes:
-                        'px-4 py-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 text-[10px] font-extrabold tracking-wide uppercase rounded-xl transition-all',
+                    classes: 'px-4 py-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 text-[10px] font-extrabold tracking-wide uppercase rounded-xl transition-all',
                     [Component.text('Close')],
                   ),
                 ]),
@@ -821,8 +807,7 @@ class _ListingsPageState extends State<ListingsPage> {
 
       // Search & Filters Panel (Independent for listings)
       div(
-        classes:
-            'w-full bg-white border border-zinc-200/50 rounded-[24px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col gap-4',
+        classes: 'w-full bg-white border border-zinc-200/50 rounded-[24px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col gap-4',
         [
           // Title / Info row
           div(classes: 'flex items-center justify-between', [
@@ -831,8 +816,7 @@ class _ListingsPageState extends State<ListingsPage> {
                 Component.text('Database Query Filter'),
               ]),
               label(
-                classes:
-                    'flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-black text-red-500 hover:text-red-650 transition-colors',
+                classes: 'flex items-center gap-1.5 cursor-pointer select-none text-[10px] font-black text-red-500 hover:text-red-650 transition-colors',
                 [
                   input(
                     classes: 'rounded border-red-300 text-red-600 focus:ring-red-500 h-3.5 w-3.5 cursor-pointer',
@@ -874,8 +858,7 @@ class _ListingsPageState extends State<ListingsPage> {
               input(
                 value: _searchQuery,
                 onInput: (v) => setState(() => _searchQuery = v as String),
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
                 attributes: {'placeholder': 'Search title, publisher...'},
               ),
             ]),
@@ -887,8 +870,7 @@ class _ListingsPageState extends State<ListingsPage> {
               input(
                 value: _locationFilter,
                 onInput: (v) => setState(() => _locationFilter = v as String),
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
                 attributes: {'placeholder': 'e.g. Metro Manila'},
               ),
             ]),
@@ -904,8 +886,7 @@ class _ListingsPageState extends State<ListingsPage> {
                 ),
               ]),
               select(
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
                 onChange: (v) => setState(() => _categoryFilter = v.isNotEmpty ? v.first : ''),
                 [
                   option(value: '', selected: _categoryFilter == '', [Component.text('ALL CATEGORIES')]),
@@ -924,8 +905,7 @@ class _ListingsPageState extends State<ListingsPage> {
               input(
                 value: _priceMin?.toString() ?? '',
                 onInput: (v) => setState(() => _priceMin = double.tryParse(v as String)),
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
                 attributes: {'placeholder': '0', 'type': 'number'},
               ),
             ]),
@@ -937,8 +917,7 @@ class _ListingsPageState extends State<ListingsPage> {
               input(
                 value: _priceMax?.toString() ?? '',
                 onInput: (v) => setState(() => _priceMax = double.tryParse(v as String)),
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
                 attributes: {'placeholder': '999999', 'type': 'number'},
               ),
             ]),
@@ -1006,8 +985,7 @@ class _ListingsPageState extends State<ListingsPage> {
 
           if (filteredListings.isEmpty) {
             return div(
-              classes:
-                  'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+              classes: 'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
               [
                 span(classes: 'text-3xl mb-3', [Component.text('📂')]),
                 h3(classes: 'text-sm font-bold text-zinc-900', [Component.text('No listings match criteria')]),
@@ -1020,13 +998,11 @@ class _ListingsPageState extends State<ListingsPage> {
 
           return div(classes: 'flex flex-col gap-6', [
             div(
-              classes:
-                  'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+              classes: 'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
               [
                 table(classes: 'w-full text-left text-xs border-collapse', [
                   thead(
-                    classes:
-                        'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
+                    classes: 'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
                     [
                       tr([
                         th(classes: 'p-5', [Component.text('Item / Service')]),
@@ -1082,8 +1058,7 @@ class _ListingsPageState extends State<ListingsPage> {
                           td(classes: 'p-5 text-center', [
                             if (item.reportCount > 0)
                               span(
-                                classes:
-                                    'px-2.5 py-0.5 rounded-full text-[9px] font-black bg-red-50 text-red-500 border border-red-500/10',
+                                classes: 'px-2.5 py-0.5 rounded-full text-[9px] font-black bg-red-50 text-red-500 border border-red-500/10',
                                 [Component.text('🚩 ${item.reportCount} Reports')],
                               )
                             else
@@ -1113,8 +1088,7 @@ class _ListingsPageState extends State<ListingsPage> {
                                   }
                                 },
                               },
-                              classes:
-                                  'px-3.5 py-1.5 bg-red-50 hover:bg-red-100/50 border border-red-200 text-red-500 text-[10px] font-extrabold tracking-wide uppercase rounded-full transition-all shadow-sm',
+                              classes: 'px-3.5 py-1.5 bg-red-50 hover:bg-red-100/50 border border-red-200 text-red-500 text-[10px] font-extrabold tracking-wide uppercase rounded-full transition-all shadow-sm',
                               [Component.text('Remove')],
                             ),
                           ]),
@@ -1173,8 +1147,7 @@ class _ListingsPageState extends State<ListingsPage> {
           ]);
         },
         loading: () => div(
-          classes:
-              'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+          classes: 'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
           [div(classes: 'animate-spin h-6 w-6 border-2 border-zinc-200 border-t-indigo-500 rounded-full', [])],
         ),
         error: (err, _) => div(

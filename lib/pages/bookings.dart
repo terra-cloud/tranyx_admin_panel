@@ -5,7 +5,6 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:riverpod/legacy.dart';
 
 import '../core/providers/environment_provider.dart';
-import '../core/services/promotion_calculator.dart';
 
 // Navigation tab: 'services', 'vehicles', 'properties'
 final bookingsTabProvider = StateProvider<String>((ref) => 'services');
@@ -302,8 +301,7 @@ class _BookingsPageState extends State<BookingsPage> {
           },
           [
             div(
-              classes:
-                  'bg-white rounded-[28px] max-w-xl w-full max-h-[85vh] overflow-y-auto p-7 shadow-2xl flex flex-col gap-5 border border-zinc-200/50 transform scale-100 transition-all',
+              classes: 'bg-white rounded-[28px] max-w-xl w-full max-h-[85vh] overflow-y-auto p-7 shadow-2xl flex flex-col gap-5 border border-zinc-200/50 transform scale-100 transition-all',
               events: {
                 'click': (e) {
                   e.stopPropagation();
@@ -330,8 +328,7 @@ class _BookingsPageState extends State<BookingsPage> {
                       context.read(selectedBookingIdProvider.notifier).state = null;
                       setState(() => _detailsModalItem = null);
                     },
-                    classes:
-                        'w-7 h-7 rounded-full bg-zinc-100 text-zinc-500 font-bold hover:bg-zinc-200 text-xs flex items-center justify-center',
+                    classes: 'w-7 h-7 rounded-full bg-zinc-100 text-zinc-500 font-bold hover:bg-zinc-200 text-xs flex items-center justify-center',
                     [Component.text('✕')],
                   ),
                 ]),
@@ -405,8 +402,7 @@ class _BookingsPageState extends State<BookingsPage> {
                       Component.text('Schedule & Timeline'),
                     ]),
                     div(
-                      classes:
-                          'grid grid-cols-2 gap-2 bg-[#f8faf9] p-3 rounded-xl border border-zinc-200/20 text-[11px] font-medium text-zinc-650',
+                      classes: 'grid grid-cols-2 gap-2 bg-[#f8faf9] p-3 rounded-xl border border-zinc-200/20 text-[11px] font-medium text-zinc-650',
                       [
                         if (activeTab == 'vehicles' || activeTab == 'properties') ...[
                           span([
@@ -452,15 +448,16 @@ class _BookingsPageState extends State<BookingsPage> {
                   // Financial Breakdown & Promotion Reconciliation
                   (() {
                     final raw = _detailsModalItem!.rawData;
-                    final totalCost = (raw['totalCost'] as num?)?.toDouble() ??
-                        (raw['proposalRate'] as num?)?.toDouble() ??
-                        0.0;
+                    final totalCost =
+                        (raw['totalCost'] as num?)?.toDouble() ?? (raw['proposalRate'] as num?)?.toDouble() ?? 0.0;
                     final platformFee = (raw['platformFee'] as num?)?.toDouble() ?? (totalCost * 0.10);
-                    final listingPrice = (raw['basePrice'] as num?)?.toDouble() ??
+                    final listingPrice =
+                        (raw['basePrice'] as num?)?.toDouble() ??
                         (raw['listingPrice'] as num?)?.toDouble() ??
                         (totalCost - platformFee > 0 ? totalCost - platformFee : totalCost);
                     final promoCode = raw['promoCode'] as String? ?? raw['promotion'] as String?;
-                    final promoDiscount = (raw['promoDiscount'] as num?)?.toDouble() ??
+                    final promoDiscount =
+                        (raw['promoDiscount'] as num?)?.toDouble() ??
                         (raw['discountAmount'] as num?)?.toDouble() ??
                         0.0;
                     final finalPlatformFee = (platformFee - promoDiscount).clamp(0.0, platformFee);
@@ -476,34 +473,46 @@ class _BookingsPageState extends State<BookingsPage> {
                           Component.text('🛡️ Base Price Protected'),
                         ]),
                       ]),
-                      div(classes: 'bg-zinc-50 p-3 rounded-xl border border-zinc-200/40 flex flex-col gap-1.5 text-xs', [
-                        div(classes: 'flex justify-between text-zinc-800 font-semibold', [
-                          span([Component.text('Listing Price (Provider Base):')]),
-                          span([Component.text('₱${listingPrice.toStringAsFixed(2)}')]),
-                        ]),
-                        div(classes: 'flex justify-between text-zinc-600', [
-                          span([Component.text('Original TRANYX Platform Fee:')]),
-                          span([Component.text('₱${platformFee.toStringAsFixed(2)}')]),
-                        ]),
-                        if (promoCode != null && promoCode.isNotEmpty) ...[
-                          div(classes: 'flex justify-between text-emerald-600 font-bold bg-emerald-50/70 p-1.5 rounded', [
-                            span([Component.text('Promo ($promoCode) Fee Waiver:')]),
-                            span([Component.text('-₱${promoDiscount.toStringAsFixed(2)}')]),
+                      div(
+                        classes: 'bg-zinc-50 p-3 rounded-xl border border-zinc-200/40 flex flex-col gap-1.5 text-xs',
+                        [
+                          div(classes: 'flex justify-between text-zinc-800 font-semibold', [
+                            span([Component.text('Listing Price (Provider Base):')]),
+                            span([Component.text('₱${listingPrice.toStringAsFixed(2)}')]),
                           ]),
-                          div(classes: 'flex justify-between text-zinc-500 font-medium', [
-                            span([Component.text('Final Platform Fee Collected:')]),
-                            span([Component.text('₱${finalPlatformFee.toStringAsFixed(2)}')]),
+                          div(classes: 'flex justify-between text-zinc-600', [
+                            span([Component.text('Original TRANYX Platform Fee:')]),
+                            span([Component.text('₱${platformFee.toStringAsFixed(2)}')]),
                           ]),
+                          if (promoCode != null && promoCode.isNotEmpty) ...[
+                            div(
+                              classes: 'flex justify-between text-emerald-600 font-bold bg-emerald-50/70 p-1.5 rounded',
+                              [
+                                span([Component.text('Promo ($promoCode) Fee Waiver:')]),
+                                span([Component.text('-₱${promoDiscount.toStringAsFixed(2)}')]),
+                              ],
+                            ),
+                            div(classes: 'flex justify-between text-zinc-500 font-medium', [
+                              span([Component.text('Final Platform Fee Collected:')]),
+                              span([Component.text('₱${finalPlatformFee.toStringAsFixed(2)}')]),
+                            ]),
+                          ],
+                          div(
+                            classes: 'flex justify-between text-zinc-900 font-black border-t border-zinc-200/50 pt-1.5',
+                            [
+                              span([Component.text('Customer Total Paid:')]),
+                              span(classes: 'text-indigo-600', [Component.text('₱${customerPaid.toStringAsFixed(2)}')]),
+                            ],
+                          ),
+                          div(
+                            classes: 'flex justify-between text-emerald-800 font-black bg-emerald-50 p-1.5 rounded-lg border border-emerald-100 mt-1',
+                            [
+                              span([Component.text('Provider Settlement (100% Unchanged):')]),
+                              span([Component.text('₱${providerSettlement.toStringAsFixed(2)}')]),
+                            ],
+                          ),
                         ],
-                        div(classes: 'flex justify-between text-zinc-900 font-black border-t border-zinc-200/50 pt-1.5', [
-                          span([Component.text('Customer Total Paid:')]),
-                          span(classes: 'text-indigo-600', [Component.text('₱${customerPaid.toStringAsFixed(2)}')]),
-                        ]),
-                        div(classes: 'flex justify-between text-emerald-800 font-black bg-emerald-50 p-1.5 rounded-lg border border-emerald-100 mt-1', [
-                          span([Component.text('Provider Settlement (100% Unchanged):')]),
-                          span([Component.text('₱${providerSettlement.toStringAsFixed(2)}')]),
-                        ]),
-                      ]),
+                      ),
                     ]);
                   })(),
 
@@ -514,8 +523,7 @@ class _BookingsPageState extends State<BookingsPage> {
                         Component.text('Escrow Transaction Signature'),
                       ]),
                       p(
-                        classes:
-                            'font-mono text-[10px] text-indigo-500 font-bold bg-zinc-50 p-2.5 rounded-lg border border-zinc-200/30 break-all',
+                        classes: 'font-mono text-[10px] text-indigo-500 font-bold bg-zinc-50 p-2.5 rounded-lg border border-zinc-200/30 break-all',
                         [
                           Component.text(
                             (_detailsModalItem!.rawData['signature'] ?? _detailsModalItem!.rawData['txHash'])
@@ -533,8 +541,7 @@ class _BookingsPageState extends State<BookingsPage> {
                       context.read(selectedBookingIdProvider.notifier).state = null;
                       setState(() => _detailsModalItem = null);
                     },
-                    classes:
-                        'px-4 py-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 text-[10px] font-extrabold tracking-wide uppercase rounded-xl transition-all',
+                    classes: 'px-4 py-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 text-[10px] font-extrabold tracking-wide uppercase rounded-xl transition-all',
                     [Component.text('Close')],
                   ),
                 ]),
@@ -561,8 +568,7 @@ class _BookingsPageState extends State<BookingsPage> {
 
       // Search & Filters Panel (Independent for bookings)
       div(
-        classes:
-            'w-full bg-white border border-zinc-200/50 rounded-[24px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col gap-4',
+        classes: 'w-full bg-white border border-zinc-200/50 rounded-[24px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col gap-4',
         [
           // Title / Info row
           div(classes: 'flex items-center justify-between', [
@@ -597,8 +603,7 @@ class _BookingsPageState extends State<BookingsPage> {
               input(
                 value: _searchQuery,
                 onInput: (v) => setState(() => _searchQuery = v as String),
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
                 attributes: {'placeholder': 'Search client, provider...'},
               ),
             ]),
@@ -610,8 +615,7 @@ class _BookingsPageState extends State<BookingsPage> {
               input(
                 value: _locationFilter,
                 onInput: (v) => setState(() => _locationFilter = v as String),
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
                 attributes: {'placeholder': 'e.g. Metro Manila'},
               ),
             ]),
@@ -621,8 +625,7 @@ class _BookingsPageState extends State<BookingsPage> {
                 Component.text('Booking Status'),
               ]),
               select(
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
                 onChange: (v) => setState(() => _statusFilter = v.isNotEmpty ? v.first : ''),
                 [
                   option(value: '', selected: _statusFilter == '', [Component.text('ALL STATUSES')]),
@@ -641,8 +644,7 @@ class _BookingsPageState extends State<BookingsPage> {
               input(
                 value: _priceMin?.toString() ?? '',
                 onInput: (v) => setState(() => _priceMin = double.tryParse(v as String)),
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
                 attributes: {'placeholder': '0', 'type': 'number'},
               ),
             ]),
@@ -654,8 +656,7 @@ class _BookingsPageState extends State<BookingsPage> {
               input(
                 value: _priceMax?.toString() ?? '',
                 onInput: (v) => setState(() => _priceMax = double.tryParse(v as String)),
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
                 attributes: {'placeholder': '999999', 'type': 'number'},
               ),
             ]),
@@ -718,8 +719,7 @@ class _BookingsPageState extends State<BookingsPage> {
 
           if (filteredBookings.isEmpty) {
             return div(
-              classes:
-                  'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+              classes: 'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
               [
                 span(classes: 'text-3xl mb-3', [Component.text('📂')]),
                 h3(classes: 'text-sm font-bold text-zinc-900', [Component.text('No bookings match criteria')]),
@@ -732,13 +732,11 @@ class _BookingsPageState extends State<BookingsPage> {
 
           return div(classes: 'flex flex-col gap-6', [
             div(
-              classes:
-                  'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+              classes: 'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
               [
                 table(classes: 'w-full text-left text-xs border-collapse', [
                   thead(
-                    classes:
-                        'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
+                    classes: 'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
                     [
                       tr([
                         th(classes: 'p-5', [Component.text('Target Asset')]),
@@ -855,8 +853,7 @@ class _BookingsPageState extends State<BookingsPage> {
           ]);
         },
         loading: () => div(
-          classes:
-              'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
+          classes: 'flex-grow flex justify-center items-center py-20 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
           [div(classes: 'animate-spin h-6 w-6 border-2 border-zinc-200 border-t-indigo-500 rounded-full', [])],
         ),
         error: (err, _) => div(

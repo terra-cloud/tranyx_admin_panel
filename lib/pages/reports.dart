@@ -2,6 +2,7 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:web/web.dart' as web;
+
 import '../core/providers/environment_provider.dart';
 import 'listings.dart';
 
@@ -22,7 +23,7 @@ final reportedJobsStreamProvider = StreamProvider<List<ListingData>>((ref) {
             id: doc.id,
             title: data['title'] ?? 'Gig Service',
             owner: data['creatorName'] ?? 'Client',
-            priceLabel: '₱${price.toStringAsFixed(2)} (${type})',
+            priceLabel: '₱${price.toStringAsFixed(2)} ($type)',
             status: data['status'] ?? 'Open',
             createdAt: DateTime.fromMillisecondsSinceEpoch(data['createdAt'] ?? 0),
             icon: '💼',
@@ -155,8 +156,7 @@ class _ReportsPageState extends State<ReportsPage> {
           },
           [
             div(
-              classes:
-                  'bg-white rounded-[32px] border border-zinc-200/50 shadow-2xl p-6 w-full max-w-lg flex flex-col gap-4 relative animate-scale-up',
+              classes: 'bg-white rounded-[32px] border border-zinc-200/50 shadow-2xl p-6 w-full max-w-lg flex flex-col gap-4 relative animate-scale-up',
               events: {
                 'click': (e) => e.stopPropagation(),
               },
@@ -178,8 +178,7 @@ class _ReportsPageState extends State<ReportsPage> {
                   ]),
                   button(
                     onClick: () => setState(() => _detailsModalItem = null),
-                    classes:
-                        'w-7 h-7 rounded-full bg-zinc-50 hover:bg-zinc-100 flex items-center justify-center font-bold text-zinc-400 transition-colors',
+                    classes: 'w-7 h-7 rounded-full bg-zinc-50 hover:bg-zinc-100 flex items-center justify-center font-bold text-zinc-400 transition-colors',
                     [Component.text('✕')],
                   ),
                 ]),
@@ -212,8 +211,7 @@ class _ReportsPageState extends State<ReportsPage> {
                         Component.text('Description'),
                       ]),
                       p(
-                        classes:
-                            'text-[11px] text-zinc-600 bg-zinc-50/50 p-2.5 rounded-xl border border-zinc-100/50 leading-relaxed font-medium',
+                        classes: 'text-[11px] text-zinc-600 bg-zinc-50/50 p-2.5 rounded-xl border border-zinc-100/50 leading-relaxed font-medium',
                         [Component.text(_detailsModalItem!.rawData['description'] as String)],
                       ),
                     ]),
@@ -227,8 +225,7 @@ class _ReportsPageState extends State<ReportsPage> {
                       div(classes: 'flex flex-col gap-1.5', [
                         for (final r in _detailsModalItem!.reports)
                           div(
-                            classes:
-                                'p-2.5 bg-red-50/50 border border-red-200/30 rounded-xl flex flex-col gap-0.5 text-[10px]',
+                            classes: 'p-2.5 bg-red-50/50 border border-red-200/30 rounded-xl flex flex-col gap-0.5 text-[10px]',
                             [
                               p(classes: 'text-red-650 font-bold', [
                                 Component.text('Reason: ${r is Map ? r['reason'] : r}'),
@@ -256,8 +253,7 @@ class _ReportsPageState extends State<ReportsPage> {
                         Component.text('Apply account suspension directly to the creator of this listing.'),
                       ]),
                       select(
-                        classes:
-                            'bg-red-50/30 border border-red-200/50 rounded-xl px-3 py-2 text-[10px] font-black text-red-700 focus:outline-none cursor-pointer w-full mt-1',
+                        classes: 'bg-red-50/30 border border-red-200/50 rounded-xl px-3 py-2 text-[10px] font-black text-red-700 focus:outline-none cursor-pointer w-full mt-1',
                         onChange: (v) async {
                           if (v.isEmpty || v.first.isEmpty) return;
 
@@ -318,14 +314,12 @@ class _ReportsPageState extends State<ReportsPage> {
                         web.window.alert('Listing deleted.');
                       }
                     },
-                    classes:
-                        'px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-[10px] font-extrabold tracking-wide uppercase rounded-xl transition-all shadow-md shadow-red-500/10',
+                    classes: 'px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-[10px] font-extrabold tracking-wide uppercase rounded-xl transition-all shadow-md shadow-red-500/10',
                     [Component.text('Delete Listing')],
                   ),
                   button(
                     onClick: () => setState(() => _detailsModalItem = null),
-                    classes:
-                        'px-4 py-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 text-[10px] font-extrabold tracking-wide uppercase rounded-xl transition-all',
+                    classes: 'px-4 py-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 text-[10px] font-extrabold tracking-wide uppercase rounded-xl transition-all',
                     [Component.text('Close')],
                   ),
                 ]),
@@ -346,8 +340,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
       // Filters Bar
       div(
-        classes:
-            'w-full bg-white border border-zinc-200/50 rounded-[24px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col gap-4',
+        classes: 'w-full bg-white border border-zinc-200/50 rounded-[24px] p-5 shadow-[0_4px_20px_rgba(0,0,0,0.01)] flex flex-col gap-4',
         [
           div(classes: 'flex items-center justify-between', [
             h3(classes: 'text-[11px] font-extrabold text-zinc-400 uppercase tracking-wider', [
@@ -373,8 +366,7 @@ class _ReportsPageState extends State<ReportsPage> {
               input(
                 value: _searchQuery,
                 onInput: (v) => setState(() => _searchQuery = v as String),
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10',
                 attributes: {'placeholder': 'Search title, publisher...'},
               ),
             ]),
@@ -385,8 +377,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 Component.text('Listing Type'),
               ]),
               select(
-                classes:
-                    'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10 cursor-pointer',
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200/50 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/10 cursor-pointer',
                 onChange: (v) => setState(() => _typeFilter = v.isNotEmpty ? v.first : 'all'),
                 [
                   option(value: 'all', selected: _typeFilter == 'all', [Component.text('ALL LISTINGS')]),
@@ -426,8 +417,7 @@ class _ReportsPageState extends State<ReportsPage> {
 
           if (filtered.isEmpty) {
             return div(
-              classes:
-                  'w-full bg-white border border-zinc-200/50 rounded-[28px] p-12 text-center flex flex-col items-center justify-center gap-3.5 shadow-[0_4px_20px_rgba(0,0,0,0.01)]',
+              classes: 'w-full bg-white border border-zinc-200/50 rounded-[28px] p-12 text-center flex flex-col items-center justify-center gap-3.5 shadow-[0_4px_20px_rgba(0,0,0,0.01)]',
               [
                 span(classes: 'text-4xl animate-bounce', [Component.text('🛡️')]),
                 h3(classes: 'text-sm font-black text-zinc-800', [Component.text('Inbox is clean')]),
@@ -439,8 +429,7 @@ class _ReportsPageState extends State<ReportsPage> {
           }
 
           return div(
-            classes:
-                'bg-white rounded-[28px] border border-zinc-200/50 shadow-[0_4px_25px_rgba(0,0,0,0.01)] overflow-hidden',
+            classes: 'bg-white rounded-[28px] border border-zinc-200/50 shadow-[0_4px_25px_rgba(0,0,0,0.01)] overflow-hidden',
             [
               div(classes: 'overflow-x-auto', [
                 table(classes: 'w-full border-collapse text-left text-xs', [
@@ -481,8 +470,7 @@ class _ReportsPageState extends State<ReportsPage> {
                         td(classes: 'py-4 px-6 font-bold text-zinc-700', [Component.text(item.owner)]),
                         td(classes: 'py-4 px-6', [
                           span(
-                            classes:
-                                'px-2 py-0.5 bg-red-50 text-red-500 border border-red-200 text-[10px] font-black rounded-full',
+                            classes: 'px-2 py-0.5 bg-red-50 text-red-500 border border-red-200 text-[10px] font-black rounded-full',
                             [Component.text('${item.reportCount} flags')],
                           ),
                         ]),
@@ -498,8 +486,7 @@ class _ReportsPageState extends State<ReportsPage> {
                         td(classes: 'py-4 px-6 text-right', [
                           button(
                             onClick: () => setState(() => _detailsModalItem = item),
-                            classes:
-                                'px-3 py-1.5 bg-black hover:bg-zinc-800 text-white text-[9px] font-black uppercase tracking-wider rounded-xl transition-all',
+                            classes: 'px-3 py-1.5 bg-black hover:bg-zinc-800 text-white text-[9px] font-black uppercase tracking-wider rounded-xl transition-all',
                             [Component.text('Moderate')],
                           ),
                         ]),
