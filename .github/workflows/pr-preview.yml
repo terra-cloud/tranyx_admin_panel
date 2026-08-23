@@ -1,0 +1,36 @@
+name: PR Preview Deploy
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build_and_preview:
+    name: Test and Build Preview
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Dart SDK
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+
+      - name: Install Dependencies
+        run: dart pub get
+
+      - name: Run Tests
+        run: dart test/promotion_calculator_test.dart
+
+      - name: Build Web App
+        run: dart run build_runner build -d -o web:build/jaspr --delete-conflicting-outputs
+
+      - name: Deploy to Firebase Hosting Preview
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TRANYX_ADMIN_PORTAL }}
+          projectId: tranyx-admin-portal

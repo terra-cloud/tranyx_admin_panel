@@ -5,6 +5,7 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:riverpod/legacy.dart';
 
 import '../core/providers/environment_provider.dart';
+import '../core/services/promotion_calculator.dart';
 
 // Navigation tab: 'services', 'vehicles', 'properties'
 final bookingsTabProvider = StateProvider<String>((ref) => 'services');
@@ -447,6 +448,64 @@ class _BookingsPageState extends State<BookingsPage> {
                       ],
                     ),
                   ]),
+
+                  // Financial Breakdown & Promotion Reconciliation
+                  (() {
+                    final raw = _detailsModalItem!.rawData;
+                    final totalCost = (raw['totalCost'] as num?)?.toDouble() ??
+                        (raw['proposalRate'] as num?)?.toDouble() ??
+                        0.0;
+                    final platformFee = (raw['platformFee'] as num?)?.toDouble() ?? (totalCost * 0.10);
+                    final listingPrice = (raw['basePrice'] as num?)?.toDouble() ??
+                        (raw['listingPrice'] as num?)?.toDouble() ??
+                        (totalCost - platformFee > 0 ? totalCost - platformFee : totalCost);
+                    final promoCode = raw['promoCode'] as String? ?? raw['promotion'] as String?;
+                    final promoDiscount = (raw['promoDiscount'] as num?)?.toDouble() ??
+                        (raw['discountAmount'] as num?)?.toDouble() ??
+                        0.0;
+                    final finalPlatformFee = (platformFee - promoDiscount).clamp(0.0, platformFee);
+                    final customerPaid = listingPrice + finalPlatformFee;
+                    final providerSettlement = listingPrice;
+
+                    return div(classes: 'flex flex-col gap-2 border-t border-zinc-100 pt-3', [
+                      div(classes: 'flex items-center justify-between', [
+                        span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                          Component.text('Financial Reconciliation Breakdown'),
+                        ]),
+                        span(classes: 'text-[9px] font-bold text-emerald-600', [
+                          Component.text('🛡️ Base Price Protected'),
+                        ]),
+                      ]),
+                      div(classes: 'bg-zinc-50 p-3 rounded-xl border border-zinc-200/40 flex flex-col gap-1.5 text-xs', [
+                        div(classes: 'flex justify-between text-zinc-800 font-semibold', [
+                          span([Component.text('Listing Price (Provider Base):')]),
+                          span([Component.text('₱${listingPrice.toStringAsFixed(2)}')]),
+                        ]),
+                        div(classes: 'flex justify-between text-zinc-600', [
+                          span([Component.text('Original TRANYX Platform Fee:')]),
+                          span([Component.text('₱${platformFee.toStringAsFixed(2)}')]),
+                        ]),
+                        if (promoCode != null && promoCode.isNotEmpty) ...[
+                          div(classes: 'flex justify-between text-emerald-600 font-bold bg-emerald-50/70 p-1.5 rounded', [
+                            span([Component.text('Promo ($promoCode) Fee Waiver:')]),
+                            span([Component.text('-₱${promoDiscount.toStringAsFixed(2)}')]),
+                          ]),
+                          div(classes: 'flex justify-between text-zinc-500 font-medium', [
+                            span([Component.text('Final Platform Fee Collected:')]),
+                            span([Component.text('₱${finalPlatformFee.toStringAsFixed(2)}')]),
+                          ]),
+                        ],
+                        div(classes: 'flex justify-between text-zinc-900 font-black border-t border-zinc-200/50 pt-1.5', [
+                          span([Component.text('Customer Total Paid:')]),
+                          span(classes: 'text-indigo-600', [Component.text('₱${customerPaid.toStringAsFixed(2)}')]),
+                        ]),
+                        div(classes: 'flex justify-between text-emerald-800 font-black bg-emerald-50 p-1.5 rounded-lg border border-emerald-100 mt-1', [
+                          span([Component.text('Provider Settlement (100% Unchanged):')]),
+                          span([Component.text('₱${providerSettlement.toStringAsFixed(2)}')]),
+                        ]),
+                      ]),
+                    ]);
+                  })(),
 
                   // Blockchain signature if available
                   if (_detailsModalItem!.rawData['signature'] != null || _detailsModalItem!.rawData['txHash'] != null)
