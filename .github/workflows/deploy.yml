@@ -15,25 +15,24 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Dart SDK
-        uses: dart-lang/setup-dart@v1
+      - name: Setup Flutter
+        uses: subosito/flutter-action@f2c4f6686ca8e8d6e6d0f28410eeef506ed66aff # v2.18.0
         with:
-          sdk: stable
+          channel: 'stable'
+          cache: true
 
-      - name: Install Dependencies
-        run: dart pub get
+      - name: Install workspace dependencies
+        run: flutter pub get
 
-      - name: Run Tests
-        run: dart test/promotion_calculator_test.dart
-      
-      - name: Activate Jaspr CLI
-        run: dart pub global activate jaspr_cli
-
-      - name: Clean
-        run: dart pub global run jaspr_cli:jaspr clean
+      - name: Install Jaspr CLI
+        run: |
+          flutter pub global activate jaspr_cli
+          echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
 
       - name: Build Web App
-        run: dart run build_runner build -d -o web:build/jaspr --delete-conflicting-outputs
+        run: |
+          jaspr clean
+          jaspr build 
 
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
