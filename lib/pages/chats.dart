@@ -158,8 +158,8 @@ final supportAgentsProvider = StreamProvider<List<UserProfileModel>>((ref) {
       .collection('users')
       .snapshots()
       .map(
-        (snap) => snap.docs.map((doc) => UserProfileModel.fromMap(doc.id, doc.data())).where((u) {
-          final r = (u.role ?? '').toLowerCase().trim();
+        (snap) => snap.docs.map((doc) => UserProfileModel.fromMap(doc.id, doc.data())).where((userProfile) {
+          final r = (userProfile.role ?? '').toLowerCase().trim();
           return r.isNotEmpty && r != 'admin' && r != 'user';
         }).toList(),
       )
@@ -355,7 +355,7 @@ class _ChatsPageState extends State<ChatsPage> {
     String getCustomerName(List<String> uIds) {
       for (final id in uIds) {
         final match = users.firstWhere(
-          (u) => u.uid == id,
+          (userItem) => userItem.uid == id,
           orElse: () => UserProfileModel(uid: '', name: '', email: ''),
         );
         if (match.uid.isNotEmpty && (match.role == null || match.role == 'user')) return match.name;
@@ -390,7 +390,6 @@ class _ChatsPageState extends State<ChatsPage> {
 
     Component buildChatItem(SupportChat chat) {
       final isSelected = activeChatId == chat.id;
-      final isMyChat = chat.assignedAgentId == currentUserId;
       final waiting = _formatWaiting(chat.waitingTime);
       final isHighPriority = chat.waitingTime.inMinutes >= 5 || chat.reassignCount >= 2;
 
@@ -469,7 +468,7 @@ class _ChatsPageState extends State<ChatsPage> {
             ]);
           },
           loading: () => div(classes: '', []),
-          error: (_, __) => div(classes: '', []),
+          error: (err, stack) => div(classes: '', []),
         ),
       ]),
 
@@ -515,18 +514,18 @@ class _ChatsPageState extends State<ChatsPage> {
                 }
                 // Sort: pending first, then by priority (reassign count + wait time), then updated desc
                 final sorted = [...chats];
-                sorted.sort((a, b) {
+                sorted.sort((chatA, chatB) {
                   // Resolved go last
-                  if (a.isResolved && !b.isResolved) return 1;
-                  if (!a.isResolved && b.isResolved) return -1;
+                  if (chatA.isResolved && !chatB.isResolved) return 1;
+                  if (!chatA.isResolved && chatB.isResolved) return -1;
                   // Pending goes first
-                  if (a.isPending && !b.isPending) return -1;
-                  if (!a.isPending && b.isPending) return 1;
+                  if (chatA.isPending && !chatB.isPending) return -1;
+                  if (!chatA.isPending && chatB.isPending) return 1;
                   // Higher reassign count (escalated) goes higher
-                  final rDiff = b.reassignCount.compareTo(a.reassignCount);
+                  final rDiff = chatB.reassignCount.compareTo(chatA.reassignCount);
                   if (rDiff != 0) return rDiff;
                   // Older wait time goes first
-                  return a.requestedAt.compareTo(b.requestedAt);
+                  return chatA.requestedAt.compareTo(chatB.requestedAt);
                 });
                 return .fragment([for (final chat in sorted) buildChatItem(chat)]);
               },

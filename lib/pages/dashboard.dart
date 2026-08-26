@@ -319,8 +319,8 @@ final userBreakdownProvider = StreamProvider<UserBreakdown>((ref) {
     if (!controller.isClosed) {
       controller.add(
         UserBreakdown(
-          total: usersList.where((u) {
-            final role = (u['role'] ?? '').toString().toLowerCase().trim();
+          total: usersList.where((userMap) {
+            final role = (userMap['role'] ?? '').toString().toLowerCase().trim();
             return role.isEmpty || role == 'user';
           }).length,
           jobSeekers: jobSeekers,
@@ -512,8 +512,8 @@ final newListings24hProvider = StreamProvider<NewListingsStats>((ref) {
       .where('createdAt', isGreaterThanOrEqualTo: cutoff)
       .snapshots()
       .listen(
-        (s) {
-          vehicles = s.docs.length;
+        (snap) {
+          vehicles = snap.docs.length;
           tryEmit();
         },
         onError: (_) {
@@ -526,8 +526,8 @@ final newListings24hProvider = StreamProvider<NewListingsStats>((ref) {
       .where('createdAt', isGreaterThanOrEqualTo: cutoff)
       .snapshots()
       .listen(
-        (s) {
-          realEstate = s.docs.length;
+        (snap) {
+          realEstate = snap.docs.length;
           tryEmit();
         },
         onError: (_) {
@@ -540,8 +540,8 @@ final newListings24hProvider = StreamProvider<NewListingsStats>((ref) {
       .where('createdAt', isGreaterThanOrEqualTo: cutoff)
       .snapshots()
       .listen(
-        (s) {
-          services = s.docs.length;
+        (snap) {
+          services = snap.docs.length;
           tryEmit();
         },
         onError: (_) {
@@ -702,7 +702,7 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
         ),
       );
     }
-    list.sort((a, b) => b.resolvedChats.compareTo(a.resolvedChats));
+    list.sort((agentA, agentB) => agentB.resolvedChats.compareTo(agentA.resolvedChats));
     if (!controller.isClosed) controller.add(list);
   });
 
@@ -878,8 +878,8 @@ class _DashboardState extends State<Dashboard> {
           orElse: () => 0,
         );
 
-    final maxRev = monthlyRevenue.fold(0.0, (a, b) => b > a ? b : a);
-    final maxUsers = monthlyUsers.fold(0, (a, b) => b > a ? b : a);
+    final maxRev = monthlyRevenue.fold(0.0, (acc, val) => val > acc ? val : acc);
+    final maxUsers = monthlyUsers.fold(0, (acc, val) => val > acc ? val : acc);
     final kycTotal = kycStats.total == 0 ? 1 : kycStats.total;
 
     return div(classes: 'flex-1 p-6 md:p-8 flex flex-col gap-7 max-w-7xl mx-auto w-full bg-[#f2f5f3]', [
@@ -958,7 +958,7 @@ class _DashboardState extends State<Dashboard> {
                         loading: () => div(classes: 'flex justify-center p-4', [
                           div(classes: 'animate-spin h-4 w-4 border-2 border-zinc-200 border-t-black rounded-full', []),
                         ]),
-                        error: (_, __) =>
+                        error: (err, stack) =>
                             div(classes: 'text-center p-3 text-[10px] text-red-500', [Component.text('Search error')]),
                       ),
                 ],

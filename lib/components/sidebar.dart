@@ -11,6 +11,7 @@ import '../pages/kyc.dart';
 import '../pages/tickets.dart';
 import '../pages/reports.dart';
 import '../pages/deposits.dart';
+import '../pages/withdrawals.dart';
 
 class Sidebar extends StatefulComponent {
   const Sidebar({super.key});
@@ -50,7 +51,14 @@ class _SidebarState extends State<Sidebar> {
     final pendingDepositsCount = context
         .watch(depositRequestsStreamProvider)
         .maybeWhen(
-          data: (list) => list.where((d) => d.status == 'PENDING_VERIFICATION').length,
+          data: (list) => list.where((d) => d.status == 'PENDING_VERIFICATION' || d.status == 'PENDING_AGENT').length,
+          orElse: () => 0,
+        );
+
+    final pendingWithdrawalsCount = context
+        .watch(withdrawalRequestsStreamProvider)
+        .maybeWhen(
+          data: (list) => list.where((w) => w.status == 'WAITING_FOR_AGENT' || w.status == 'AWAITING_AGENT_PAYMENT').length,
           orElse: () => 0,
         );
 
@@ -181,7 +189,8 @@ class _SidebarState extends State<Sidebar> {
             // Menu list
             ul(classes: 'flex flex-col gap-1.5 list-none p-0 m-0 w-full', [
               buildMenuItem('Dashboard', '/', '/images/icon_dashboard.png'),
-              buildMenuItem('Payment Queue', '/deposits', '💳', badgeCount: pendingDepositsCount),
+              buildMenuItem('P2P Deposits', '/deposits', '💳', badgeCount: pendingDepositsCount),
+              buildMenuItem('P2P Cashouts', '/withdrawals', '💸', badgeCount: pendingWithdrawalsCount),
               buildMenuItem('Listings', '/listings', '/images/icon_listings.png'),
               buildMenuItem('Bookings', '/bookings', '/images/icon_bookings.png'),
               buildMenuItem('KYC Verification', '/kyc', '/images/icon_kyc.png', badgeCount: pendingKycCount),
@@ -295,7 +304,8 @@ class _SidebarState extends State<Sidebar> {
           [
             ul(classes: 'flex flex-col gap-2.5 list-none p-0 m-0', [
               buildMobileMenuItem('Dashboard', '/', '/images/icon_dashboard.png'),
-              buildMobileMenuItem('Payment Queue', '/deposits', '💳', badgeCount: pendingDepositsCount),
+              buildMobileMenuItem('P2P Deposits', '/deposits', '💳', badgeCount: pendingDepositsCount),
+              buildMobileMenuItem('P2P Cashouts', '/withdrawals', '💸', badgeCount: pendingWithdrawalsCount),
               buildMobileMenuItem('Listings', '/listings', '/images/icon_listings.png'),
               buildMobileMenuItem('Bookings', '/bookings', '/images/icon_bookings.png'),
               buildMobileMenuItem('KYC Verification', '/kyc', '/images/icon_kyc.png', badgeCount: pendingKycCount),

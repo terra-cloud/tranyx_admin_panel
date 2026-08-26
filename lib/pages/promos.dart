@@ -707,7 +707,7 @@ class _PromosPageState extends State<PromosPage> {
       // Parse user UIDs
       final userUids = _eligibleUserUidsStr.isEmpty
           ? <String>[]
-          : _eligibleUserUidsStr.split(',').map((u) => u.trim()).where((u) => u.isNotEmpty).toList();
+          : _eligibleUserUidsStr.split(',').map((uidStr) => uidStr.trim()).where((uidStr) => uidStr.isNotEmpty).toList();
 
       // Gather roles
       final roles = <String>[];
@@ -1056,7 +1056,7 @@ class _PromosPageState extends State<PromosPage> {
           ]);
         },
         loading: () => div(classes: 'h-24 bg-white rounded-2xl animate-pulse', []),
-        error: (_, __) => div([]),
+        error: (err, stack) => div([]),
       ),
 
       // Conditional Tabs Rendering
@@ -2143,7 +2143,7 @@ class _PromosPageState extends State<PromosPage> {
         // Find selected promo
         PromoItem? selectedPromo;
         try {
-          selectedPromo = promosList.firstWhere((p) => p.code == _simSelectedPromoCode);
+          selectedPromo = promosList.firstWhere((promoItem) => promoItem.code == _simSelectedPromoCode);
         } catch (_) {
           if (promosList.isNotEmpty) {
             selectedPromo = promosList.first;

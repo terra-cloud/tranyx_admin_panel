@@ -57,7 +57,7 @@ final ticketsStreamProvider = StreamProvider<List<TicketModel>>((ref) {
       .snapshots()
       .map((snap) {
         final list = snap.docs.map((doc) => TicketModel.fromMap(doc.id, doc.data())).toList();
-        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        list.sort((ticketA, ticketB) => ticketB.createdAt.compareTo(ticketA.createdAt));
         return list;
       })
       .handleError((err) {
@@ -80,7 +80,7 @@ class TicketsPage extends StatelessComponent {
 
     String getUserName(String uid) {
       final match = users.firstWhere(
-        (u) => u.uid == uid,
+        (userItem) => userItem.uid == uid,
         orElse: () => UserProfileModel(
           uid: '',
           name: 'Unknown User',
@@ -96,7 +96,7 @@ class TicketsPage extends StatelessComponent {
 
     String getUserEmail(String uid) {
       final match = users.firstWhere(
-        (u) => u.uid == uid,
+        (userItem) => userItem.uid == uid,
         orElse: () => UserProfileModel(
           uid: '',
           name: '',

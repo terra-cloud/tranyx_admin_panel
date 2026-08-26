@@ -39,10 +39,18 @@ jobs:
           flutter pub global activate jaspr_cli
           echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
 
+      - name: Inject Environment Secrets
+        run: |
+          if [ -n "${{ secrets.IMGBB_API_KEY }}" ]; then
+            echo "IMGBB_API_KEY=${{ secrets.IMGBB_API_KEY }}" >> .env
+          fi
+
       - name: Build Web App
+        env:
+          IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
         run: |
           jaspr clean
-          jaspr build 
+          jaspr build --dart-define=IMGBB_API_KEY="${{ secrets.IMGBB_API_KEY || 'abfd185244dc224ff987946bc9775bfc' }}"
 
       - name: Deploy to Firebase Hosting Preview
         uses: FirebaseExtended/action-hosting-deploy@v0

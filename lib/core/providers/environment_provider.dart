@@ -33,7 +33,7 @@ final firestoreProvider = Provider<FirebaseFirestore>((ref) {
   return appAsync.when(
     data: (app) => FirebaseFirestore.instanceFor(app: app),
     loading: () => FirebaseFirestore.instance,
-    error: (_, __) => FirebaseFirestore.instance,
+    error: (err, stack) => FirebaseFirestore.instance,
   );
 });
 
@@ -43,7 +43,7 @@ final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
   final auth = appAsync.when(
     data: (app) => FirebaseAuth.instanceFor(app: app),
     loading: () => FirebaseAuth.instance,
-    error: (_, __) => FirebaseAuth.instance,
+    error: (err, stack) => FirebaseAuth.instance,
   );
 
   // Reactive sync login using stored credentials or admin console session

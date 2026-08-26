@@ -3,7 +3,9 @@ import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:jaspr_router/jaspr_router.dart';
+import 'package:web/web.dart' as web;
 
+import 'components/global_p2p_alert_manager.dart';
 import 'components/sidebar.dart';
 import 'core/config/firebase_environments.dart';
 import 'core/providers/environment_provider.dart';
@@ -20,6 +22,7 @@ import 'pages/promos.dart';
 import 'pages/news.dart';
 import 'pages/reports.dart';
 import 'pages/deposits.dart';
+import 'pages/withdrawals.dart';
 
 /// Provider that streams the currently logged-in Admin staff member.
 final adminCurrentUserProvider = StreamProvider<User?>((ref) {
@@ -58,6 +61,9 @@ class AppShell extends StatelessComponent {
                 builder: (context, state, child) {
                   final envUserAsync = context.watch(activeEnvAuthUserProvider);
                   return div(classes: 'flex flex-col md:flex-row min-h-screen w-full bg-[#eff2f0]', [
+                    // Global Real-Time P2P Alert & Sound Interrupt Manager
+                    const GlobalP2PAlertManager(),
+
                     const Sidebar(),
                     div(classes: 'flex-1 flex flex-col min-h-screen overflow-y-auto max-h-screen', [
                       const HeaderPanel(),
@@ -106,6 +112,8 @@ class AppShell extends StatelessComponent {
                   Route(path: '/', title: 'Dashboard', builder: (context, state) => const Dashboard()),
                   Route(path: '/deposits', title: 'Payment Verification', builder: (context, state) => const DepositsPage()),
                   Route(path: '/payment-verification', title: 'Payment Verification', builder: (context, state) => const DepositsPage()),
+                  Route(path: '/withdrawals', title: 'P2P Cashouts', builder: (context, state) => const WithdrawalsPage()),
+                  Route(path: '/p2p-withdrawals', title: 'P2P Cashouts', builder: (context, state) => const WithdrawalsPage()),
                   Route(path: '/listings', title: 'Listings', builder: (context, state) => const ListingsPage()),
                   Route(path: '/bookings', title: 'Bookings', builder: (context, state) => const BookingsPage()),
                   Route(path: '/kyc', title: 'KYC queue', builder: (context, state) => const KycPage()),
@@ -144,6 +152,7 @@ class HeaderPanel extends StatelessComponent {
   Component build(BuildContext context) {
     final currentEnv = context.watch(activeEnvironmentProvider);
     final user = context.watch(adminCurrentUserProvider).value;
+    final soundEnabled = context.watch(globalAlertSoundEnabledProvider);
 
     Component buildEnvCapsule(String label, Environment value) {
       final isActive = currentEnv == value;
@@ -182,9 +191,19 @@ class HeaderPanel extends StatelessComponent {
       // Right: Bell + Profile avatar
       div(classes: 'flex items-center gap-4.5', [
         button(
+          onClick: () {
+            final nextVal = !soundEnabled;
+            context.read(globalAlertSoundEnabledProvider.notifier).state = nextVal;
+            try {
+              web.window.localStorage.setItem('tranyx_global_sound_enabled', nextVal.toString());
+            } catch (_) {}
+          },
           classes:
-              'p-2 bg-white border border-zinc-200/50 rounded-full text-zinc-700 hover:text-black shadow-sm transition-all focus:outline-none',
-          [Component.text('🔔')],
+              'p-2 bg-white border border-zinc-200/50 rounded-full text-zinc-700 hover:text-black shadow-sm transition-all focus:outline-none cursor-pointer flex items-center justify-center text-sm',
+          attributes: {
+            'title': soundEnabled ? 'Audio Alerts: Enabled (Click to Mute)' : 'Audio Alerts: Muted (Click to Enable)'
+          },
+          [Component.text(soundEnabled ? '🔔' : '🔕')],
         ),
         div(classes: 'flex items-center gap-2.5', [
           div(

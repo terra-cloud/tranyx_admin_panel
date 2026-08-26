@@ -1,15 +1,11 @@
 import 'dart:js_interop';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
-import 'package:jaspr_router/jaspr_router.dart';
-
 import 'package:web/web.dart' as web;
 
-import '../app.dart';
 import '../core/providers/environment_provider.dart';
 
 class NewsPostItem {
@@ -281,7 +277,7 @@ class _NewsPageState extends State<NewsPage> {
           canvas.height = h;
           final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
           ctx.drawImage(img, 0, 0, w, h);
-          final compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75 as JSAny?);
+          final compressedDataUrl = canvas.toDataURL('image/jpeg', (0.75).toJS);
           setState(() {
             _imageUrl = compressedDataUrl;
             _formVersion++;

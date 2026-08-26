@@ -1,14 +1,17 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
+import 'package:jaspr_router/jaspr_router.dart';
 import 'package:web/web.dart' as web;
 
 import '../app.dart';
 import '../core/providers/environment_provider.dart';
 import 'users.dart';
+import 'withdrawals.dart';
 
 /// Represents a P2P deposit request submitted by a user.
 class DepositRequest {
@@ -36,6 +39,14 @@ class DepositRequest {
   final String? rejectionReason;
   final String? rejectionNote;
   final Map<String, dynamic> rawData;
+
+  bool get isOnChain =>
+      paymentMethod.toLowerCase().contains('usdt') ||
+      paymentMethod.toLowerCase().contains('crypto') ||
+      paymentMethod.toLowerCase().contains('onchain') ||
+      paymentMethod.toLowerCase().contains('trc20') ||
+      paymentMethod.toLowerCase().contains('erc20') ||
+      paymentMethod.toLowerCase().contains('polygon');
 
   DepositRequest({
     required this.id,
@@ -443,16 +454,50 @@ class AdminAuditEntry {
   }
 }
 
-/// Provider streaming all deposit requests.
+/// Provider streaming all deposit requests from all possible collections.
 final depositRequestsStreamProvider = StreamProvider<List<DepositRequest>>((ref) {
   ref.watch(activeEnvAuthUserProvider);
   final firestore = ref.watch(firestoreProvider);
-  return firestore.collection('deposit_requests').snapshots().map((snap) {
-    return snap.docs.map((doc) => DepositRequest.fromMap(doc.id, doc.data())).toList();
-  }).handleError((err) {
-    print('[Deposits] Stream notice: $err');
-    return <DepositRequest>[];
+
+  final controller = StreamController<List<DepositRequest>>();
+  final Map<String, List<DepositRequest>> sourceMap = {
+    'deposit_requests': [],
+    'deposits': [],
+  };
+
+  void emitMerged() {
+    final Map<String, DepositRequest> merged = {};
+    for (final list in sourceMap.values) {
+      for (final item in list) {
+        merged[item.id] = item;
+      }
+    }
+    final result = merged.values.toList()
+      ..sort((reqA, reqB) => reqB.submittedAt.compareTo(reqA.submittedAt));
+    if (!controller.isClosed) {
+      controller.add(result);
+    }
+  }
+
+  final sub1 = firestore.collection('deposit_requests').snapshots().listen((snap) {
+    sourceMap['deposit_requests'] = snap.docs.map((doc) => DepositRequest.fromMap(doc.id, doc.data())).toList();
+    emitMerged();
+  }, onError: (err) {
+    print('[Deposits] deposit_requests stream notice: $err');
   });
+
+  final sub2 = firestore.collection('deposits').snapshots().listen((snap) {
+    sourceMap['deposits'] = snap.docs.map((doc) => DepositRequest.fromMap(doc.id, doc.data())).toList();
+    emitMerged();
+  }, onError: (_) {});
+
+  ref.onDispose(() {
+    sub1.cancel();
+    sub2.cancel();
+    controller.close();
+  });
+
+  return controller.stream;
 });
 
 /// Provider streaming claimed P2P reference numbers registry.
@@ -482,7 +527,7 @@ final adminAuditLogsStreamProvider = StreamProvider<List<AdminAuditEntry>>((ref)
 /// Count of pending deposit verification requests.
 final pendingDepositsCountProvider = Provider<int>((ref) {
   final list = ref.watch(depositRequestsStreamProvider).value ?? [];
-  return list.where((d) => d.status == 'PENDING_AGENT' || d.status == 'PENDING_VERIFICATION').length;
+  return list.where((d) => !d.isOnChain && (d.status == 'PENDING_AGENT' || d.status == 'PENDING_VERIFICATION')).length;
 });
 
 class DepositsPage extends StatefulComponent {
@@ -498,10 +543,8 @@ class _DepositsPageState extends State<DepositsPage> {
   String _searchQuery = '';
   String _methodFilter = 'all'; // all, GCash, Maya
 
-  // Audio Chime & Interrupt Alert States
+  // Audio Chime & Alert States
   bool _soundEnabled = true;
-  final Set<String> _acknowledgedInterruptIds = {};
-  DepositRequest? _activeInterruptDeposit;
 
   // Inspection modal state
   DepositRequest? _inspectingDeposit;
@@ -979,9 +1022,6 @@ class _DepositsPageState extends State<DepositsPage> {
       setState(() {
         _showSendQrModal = false;
         _targetDepositForQr = null;
-        if (_activeInterruptDeposit?.id == deposit.id) {
-          _activeInterruptDeposit = null;
-        }
       });
     } catch (e) {
       print('[Deposits] Send QR Error: $e');
@@ -1405,27 +1445,19 @@ class _DepositsPageState extends State<DepositsPage> {
   @override
   Component build(BuildContext context) {
     final depositsAsync = context.watch(depositRequestsStreamProvider);
+    final withdrawalsAsync = context.watch(withdrawalRequestsStreamProvider);
     final claimedAsync = context.watch(claimedReferencesStreamProvider);
     final auditLogsAsync = context.watch(adminAuditLogsStreamProvider);
     final usersAsync = context.watch(usersStreamProvider);
     final adminUser = context.watch(adminCurrentUserProvider).value;
 
     final allDeposits = depositsAsync.value ?? [];
+    final allWithdrawals = withdrawalsAsync.value ?? [];
     final claimedList = claimedAsync.value ?? [];
     final auditLogs = auditLogsAsync.value ?? [];
     final usersList = usersAsync.value ?? [];
 
-    // Check for NEW unhandled incoming requests to trigger Interrupt Popup
-    final unhandledNewRequests = allDeposits.where((d) {
-      return (d.status == 'PENDING_AGENT' && d.assignedAgentId == null) &&
-          !_acknowledgedInterruptIds.contains(d.id);
-    }).toList();
-
-    if (unhandledNewRequests.isNotEmpty && _activeInterruptDeposit == null) {
-      final newest = unhandledNewRequests.first;
-      _activeInterruptDeposit = newest;
-      _playAlertChime();
-    }
+    final pendingWithdrawalsCount = allWithdrawals.where((w) => w.status == 'WAITING_FOR_AGENT' || w.status == 'AWAITING_AGENT_PAYMENT').length;
 
     // Map claimed reference numbers for instant lookup
     final Map<String, ClaimedReference> claimedRefsMap = {};
@@ -1499,9 +1531,44 @@ class _DepositsPageState extends State<DepositsPage> {
             ],
           ),
 
-        // NEW INCOMING P2P DEPOSIT INTERRUPT MODAL
-        if (_activeInterruptDeposit != null)
-          _buildInterruptAlertModal(_activeInterruptDeposit!, adminUser),
+        // Top P2P Hub Switcher Bar (Seamless transition between Deposits and Withdrawals)
+        div(
+          classes: 'w-full bg-white p-2 rounded-2xl border border-zinc-200/60 shadow-sm flex items-center justify-between flex-wrap gap-3',
+          [
+            div(classes: 'flex items-center gap-2', [
+              button(
+                onClick: () => Router.of(context).push('/deposits'),
+                classes:
+                    'px-4 py-2 rounded-xl text-xs font-bold bg-black text-white shadow-sm flex items-center gap-2 cursor-pointer',
+                [
+                  span([Component.text('💳 P2P Deposits')]),
+                  if (awaitingQrCount > 0 || pendingProofCount > 0)
+                    span(
+                      classes: 'px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black',
+                      [Component.text('${awaitingQrCount + pendingProofCount}')],
+                    ),
+                ],
+              ),
+              button(
+                onClick: () => Router.of(context).push('/withdrawals'),
+                classes:
+                    'px-4 py-2 rounded-xl text-xs font-bold text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100/70 transition-all flex items-center gap-2 cursor-pointer',
+                [
+                  span([Component.text('💸 P2P Cashouts')]),
+                  if (pendingWithdrawalsCount > 0)
+                    span(
+                      classes: 'px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse',
+                      [Component.text('$pendingWithdrawalsCount')],
+                    ),
+                ],
+              ),
+            ]),
+            div(classes: 'flex items-center gap-2 text-xs text-zinc-400 font-semibold pr-2', [
+              span(classes: 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse', []),
+              Component.text('Real-time Settlement Hub Active'),
+            ]),
+          ],
+        ),
 
         // Header Section
         div(
@@ -1747,125 +1814,6 @@ class _DepositsPageState extends State<DepositsPage> {
         ),
         h3(classes: 'text-sm font-black text-zinc-900', [Component.text(title)]),
         p(classes: 'text-xs text-zinc-400 mt-1 max-w-sm leading-relaxed', [Component.text(subtitle)]),
-      ],
-    );
-  }
-
-  /// INTERRUPT POPUP MODAL: Shows un-ignorable alert when a new P2P deposit arrives
-  Component _buildInterruptAlertModal(DepositRequest deposit, fb.User? adminUser) {
-    final isGcash = deposit.paymentMethod.toLowerCase().contains('gcash');
-    final isMaya = deposit.paymentMethod.toLowerCase().contains('maya');
-
-    return div(
-      classes: 'fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4',
-      [
-        div(
-          classes:
-              'bg-zinc-950 text-white rounded-[32px] border-2 border-amber-500/80 shadow-[0_0_60px_rgba(245,158,11,0.35)] w-full max-w-lg overflow-hidden flex flex-col animate-bounce-short',
-          [
-            // Glowing Alert Header
-            div(
-              classes:
-                  'p-6 bg-gradient-to-r from-amber-600 to-rose-600 flex items-center justify-between gap-4',
-              [
-                div(classes: 'flex items-center gap-3.5', [
-                  div(
-                    classes:
-                        'w-12 h-12 rounded-2xl bg-white text-zinc-950 flex items-center justify-center text-2xl font-black shadow-lg animate-pulse',
-                    [Component.text('⚡')],
-                  ),
-                  div([
-                    h2(classes: 'text-base font-black tracking-tight text-white', [
-                      Component.text('NEW P2P DEPOSIT ALERT!'),
-                    ]),
-                    p(classes: 'text-xs text-white/80 font-semibold', [
-                      Component.text('User is waiting for an agent to send QR code'),
-                    ]),
-                  ]),
-                ]),
-
-                button(
-                  onClick: () {
-                    setState(() {
-                      _acknowledgedInterruptIds.add(deposit.id);
-                      _activeInterruptDeposit = null;
-                    });
-                  },
-                  classes: 'text-white/70 hover:text-white bg-transparent border-0 cursor-pointer text-sm font-bold',
-                  [Component.text('✕')],
-                ),
-              ],
-            ),
-
-            // Request Details Box
-            div(classes: 'p-6 flex flex-col gap-4 text-xs', [
-              div(
-                classes:
-                    'p-4 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-between gap-4',
-                [
-                  div(classes: 'flex flex-col gap-1', [
-                    span(classes: 'text-[10px] text-zinc-400 font-bold uppercase tracking-wider', [
-                      Component.text('Deposit Request'),
-                    ]),
-                    span(classes: 'text-base font-extrabold text-white', [Component.text(deposit.userName)]),
-                    span(classes: 'text-[11px] text-zinc-400 font-mono', [Component.text('UID: ${deposit.userId}')]),
-                  ]),
-
-                  div(classes: 'flex flex-col items-end gap-1', [
-                    span(
-                      classes:
-                          'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-1 '
-                          '${isGcash ? 'bg-[#007DFE]/20 text-[#007DFE] border border-[#007DFE]/40' : (isMaya ? 'bg-[#2CB34A]/20 text-[#2CB34A] border border-[#2CB34A]/40' : 'bg-zinc-800 text-zinc-300')}',
-                      [
-                        span([Component.text(isGcash ? '🔵' : (isMaya ? '🟢' : '💳'))]),
-                        Component.text(deposit.paymentMethod),
-                      ],
-                    ),
-                    span(classes: 'text-2xl font-black text-emerald-400 tracking-tight', [
-                      Component.text('₱${deposit.amount.toStringAsFixed(2)}'),
-                    ]),
-                  ]),
-                ],
-              ),
-
-              p(classes: 'text-[11px] text-zinc-400 leading-relaxed font-medium text-center', [
-                Component.text(
-                  '💡 Click "Claim & Send QR Code" below to lock this request to your agent profile and prevent other agents from overriding.',
-                ),
-              ]),
-            ]),
-
-            // Action Buttons
-            div(classes: 'p-5 border-t border-zinc-900 bg-zinc-900/60 flex items-center justify-end gap-3', [
-              button(
-                onClick: () {
-                  setState(() {
-                    _acknowledgedInterruptIds.add(deposit.id);
-                    _activeInterruptDeposit = null;
-                  });
-                },
-                classes:
-                    'px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold transition-all cursor-pointer border-0 outline-none',
-                [Component.text('Snooze Alert')],
-              ),
-              button(
-                onClick: () {
-                  setState(() {
-                    _acknowledgedInterruptIds.add(deposit.id);
-                    _activeInterruptDeposit = null;
-                  });
-                  _openSendQrModal(deposit);
-                },
-                classes:
-                    'px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white text-xs font-black transition-all shadow-lg shadow-emerald-500/20 cursor-pointer border-0 outline-none flex items-center gap-2',
-                [
-                  span([Component.text('⚡ Claim & Send QR Code')]),
-                  span(classes: 'text-xs', [Component.text('→')]),
-                ],
-              ),
-            ]),
-          ],
-        ),
       ],
     );
   }

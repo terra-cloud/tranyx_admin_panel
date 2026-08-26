@@ -97,10 +97,10 @@ final kycQueueStreamProvider = StreamProvider<List<KycSubmission>>((ref) {
       .snapshots()
       .map((snap) {
         final list = snap.docs.map((doc) => KycSubmission.fromMap(doc.id, doc.data())).toList();
-        list.sort((a, b) {
-          if (a.status == 'Pending' && b.status != 'Pending') return -1;
-          if (a.status != 'Pending' && b.status == 'Pending') return 1;
-          return b.submittedAt.compareTo(a.submittedAt);
+        list.sort((kycA, kycB) {
+          if (kycA.status == 'Pending' && kycB.status != 'Pending') return -1;
+          if (kycA.status != 'Pending' && kycB.status == 'Pending') return 1;
+          return kycB.submittedAt.compareTo(kycA.submittedAt);
         });
         return list;
       })
@@ -184,7 +184,7 @@ class _KycPageState extends State<KycPage> {
             );
           },
           loading: () => span([Component.text('Loading...')]),
-          error: (_, __) => span([Component.text('Error')]),
+          error: (err, stack) => span([Component.text('Error')]),
         ),
       ]),
 
@@ -209,7 +209,7 @@ class _KycPageState extends State<KycPage> {
             for (final submission in kycList)
               () {
                 final userProfile = users.firstWhere(
-                  (u) => u.uid == submission.uid,
+                  (userItem) => userItem.uid == submission.uid,
                   orElse: () => UserProfileModel(
                     uid: submission.uid,
                     name: submission.userName,
@@ -315,7 +315,7 @@ class _KycPageState extends State<KycPage> {
       if (_selectedSubmission != null)
         () {
           final userProfile = users.firstWhere(
-            (u) => u.uid == _selectedSubmission!.uid,
+            (userItem) => userItem.uid == _selectedSubmission!.uid,
             orElse: () => UserProfileModel(
               uid: _selectedSubmission!.uid,
               name: _selectedSubmission!.userName,

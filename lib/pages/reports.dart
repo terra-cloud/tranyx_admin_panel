@@ -119,10 +119,10 @@ final combinedReportedListingsProvider = Provider<AsyncValue<List<ListingData>>>
   ];
 
   // Sort by reportCount descending, then by createdAt descending
-  all.sort((a, b) {
-    final countCompare = b.reportCount.compareTo(a.reportCount);
+  all.sort((itemA, itemB) {
+    final countCompare = itemB.reportCount.compareTo(itemA.reportCount);
     if (countCompare != 0) return countCompare;
-    return b.createdAt.compareTo(a.createdAt);
+    return itemB.createdAt.compareTo(itemA.createdAt);
   });
 
   return AsyncValue.data(all);
@@ -142,7 +142,6 @@ class _ReportsPageState extends State<ReportsPage> {
 
   @override
   Component build(BuildContext context) {
-    final currentEnv = context.watch(activeEnvironmentProvider);
     final reportedListingsAsync = context.watch(combinedReportedListingsProvider);
 
     return div(classes: 'w-full p-8 flex flex-col gap-6 relative', [

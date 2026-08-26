@@ -64,7 +64,7 @@ final userActivityHistoryProvider = StreamProvider.family<List<ActivityEvent>, S
     for (final list in subEvents.values) {
       all.addAll(list);
     }
-    all.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    all.sort((evA, evB) => evB.timestamp.compareTo(evA.timestamp));
     if (!controller.isClosed) controller.add(all);
   }
 
@@ -284,7 +284,7 @@ final userPointsHistoryProvider = StreamProvider.family<List<PointsHistoryModel>
       .snapshots()
       .map((snap) {
         final list = snap.docs.map((doc) => PointsHistoryModel.fromMap(doc.id, doc.data())).toList();
-        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        list.sort((itemA, itemB) => itemB.createdAt.compareTo(itemA.createdAt));
         return list;
       })
       .handleError((err) {
@@ -1428,8 +1428,8 @@ class _UsersPageState extends State<UsersPage> {
         // Directory Table Card
         (activeTab == 'platform' ? usersAsync : adminUsersAsync).when(
           data: (allUsers) {
-            final users = allUsers.where((u) {
-              final r = u.role?.toLowerCase().trim() ?? '';
+            final users = allUsers.where((userModel) {
+              final r = userModel.role?.toLowerCase().trim() ?? '';
               if (activeTab == 'support') {
                 // Rule: anything that is NOT admin and NOT a plain platform user is an agent
                 return r.isNotEmpty && r != 'admin' && r != 'user';
@@ -1800,10 +1800,10 @@ class _UsersPageState extends State<UsersPage> {
         // Rewards Leaderboard Table
         usersAsync.when(
           data: (allUsers) {
-            final rewardUsers = allUsers.where((u) {
-              final r = u.role?.toLowerCase().trim() ?? '';
+            final rewardUsers = allUsers.where((userModel) {
+              final r = userModel.role?.toLowerCase().trim() ?? '';
               return r.isEmpty || r == 'user';
-            }).toList()..sort((a, b) => b.terraPoints.compareTo(a.terraPoints));
+            }).toList()..sort((userA, userB) => userB.terraPoints.compareTo(userA.terraPoints));
 
             if (rewardUsers.isEmpty) {
               return div(

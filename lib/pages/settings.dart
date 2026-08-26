@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
+import 'package:web/web.dart' as web;
 
 import '../app.dart';
 import '../core/config/firebase_environments.dart';
@@ -78,7 +79,24 @@ class _SettingsPageState extends State<SettingsPage> {
         if (_newPassword.length < 6) {
           throw Exception('Password must be at least 6 characters.');
         }
-        await user.updatePassword(_newPassword);
+        try {
+          await user.updatePassword(_newPassword);
+        } on fb.FirebaseAuthException catch (authErr) {
+          if (authErr.code == 'requires-recent-login') {
+            final email = user.email ?? web.window.localStorage.getItem('tranyx_staff_email');
+            final savedPass = web.window.localStorage.getItem('tranyx_staff_password');
+            if (email != null && savedPass != null) {
+              final cred = fb.EmailAuthProvider.credential(email: email, password: savedPass);
+              await user.reauthenticateWithCredential(cred);
+              await user.updatePassword(_newPassword);
+              web.window.localStorage.setItem('tranyx_staff_password', _newPassword);
+            } else {
+              throw Exception('For security, please log out and log in again before changing your password.');
+            }
+          } else {
+            rethrow;
+          }
+        }
         await user.reload();
         updates.add('password');
       }

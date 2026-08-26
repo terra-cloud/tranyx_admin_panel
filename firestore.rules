@@ -1,8 +1,168 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && (request.auth.uid == userId);
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        request.auth.token.role == 'admin' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'staff', 'superadmin', 'agent'])
+      );
+    }
+
+    // Top-level Withdrawal Requests
+    match /withdrawal_requests/{requestId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.uid == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.uid == request.auth.uid ||
+        isAdmin()
+      );
+      allow update, delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.uid == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // Alternative withdrawals collection
+    match /withdrawals/{requestId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /cashout_requests/{requestId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Deposit Requests
+    match /deposit_requests/{depositId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.uid == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.uid == request.auth.uid ||
+        isAdmin()
+      );
+      allow update, delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.uid == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    match /deposits/{depositId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // User Wallets & Ledger Sub-collections
+    match /wallets/{userId} {
+      allow read, write: if isAuthenticated() && (isOwner(userId) || isAdmin());
+
+      match /transactions/{txId} {
+        allow read, write: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      }
+      match /ledger/{entryDoc} {
+        allow read, write: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      }
+    }
+
+    // Users & User Sub-collections
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+
+      match /transactions/{txId} {
+        allow read, write: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      }
+      match /ledger/{entryDoc} {
+        allow read, write: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      }
+      match /points/{docId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // Global Transactions
+    match /transactions/{txId} {
+      allow read: if isAuthenticated() && (
+        resource.data.uid == request.auth.uid ||
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // Support Chats & Messages
+    match /support_chats/{chatId} {
+      allow read, write: if isAuthenticated();
+
+      match /messages/{msgId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // Support Tickets
+    match /supportTickets/{ticketId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Claimed References, Audit Logs, Notifications
+    match /claimed_p2p_references/{refId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /admin_audit_logs/{logId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /notifications/{notifId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /points_history/{historyId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rentals & Properties & Bookings
+    match /jobs/{jobId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /rentals/{rentalId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /properties/{propId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /rental_requests/{reqId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /property_requests/{reqId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /promos/{promoId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /news/{newsId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Global Fallback for Authenticated Tranyx Services
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAuthenticated();
     }
   }
 }
