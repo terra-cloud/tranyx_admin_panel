@@ -288,12 +288,35 @@ class _NewsPageState extends State<NewsPage> {
   }
 
   void _savePost() async {
-    if (_title.trim().isEmpty || _content.trim().isEmpty) {
-      web.window.alert('Title and Content are required.');
+    // 1. Direct, robust extraction from live DOM elements with fallback to internal state
+    final titleElem = web.document.getElementById('banner-title-input') as web.HTMLInputElement?;
+    final contentElem = web.document.getElementById('banner-content-input') as web.HTMLTextAreaElement?;
+    final imageElem = web.document.getElementById('banner-image-url-input') as web.HTMLInputElement?;
+    final promoElem = web.document.getElementById('banner-promo-code-input') as web.HTMLInputElement?;
+    final actionUrlElem = web.document.getElementById('banner-action-url-input') as web.HTMLInputElement?;
+    final buttonTextElem = web.document.getElementById('banner-button-text-input') as web.HTMLInputElement?;
+
+    final rawTitle = (titleElem?.value ?? _title).trim();
+    final rawContent = (contentElem?.value ?? _content).trim();
+    final rawImageUrl = (imageElem?.value ?? _imageUrl).trim();
+    final rawPromo = (promoElem?.value ?? _promoCode).trim();
+    final rawActionUrl = (actionUrlElem?.value ?? _actionUrl).trim();
+    final rawButtonText = (buttonTextElem?.value ?? _buttonText).trim();
+
+    // 2. Form Validation: ensure title and content are present
+    if (rawTitle.isEmpty || rawContent.isEmpty) {
+      web.window.alert('Cannot detect title and description upon publish. Please enter both a Title and Content Description.');
       return;
     }
 
+    // 3. Keep text intact in state and toggle saving indicator
     setState(() {
+      _title = rawTitle;
+      _content = rawContent;
+      _imageUrl = rawImageUrl;
+      _promoCode = rawPromo;
+      _actionUrl = rawActionUrl;
+      _buttonText = rawButtonText;
       _isSaving = true;
     });
 
@@ -305,17 +328,17 @@ class _NewsPageState extends State<NewsPage> {
       }
 
       final data = {
-        'title': _title.trim(),
-        'content': _content.trim(),
-        'imageUrl': _imageUrl.trim(),
+        'title': rawTitle,
+        'content': rawContent,
+        'imageUrl': rawImageUrl,
         'category': _category,
-        'promoCode': _promoCode.trim().isNotEmpty ? _promoCode.trim().toUpperCase() : null,
+        'promoCode': rawPromo.isNotEmpty ? rawPromo.toUpperCase() : null,
         'actionType': _actionType,
-        'actionUrl': _actionUrl.trim().isNotEmpty ? _actionUrl.trim() : null,
+        'actionUrl': rawActionUrl.isNotEmpty ? rawActionUrl : null,
         'isActive': _isActive,
         'createdAt': DateTime.now().millisecondsSinceEpoch,
         'publishAt': publishAt?.millisecondsSinceEpoch,
-        'buttonText': _buttonText.trim().isNotEmpty ? _buttonText.trim() : null,
+        'buttonText': rawButtonText.isNotEmpty ? rawButtonText : null,
         'buttonX': double.tryParse(_buttonXStr),
         'buttonY': double.tryParse(_buttonYStr),
         'buttonWidth': double.tryParse(_buttonWidthStr),
@@ -335,13 +358,18 @@ class _NewsPageState extends State<NewsPage> {
         await firestore.collection('news_posts').add(data);
       }
 
+      // 4. ONLY reset form AFTER successful database write
       _resetForm();
+      web.window.alert('Banner successfully published!');
     } catch (e) {
+      // 5. Retain inputs on failure
       web.window.alert('Failed to save post: $e');
     } finally {
-      setState(() {
-        _isSaving = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
   }
 
@@ -610,6 +638,7 @@ class _NewsPageState extends State<NewsPage> {
               div(classes: 'flex flex-col gap-1.5', [
                 label([Component.text('Banner Title *')]),
                 input(
+                  id: 'banner-title-input',
                   classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
                   type: InputType.text,
                   attributes: {'placeholder': 'e.g. 50% Off First Transit Ride!', 'value': _title},
@@ -644,6 +673,7 @@ class _NewsPageState extends State<NewsPage> {
               div(classes: 'flex flex-col gap-1.5', [
                 label([Component.text('Content Description *')]),
                 textarea(
+                  id: 'banner-content-input',
                   placeholder: 'Enter announcement details or promo eligibility requirements...',
                   classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium h-24 resize-none',
                   events: {'input': (e) => _content = (e.target as dynamic).value as String},
@@ -655,6 +685,7 @@ class _NewsPageState extends State<NewsPage> {
               div(classes: 'flex flex-col gap-1.5', [
                 label([Component.text('Banner Image URL')]),
                 input(
+                  id: 'banner-image-url-input',
                   classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
                   type: InputType.text,
                   attributes: {'placeholder': 'e.g. https://images.unsplash.com/...', 'value': _imageUrl},
@@ -705,6 +736,7 @@ class _NewsPageState extends State<NewsPage> {
                 div(classes: 'flex flex-col gap-1.5', [
                   label([Component.text('Linked Promo Code')]),
                   input(
+                    id: 'banner-promo-code-input',
                     classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium uppercase',
                     type: InputType.text,
                     attributes: {'placeholder': 'e.g. TRANSIT50', 'value': _promoCode},
@@ -717,6 +749,7 @@ class _NewsPageState extends State<NewsPage> {
                 div(classes: 'flex flex-col gap-1.5', [
                   label([Component.text('Action Destination URL (Web link or tranyx:// deep link)')]),
                   input(
+                    id: 'banner-action-url-input',
                     classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
                     type: InputType.text,
                     attributes: {'placeholder': 'e.g. https://external.com or tranyx://transit', 'value': _actionUrl},
@@ -733,6 +766,7 @@ class _NewsPageState extends State<NewsPage> {
                 div(classes: 'flex flex-col gap-1.5', [
                   label([Component.text('Button Text')]),
                   input(
+                    id: 'banner-button-text-input',
                     classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
                     type: InputType.text,
                     attributes: {'placeholder': 'e.g. Claim Now, Visit Site', 'value': _buttonText},
