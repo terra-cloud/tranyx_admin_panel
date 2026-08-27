@@ -296,12 +296,14 @@ class _NewsPageState extends State<NewsPage> {
     final actionUrlElem = web.document.getElementById('banner-action-url-input') as web.HTMLInputElement?;
     final buttonTextElem = web.document.getElementById('banner-button-text-input') as web.HTMLInputElement?;
 
-    final rawTitle = (titleElem?.value ?? _title).trim();
-    final rawContent = (contentElem?.value ?? _content).trim();
-    final rawImageUrl = (imageElem?.value ?? _imageUrl).trim();
-    final rawPromo = (promoElem?.value ?? _promoCode).trim();
-    final rawActionUrl = (actionUrlElem?.value ?? _actionUrl).trim();
-    final rawButtonText = (buttonTextElem?.value ?? _buttonText).trim();
+    final String domTitle = titleElem?.value.trim() ?? '';
+    final String domContent = contentElem?.value.trim() ?? '';
+    final String rawTitle = domTitle.isNotEmpty ? domTitle : _title.trim();
+    final String rawContent = domContent.isNotEmpty ? domContent : _content.trim();
+    final String rawImageUrl = (imageElem?.value.trim().isNotEmpty == true) ? imageElem!.value.trim() : _imageUrl.trim();
+    final String rawPromo = (promoElem?.value.trim().isNotEmpty == true) ? promoElem!.value.trim() : _promoCode.trim();
+    final String rawActionUrl = (actionUrlElem?.value.trim().isNotEmpty == true) ? actionUrlElem!.value.trim() : _actionUrl.trim();
+    final String rawButtonText = (buttonTextElem?.value.trim().isNotEmpty == true) ? buttonTextElem!.value.trim() : _buttonText.trim();
 
     // 2. Form Validation: ensure title and content are present
     if (rawTitle.isEmpty || rawContent.isEmpty) {
@@ -641,8 +643,10 @@ class _NewsPageState extends State<NewsPage> {
                   id: 'banner-title-input',
                   classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
                   type: InputType.text,
-                  attributes: {'placeholder': 'e.g. 50% Off First Transit Ride!', 'value': _title},
-                  events: {'input': (e) => _title = (e.target as dynamic).value as String},
+                  value: _title,
+                  onInput: (v) => _title = (v as String?) ?? '',
+                  onChange: (v) => _title = (v as String?) ?? '',
+                  attributes: {'placeholder': 'e.g. 50% Off First Transit Ride!'},
                 ),
               ]),
 
@@ -651,7 +655,7 @@ class _NewsPageState extends State<NewsPage> {
                 label([Component.text('Category')]),
                 select(
                   classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium bg-white',
-                  events: {'change': (e) => _category = (e.target as dynamic).value as String},
+                  onChange: (v) => setState(() => _category = v.first),
                   [
                     option(value: 'news', attributes: _category == 'news' ? {'selected': ''} : {}, [
                       Component.text('News Announcement'),
@@ -676,7 +680,8 @@ class _NewsPageState extends State<NewsPage> {
                   id: 'banner-content-input',
                   placeholder: 'Enter announcement details or promo eligibility requirements...',
                   classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium h-24 resize-none',
-                  events: {'input': (e) => _content = (e.target as dynamic).value as String},
+                  onInput: (v) => _content = (v as String?) ?? '',
+                  onChange: (v) => _content = (v as String?) ?? '',
                   [Component.text(_content)],
                 ),
               ]),
@@ -688,8 +693,10 @@ class _NewsPageState extends State<NewsPage> {
                   id: 'banner-image-url-input',
                   classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
                   type: InputType.text,
-                  attributes: {'placeholder': 'e.g. https://images.unsplash.com/...', 'value': _imageUrl},
-                  events: {'input': (e) => setState(() => _imageUrl = (e.target as dynamic).value as String)},
+                  value: _imageUrl,
+                  onInput: (v) => setState(() => _imageUrl = (v as String?) ?? ''),
+                  onChange: (v) => setState(() => _imageUrl = (v as String?) ?? ''),
+                  attributes: {'placeholder': 'e.g. https://images.unsplash.com/...'},
                 ),
                 // File picker for direct computer uploads
                 div(
@@ -716,7 +723,7 @@ class _NewsPageState extends State<NewsPage> {
                 label([Component.text('Tap Action')]),
                 select(
                   classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium bg-white',
-                  events: {'change': (e) => setState(() => _actionType = (e.target as dynamic).value as String)},
+                  onChange: (v) => setState(() => _actionType = v.first),
                   [
                     option(value: 'none', attributes: _actionType == 'none' ? {'selected': ''} : {}, [
                       Component.text('No action (Static banner)'),
@@ -739,12 +746,14 @@ class _NewsPageState extends State<NewsPage> {
                     id: 'banner-promo-code-input',
                     classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium uppercase',
                     type: InputType.text,
-                    attributes: {'placeholder': 'e.g. TRANSIT50', 'value': _promoCode},
-                    events: {'input': (e) => _promoCode = (e.target as dynamic).value as String},
+                    value: _promoCode,
+                    onInput: (v) => _promoCode = (v as String?) ?? '',
+                    onChange: (v) => _promoCode = (v as String?) ?? '',
+                    attributes: {'placeholder': 'e.g. TRANSIT50'},
                   ),
                 ]),
 
-              // Action URL (Conditional)
+              // Action Destination URL (Conditional)
               if (_actionType == 'link' || _actionType == 'promo')
                 div(classes: 'flex flex-col gap-1.5', [
                   label([Component.text('Action Destination URL (Web link or tranyx:// deep link)')]),
@@ -752,8 +761,10 @@ class _NewsPageState extends State<NewsPage> {
                     id: 'banner-action-url-input',
                     classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
                     type: InputType.text,
-                    attributes: {'placeholder': 'e.g. https://external.com or tranyx://transit', 'value': _actionUrl},
-                    events: {'input': (e) => _actionUrl = (e.target as dynamic).value as String},
+                    value: _actionUrl,
+                    onInput: (v) => _actionUrl = (v as String?) ?? '',
+                    onChange: (v) => _actionUrl = (v as String?) ?? '',
+                    attributes: {'placeholder': 'e.g. https://external.com or tranyx://transit'},
                   ),
                 ]),
 
@@ -769,8 +780,10 @@ class _NewsPageState extends State<NewsPage> {
                     id: 'banner-button-text-input',
                     classes: 'px-4 py-3 rounded-xl border border-zinc-200 outline-none focus:border-zinc-350 text-sm font-medium',
                     type: InputType.text,
-                    attributes: {'placeholder': 'e.g. Claim Now, Visit Site', 'value': _buttonText},
-                    events: {'input': (e) => setState(() => _buttonText = (e.target as dynamic).value as String)},
+                    value: _buttonText,
+                    onInput: (v) => setState(() => _buttonText = (v as String?) ?? ''),
+                    onChange: (v) => setState(() => _buttonText = (v as String?) ?? ''),
+                    attributes: {'placeholder': 'e.g. Claim Now, Visit Site'},
                   ),
                 ]),
 
