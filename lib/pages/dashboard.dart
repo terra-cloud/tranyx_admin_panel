@@ -11,6 +11,8 @@ import '../core/providers/environment_provider.dart';
 import 'listings.dart';
 import 'bookings.dart';
 import 'chats.dart';
+import 'deposits.dart' show depositRequestsStreamProvider;
+import 'withdrawals.dart' show withdrawalRequestsStreamProvider;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -126,7 +128,235 @@ class StaffPerformance {
   StaffPerformance({required this.name, required this.role, required this.resolvedChats, required this.csat});
 }
 
+class P2PMethodMetric {
+  final String method;
+  final int count;
+  final double volume;
+  P2PMethodMetric({required this.method, required this.count, required this.volume});
+}
+
+class P2PRecentActivity {
+  final String id;
+  final String type; // 'DEPOSIT' or 'CASHOUT'
+  final String userName;
+  final double amount;
+  final String paymentMethod;
+  final String status;
+  final int timestamp;
+  P2PRecentActivity({
+    required this.id,
+    required this.type,
+    required this.userName,
+    required this.amount,
+    required this.paymentMethod,
+    required this.status,
+    required this.timestamp,
+  });
+}
+
+class MonthlyP2PData {
+  final List<double> depositVolumes;
+  final List<double> withdrawalVolumes;
+  final List<int> depositCounts;
+  final List<int> withdrawalCounts;
+
+  MonthlyP2PData({
+    required this.depositVolumes,
+    required this.withdrawalVolumes,
+    required this.depositCounts,
+    required this.withdrawalCounts,
+  });
+
+  static MonthlyP2PData empty() => MonthlyP2PData(
+        depositVolumes: List<double>.filled(12, 0.0),
+        withdrawalVolumes: List<double>.filled(12, 0.0),
+        depositCounts: List<int>.filled(12, 0),
+        withdrawalCounts: List<int>.filled(12, 0),
+      );
+}
+
+class P2PDashboardMetrics {
+  final int pendingDeposits;
+  final int pendingWithdrawals;
+  final double pendingDepositVolume;
+  final double pendingWithdrawalVolume;
+  final double approvedDepositVolume;
+  final double approvedWithdrawalVolume;
+  final double totalP2PVolume;
+  final int totalCompletedTransactions;
+  final int totalRequests;
+  final List<P2PMethodMetric> topPaymentMethods;
+  final List<P2PRecentActivity> recentActivities;
+  final MonthlyP2PData monthlyData;
+
+  P2PDashboardMetrics({
+    required this.pendingDeposits,
+    required this.pendingWithdrawals,
+    required this.pendingDepositVolume,
+    required this.pendingWithdrawalVolume,
+    required this.approvedDepositVolume,
+    required this.approvedWithdrawalVolume,
+    required this.totalP2PVolume,
+    required this.totalCompletedTransactions,
+    required this.totalRequests,
+    required this.topPaymentMethods,
+    required this.recentActivities,
+    required this.monthlyData,
+  });
+
+  double get settlementRate =>
+      totalRequests == 0 ? 100.0 : ((totalCompletedTransactions / totalRequests) * 100.0).clamp(0.0, 100.0);
+
+  static P2PDashboardMetrics empty() => P2PDashboardMetrics(
+        pendingDeposits: 0,
+        pendingWithdrawals: 0,
+        pendingDepositVolume: 0.0,
+        pendingWithdrawalVolume: 0.0,
+        approvedDepositVolume: 0.0,
+        approvedWithdrawalVolume: 0.0,
+        totalP2PVolume: 0.0,
+        totalCompletedTransactions: 0,
+        totalRequests: 0,
+        topPaymentMethods: [],
+        recentActivities: [],
+        monthlyData: MonthlyP2PData.empty(),
+      );
+}
+
 // ── Providers ──────────────────────────────────────────────────────────────
+
+/// Live P2P fiat rail operational metrics (deposits, cashouts, volumes, rails)
+final p2pDashboardMetricsProvider = Provider<P2PDashboardMetrics>((ref) {
+  final depositsAsync = ref.watch(depositRequestsStreamProvider);
+  final withdrawalsAsync = ref.watch(withdrawalRequestsStreamProvider);
+
+  final deposits = depositsAsync.value ?? [];
+  final withdrawals = withdrawalsAsync.value ?? [];
+
+  // Filter out on-chain crypto
+  final fiatDeposits = deposits.where((d) => !d.isOnChain).toList();
+  final fiatWithdrawals = withdrawals.where((w) => !w.isOnChain).toList();
+
+  final pendingDepositsList = fiatDeposits.where((d) =>
+      d.status == 'PENDING_AGENT' ||
+      d.status == 'AWAITING_PAYMENT' ||
+      d.status == 'PENDING_VERIFICATION' ||
+      d.status == 'AWAITING_QR' ||
+      d.status == 'WAITING_FOR_QR' ||
+      d.status == 'REQUESTED' ||
+      d.status == 'OPEN' ||
+      d.status == 'PENDING').toList();
+
+  final pendingWithdrawalsList = fiatWithdrawals.where((w) =>
+      w.status == 'WAITING_FOR_AGENT' ||
+      w.status == 'AWAITING_AGENT_PAYMENT' ||
+      w.status == 'PENDING_CONFIRMATION' ||
+      w.status == 'PENDING_AGENT' ||
+      w.status == 'REQUESTED' ||
+      w.status == 'OPEN' ||
+      w.status == 'PENDING').toList();
+
+  final approvedDeposits = fiatDeposits.where((d) => d.status == 'APPROVED').toList();
+  final approvedWithdrawals = fiatWithdrawals.where((w) => w.status == 'APPROVED').toList();
+
+  final pendingDepositVolume = pendingDepositsList.fold<double>(0.0, (acc, d) => acc + d.amount);
+  final pendingWithdrawalVolume = pendingWithdrawalsList.fold<double>(0.0, (acc, w) => acc + w.amount);
+
+  final approvedDepositVolume = approvedDeposits.fold<double>(0.0, (acc, d) => acc + d.amount);
+  final approvedWithdrawalVolume = approvedWithdrawals.fold<double>(0.0, (acc, w) => acc + w.amount);
+  final totalP2PVolume = approvedDepositVolume + approvedWithdrawalVolume;
+  final totalCompletedTransactions = approvedDeposits.length + approvedWithdrawals.length;
+  final totalRequests = fiatDeposits.length + fiatWithdrawals.length;
+
+  // Monthly breakdown for current year
+  final currentYear = DateTime.now().year;
+  final monthlyDepositVolumes = List<double>.filled(12, 0.0);
+  final monthlyWithdrawalVolumes = List<double>.filled(12, 0.0);
+  final monthlyDepositCounts = List<int>.filled(12, 0);
+  final monthlyWithdrawalCounts = List<int>.filled(12, 0);
+
+  for (final d in approvedDeposits) {
+    if (d.submittedAt > 0) {
+      final dt = DateTime.fromMillisecondsSinceEpoch(d.submittedAt);
+      if (dt.year == currentYear) {
+        monthlyDepositVolumes[dt.month - 1] += d.amount;
+        monthlyDepositCounts[dt.month - 1] += 1;
+      }
+    }
+  }
+
+  for (final w in approvedWithdrawals) {
+    if (w.createdAt > 0) {
+      final dt = DateTime.fromMillisecondsSinceEpoch(w.createdAt);
+      if (dt.year == currentYear) {
+        monthlyWithdrawalVolumes[dt.month - 1] += w.amount;
+        monthlyWithdrawalCounts[dt.month - 1] += 1;
+      }
+    }
+  }
+
+  final monthlyP2PData = MonthlyP2PData(
+    depositVolumes: monthlyDepositVolumes,
+    withdrawalVolumes: monthlyWithdrawalVolumes,
+    depositCounts: monthlyDepositCounts,
+    withdrawalCounts: monthlyWithdrawalCounts,
+  );
+
+  // Aggregate payment methods
+  final Map<String, List<double>> methodMap = {};
+  for (final d in approvedDeposits) {
+    methodMap.putIfAbsent(d.paymentMethod, () => []).add(d.amount);
+  }
+  for (final w in approvedWithdrawals) {
+    methodMap.putIfAbsent(w.paymentMethod, () => []).add(w.amount);
+  }
+
+  final topPaymentMethods = methodMap.entries.map((e) {
+    final count = e.value.length;
+    final vol = e.value.fold<double>(0.0, (acc, v) => acc + v);
+    return P2PMethodMetric(method: e.key, count: count, volume: vol);
+  }).toList()
+    ..sort((m1, m2) => m2.volume.compareTo(m1.volume));
+
+  // Recent activity (latest 6 across deposits and withdrawals)
+  final List<P2PRecentActivity> activities = [
+    ...fiatDeposits.map((d) => P2PRecentActivity(
+          id: d.id,
+          type: 'DEPOSIT',
+          userName: d.userName.isNotEmpty ? d.userName : d.userId,
+          amount: d.amount,
+          paymentMethod: d.paymentMethod,
+          status: d.status,
+          timestamp: d.submittedAt,
+        )),
+    ...fiatWithdrawals.map((w) => P2PRecentActivity(
+          id: w.id,
+          type: 'CASHOUT',
+          userName: w.userAccountName.isNotEmpty
+              ? w.userAccountName
+              : (w.userName.isNotEmpty ? w.userName : w.uid),
+          amount: w.amount,
+          paymentMethod: w.paymentMethod,
+          status: w.status,
+          timestamp: w.createdAt,
+        )),
+  ]..sort((act1, act2) => act2.timestamp.compareTo(act1.timestamp));
+
+  return P2PDashboardMetrics(
+    pendingDeposits: pendingDepositsList.length,
+    pendingWithdrawals: pendingWithdrawalsList.length,
+    pendingDepositVolume: pendingDepositVolume,
+    pendingWithdrawalVolume: pendingWithdrawalVolume,
+    approvedDepositVolume: approvedDepositVolume,
+    approvedWithdrawalVolume: approvedWithdrawalVolume,
+    totalP2PVolume: totalP2PVolume,
+    totalCompletedTransactions: totalCompletedTransactions,
+    totalRequests: totalRequests,
+    topPaymentMethods: topPaymentMethods,
+    recentActivities: activities.take(6).toList(),
+    monthlyData: monthlyP2PData,
+  );
+});
 
 /// Total registered platform users (excludes staff/admin)
 final dbTotalUsersCountProvider = StreamProvider<int>((ref) {
@@ -878,6 +1108,7 @@ class _DashboardState extends State<Dashboard> {
           orElse: () => 0,
         );
 
+    final p2pMetrics = context.watch(p2pDashboardMetricsProvider);
     final maxRev = monthlyRevenue.fold(0.0, (acc, val) => val > acc ? val : acc);
     final maxUsers = monthlyUsers.fold(0, (acc, val) => val > acc ? val : acc);
     final kycTotal = kycStats.total == 0 ? 1 : kycStats.total;
@@ -1012,19 +1243,36 @@ class _DashboardState extends State<Dashboard> {
           ],
         ),
 
-      // Quick action links
-      div(classes: 'grid grid-cols-2 sm:grid-cols-4 gap-3', [
+      // Quick action links (6 Tiles)
+      div(classes: 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3', [
         _promoBanner(
-          'Verify KYC Queue',
-          'Approve identity verifications',
+          'P2P Deposits',
+          '${p2pMetrics.pendingDeposits} awaiting agent review',
+          'bg-emerald-50 border border-emerald-100',
+          '/deposits',
+        ),
+        _promoBanner(
+          'P2P Cashouts',
+          '${p2pMetrics.pendingWithdrawals} awaiting payout & proof',
           'bg-amber-50 border border-amber-100',
+          '/withdrawals',
+        ),
+        _promoBanner(
+          'Verify KYC',
+          '${kycStats.pending} pending ID submissions',
+          'bg-blue-50 border border-blue-100',
           '/kyc',
         ),
-        _promoBanner('Live Support', 'Manage active support chats', 'bg-blue-50 border border-blue-100', '/chats'),
+        _promoBanner(
+          'Live Support',
+          pendingChatsCount > 0 ? '$pendingChatsCount pending chats' : 'Active agent queue',
+          'bg-rose-50 border border-rose-100',
+          '/chats',
+        ),
         _promoBanner(
           'P2P Listings',
-          'Review platform listings',
-          'bg-emerald-50 border border-emerald-100',
+          '${liveListings.total} active platform posts',
+          'bg-zinc-50 border border-zinc-200',
           '/listings',
         ),
         _promoBanner(
@@ -1300,6 +1548,9 @@ class _DashboardState extends State<Dashboard> {
           ],
         ),
       ]),
+
+      // ── P2P Liquidity & Agent Settlement Hub ──────────────────
+      _buildP2PMetricsSection(context, p2pMetrics),
 
       // ── Charts Row ─────────────────────────────────────────────
       if (isAdmin)
@@ -1632,6 +1883,439 @@ class _DashboardState extends State<Dashboard> {
         ),
       ]),
     ]);
+  }
+
+  String _formatRelativeTime(int ts) {
+    if (ts <= 0) return 'Just now';
+    final diff = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
+  Component _buildP2PMetricsSection(BuildContext context, P2PDashboardMetrics p2p) {
+    return div(
+      classes: 'bg-white rounded-[28px] border border-zinc-200/60 p-6 flex flex-col gap-6 shadow-[0_8px_30px_rgba(0,0,0,0.02)]',
+      [
+        // Section Header
+        div(classes: 'flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-100 pb-5', [
+          div(classes: 'flex items-center gap-3.5', [
+            div(
+              classes:
+                  'w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-xl text-emerald-600 shadow-sm',
+              [Component.text('💳')],
+            ),
+            div(classes: 'flex flex-col', [
+              div(classes: 'flex items-center gap-2', [
+                h3(classes: 'text-base font-black text-zinc-900 tracking-tight', [
+                  Component.text('P2P Fiat & Agent Settlement Hub'),
+                ]),
+                span(
+                  classes:
+                      'px-2 py-0.5 rounded-full bg-emerald-50 text-[#0fa958] border border-emerald-200/60 text-[9px] font-black uppercase tracking-wider',
+                  [Component.text('Live Rails')],
+                ),
+              ]),
+              p(classes: 'text-xs text-zinc-400 font-bold mt-0.5', [
+                Component.text('GCash, Maya, SeaBank, GrabPay, GoTyme & Bank Transfer operational metrics'),
+              ]),
+            ]),
+          ]),
+          div(classes: 'flex items-center gap-2 self-start sm:self-auto', [
+            a(
+              href: '/deposits',
+              classes:
+                  'px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 text-[11px] font-extrabold transition-all no-underline flex items-center gap-1.5 shadow-sm cursor-pointer',
+              [
+                Component.text('Deposit Queue'),
+                if (p2p.pendingDeposits > 0)
+                  span(
+                    classes: 'px-1.5 py-0.2 rounded-full bg-emerald-600 text-white text-[9px] font-black',
+                    [Component.text(p2p.pendingDeposits.toString())],
+                  ),
+              ],
+            ),
+            a(
+              href: '/withdrawals',
+              classes:
+                  'px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80 text-[11px] font-extrabold transition-all no-underline flex items-center gap-1.5 shadow-sm cursor-pointer',
+              [
+                Component.text('Cashout Queue'),
+                if (p2p.pendingWithdrawals > 0)
+                  span(
+                    classes: 'px-1.5 py-0.2 rounded-full bg-amber-600 text-white text-[9px] font-black',
+                    [Component.text(p2p.pendingWithdrawals.toString())],
+                  ),
+              ],
+            ),
+          ]),
+        ]),
+
+        // 4 KPI Summary Cards
+        div(classes: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4', [
+          // 1. Gross P2P Settled Volume
+          div(
+            classes: 'p-4 rounded-2xl bg-zinc-50/80 border border-zinc-200/70 flex flex-col justify-between gap-3',
+            [
+              div(classes: 'flex items-center justify-between', [
+                span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('Total Settled Volume'),
+                ]),
+                span(classes: 'text-sm', [Component.text('💰')]),
+              ]),
+              div(classes: 'flex flex-col gap-0.5', [
+                h4(classes: 'text-xl font-black text-zinc-900 tracking-tight', [
+                  Component.text('₱${p2p.totalP2PVolume.toStringAsFixed(2)}'),
+                ]),
+                div(classes: 'flex items-center gap-3 text-[10px] font-bold text-zinc-500 mt-1', [
+                  span([Component.text('In: ₱${p2p.approvedDepositVolume.toStringAsFixed(0)}')]),
+                  span(classes: 'text-zinc-300', [Component.text('•')]),
+                  span([Component.text('Out: ₱${p2p.approvedWithdrawalVolume.toStringAsFixed(0)}')]),
+                ]),
+              ]),
+            ],
+          ),
+
+          // 2. Active P2P Deposit Queue
+          div(
+            classes:
+                'p-4 rounded-2xl ${p2p.pendingDeposits > 0 ? "bg-emerald-50/50 border-emerald-200/80" : "bg-zinc-50/80 border-zinc-200/70"} border flex flex-col justify-between gap-3',
+            [
+              div(classes: 'flex items-center justify-between', [
+                span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('Pending Deposit Queue'),
+                ]),
+                if (p2p.pendingDeposits > 0)
+                  span(
+                    classes: 'px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-black animate-pulse',
+                    [Component.text('${p2p.pendingDeposits} Actionable')],
+                  )
+                else
+                  span(classes: 'text-[10px] font-black text-emerald-600', [Component.text('✓ Clear')]),
+              ]),
+              div(classes: 'flex flex-col gap-0.5', [
+                h4(classes: 'text-xl font-black text-emerald-700 tracking-tight', [
+                  Component.text('${p2p.pendingDeposits} Requests'),
+                ]),
+                span(classes: 'text-[10px] font-bold text-zinc-500 mt-1', [
+                  Component.text('₱${p2p.pendingDepositVolume.toStringAsFixed(2)} pending verification'),
+                ]),
+              ]),
+            ],
+          ),
+
+          // 3. Active P2P Cashout Queue
+          div(
+            classes:
+                'p-4 rounded-2xl ${p2p.pendingWithdrawals > 0 ? "bg-amber-50/50 border-amber-200/80" : "bg-zinc-50/80 border-zinc-200/70"} border flex flex-col justify-between gap-3',
+            [
+              div(classes: 'flex items-center justify-between', [
+                span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('Pending Cashout Queue'),
+                ]),
+                if (p2p.pendingWithdrawals > 0)
+                  span(
+                    classes: 'px-2 py-0.5 rounded-full bg-amber-500 text-white text-[9px] font-black animate-pulse',
+                    [Component.text('${p2p.pendingWithdrawals} Actionable')],
+                  )
+                else
+                  span(classes: 'text-[10px] font-black text-amber-600', [Component.text('✓ Clear')]),
+              ]),
+              div(classes: 'flex flex-col gap-0.5', [
+                h4(classes: 'text-xl font-black text-amber-700 tracking-tight', [
+                  Component.text('${p2p.pendingWithdrawals} Requests'),
+                ]),
+                span(classes: 'text-[10px] font-bold text-zinc-500 mt-1', [
+                  Component.text('₱${p2p.pendingWithdrawalVolume.toStringAsFixed(2)} awaiting payout proof'),
+                ]),
+              ]),
+            ],
+          ),
+
+          // 4. Settlement Completion Rate
+          div(
+            classes: 'p-4 rounded-2xl bg-zinc-50/80 border border-zinc-200/70 flex flex-col justify-between gap-3',
+            [
+              div(classes: 'flex items-center justify-between', [
+                span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('Settlement Success Rate'),
+                ]),
+                span(classes: 'text-sm', [Component.text('⚡')]),
+              ]),
+              div(classes: 'flex flex-col gap-0.5', [
+                h4(classes: 'text-xl font-black text-indigo-600 tracking-tight', [
+                  Component.text('${p2p.settlementRate.toStringAsFixed(1)}%'),
+                ]),
+                span(classes: 'text-[10px] font-bold text-zinc-500 mt-1', [
+                  Component.text('${p2p.totalCompletedTransactions} of ${p2p.totalRequests} completed'),
+                ]),
+              ]),
+            ],
+          ),
+        ]),
+
+        // ── P2P Visual Graphs Row (Monthly Dual-Bar Inflow/Outflow + Payment Rails Conic Pie Chart) ──
+        div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5 pt-1', [
+          // 1. Monthly Deposits vs Withdrawals Dual-Bar Chart (2/3 width)
+          div(
+            classes: 'lg:col-span-2 p-5 rounded-2xl bg-zinc-50/50 border border-zinc-200/60 flex flex-col gap-4',
+            [
+              div(classes: 'flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-200/50 pb-3', [
+                div([
+                  h4(classes: 'text-xs font-black text-zinc-900', [Component.text('Monthly P2P Deposits vs Cashouts')]),
+                  p(classes: 'text-[10px] text-zinc-400 font-bold', [
+                    Component.text('Monthly gross volume comparison (₱) — ${DateTime.now().year}'),
+                  ]),
+                ]),
+                div(classes: 'flex items-center gap-3 text-[10px] font-extrabold', [
+                  div(classes: 'flex items-center gap-1.5', [
+                    div(classes: 'w-2.5 h-2.5 rounded-sm bg-[#0fa958]', []),
+                    span(classes: 'text-zinc-600', [Component.text('Deposits')]),
+                  ]),
+                  div(classes: 'flex items-center gap-1.5', [
+                    div(classes: 'w-2.5 h-2.5 rounded-sm bg-amber-500', []),
+                    span(classes: 'text-zinc-600', [Component.text('Cashouts')]),
+                  ]),
+                ]),
+              ]),
+
+              () {
+                final monthly = p2p.monthlyData;
+                final now = DateTime.now();
+                double maxMonthVol = 0.0;
+                for (var i = 0; i < 12; i++) {
+                  if (monthly.depositVolumes[i] > maxMonthVol) maxMonthVol = monthly.depositVolumes[i];
+                  if (monthly.withdrawalVolumes[i] > maxMonthVol) maxMonthVol = monthly.withdrawalVolumes[i];
+                }
+                if (maxMonthVol == 0.0) maxMonthVol = 1.0;
+
+                return div(classes: 'h-48 flex items-end justify-between gap-1 sm:gap-2 pt-4 px-1 relative', [
+                  for (var y = 1; y <= 3; y++)
+                    div(
+                      classes: 'absolute left-0 right-0 border-t border-dashed border-zinc-200/70 pointer-events-none',
+                      attributes: {'style': 'bottom: ${y * 28}%'},
+                      [],
+                    ),
+                  for (var i = 0; i < 12; i++)
+                    () {
+                      final depVol = monthly.depositVolumes[i];
+                      final withVol = monthly.withdrawalVolumes[i];
+                      final depHeight = (depVol / maxMonthVol * 88 + 4).clamp(4.0, 100.0);
+                      final withHeight = (withVol / maxMonthVol * 88 + 4).clamp(4.0, 100.0);
+                      final isCurrentMonth = i == now.month - 1;
+
+                      return div(classes: 'flex-1 flex flex-col items-center gap-1.5 z-10', [
+                        div(
+                          classes: 'w-full flex items-end justify-center gap-0.5 sm:gap-1',
+                          attributes: {'style': 'height: 140px'},
+                          [
+                            // Deposit bar
+                            div(
+                              classes:
+                                  'w-1/2 rounded-t-md transition-all ${isCurrentMonth ? "bg-[#0fa958]" : "bg-emerald-300 hover:bg-emerald-400"}',
+                              attributes: {
+                                'style': 'height: $depHeight%',
+                                'title': '${_monthNames[i]} Deposits: ₱${depVol.toStringAsFixed(2)} (${monthly.depositCounts[i]} txs)',
+                              },
+                              [],
+                            ),
+                            // Withdrawal bar
+                            div(
+                              classes:
+                                  'w-1/2 rounded-t-md transition-all ${isCurrentMonth ? "bg-amber-500" : "bg-amber-300 hover:bg-amber-400"}',
+                              attributes: {
+                                'style': 'height: $withHeight%',
+                                'title': '${_monthNames[i]} Cashouts: ₱${withVol.toStringAsFixed(2)} (${monthly.withdrawalCounts[i]} txs)',
+                              },
+                              [],
+                            ),
+                          ],
+                        ),
+                        span(
+                          classes:
+                              'text-[8px] font-extrabold ${isCurrentMonth ? "text-zinc-900 font-black" : "text-zinc-400"} uppercase',
+                          [Component.text(_monthLabels[i])],
+                        ),
+                      ]);
+                    }(),
+                ]);
+              }(),
+
+              // Monthly Summary Pill Footer
+              div(classes: 'flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] font-bold text-zinc-500 pt-2 border-t border-zinc-100', [
+                span([
+                  Component.text(
+                    'This Month (${_monthLabels[DateTime.now().month - 1]}): 🟢 ₱${p2p.monthlyData.depositVolumes[DateTime.now().month - 1].toStringAsFixed(0)} Inflow • 🟠 ₱${p2p.monthlyData.withdrawalVolumes[DateTime.now().month - 1].toStringAsFixed(0)} Outflow',
+                  ),
+                ]),
+                span(classes: 'text-[9px] font-extrabold text-zinc-400', [Component.text('12-Month Inflow/Outflow')]),
+              ]),
+            ],
+          ),
+
+          // 2. P2P Payment Rails Volume Pie / Donut Chart (1/3 width)
+          div(
+            classes: 'p-5 rounded-2xl bg-zinc-50/50 border border-zinc-200/60 flex flex-col gap-4 justify-between',
+            [
+              div([
+                h4(classes: 'text-xs font-black text-zinc-900', [Component.text('P2P Rails Volume Share')]),
+                p(classes: 'text-[10px] text-zinc-400 font-bold', [
+                  Component.text('Market share breakdown by payment rail'),
+                ]),
+              ]),
+
+              if (p2p.topPaymentMethods.isEmpty)
+                div(classes: 'py-12 text-center text-xs font-bold text-zinc-400', [
+                  Component.text('No completed P2P settlements recorded yet'),
+                ])
+              else ...[
+                // Conic Gradient Donut Pie
+                () {
+                  final colors = ['#0fa958', '#6366f1', '#f59e0b', '#0ea5e9', '#a855f7', '#ec4899'];
+                  final totalVol = p2p.totalP2PVolume > 0 ? p2p.totalP2PVolume : 1.0;
+                  final gradientParts = <String>[];
+                  double currentAngle = 0.0;
+
+                  for (var i = 0; i < p2p.topPaymentMethods.length; i++) {
+                    final item = p2p.topPaymentMethods[i];
+                    final share = (item.volume / totalVol) * 100.0;
+                    final nextAngle = currentAngle + share;
+                    final color = colors[i % colors.length];
+                    gradientParts.add('$color ${currentAngle.toStringAsFixed(1)}% ${nextAngle.toStringAsFixed(1)}%');
+                    currentAngle = nextAngle;
+                  }
+
+                  final conicString = gradientParts.join(', ');
+
+                  return div(classes: 'flex items-center justify-center py-1', [
+                    div(
+                      classes: 'relative flex items-center justify-center',
+                      attributes: {
+                        'style':
+                            'width:130px;height:130px;border-radius:50%;background:conic-gradient($conicString);'
+                            'box-shadow: 0 0 0 5px white, 0 0 0 6px #e5e7eb;',
+                      },
+                      [
+                        // Inner circle cutout for donut look
+                        div(
+                          classes:
+                              'w-16 h-16 rounded-full bg-white flex flex-col items-center justify-center shadow-inner',
+                          [
+                            span(classes: 'text-[10px] font-black text-zinc-800', [
+                              Component.text('${p2p.topPaymentMethods.length} Rails'),
+                            ]),
+                            span(classes: 'text-[7px] font-bold text-zinc-400 uppercase', [Component.text('P2P Mix')]),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ]);
+                }(),
+
+                // Legend List
+                div(classes: 'flex flex-col gap-1.5 pt-2 border-t border-zinc-100', [
+                  for (var i = 0; i < p2p.topPaymentMethods.length && i < 4; i++)
+                    () {
+                      final item = p2p.topPaymentMethods[i];
+                      final pct = p2p.totalP2PVolume > 0 ? (item.volume / p2p.totalP2PVolume) * 100 : 0.0;
+                      final colors = ['#0fa958', '#6366f1', '#f59e0b', '#0ea5e9', '#a855f7', '#ec4899'];
+                      final color = colors[i % colors.length];
+                      return div(classes: 'flex items-center justify-between text-[10px]', [
+                        div(classes: 'flex items-center gap-1.5', [
+                          div(classes: 'w-2 h-2 rounded-full', attributes: {'style': 'background:$color'}, []),
+                          span(classes: 'font-bold text-zinc-700', [Component.text(item.method)]),
+                        ]),
+                        div(classes: 'flex items-center gap-1.5 font-mono', [
+                          span(classes: 'font-black text-zinc-800', [Component.text('₱${item.volume.toStringAsFixed(0)}')]),
+                          span(classes: 'text-[9px] font-bold text-zinc-400 w-8 text-right', [
+                            Component.text('${pct.toStringAsFixed(0)}%'),
+                          ]),
+                        ]),
+                      ]);
+                    }(),
+                ]),
+              ],
+            ],
+          ),
+        ]),
+
+        // Bottom Row: Recent P2P Live Activity Stream
+        div(
+          classes: 'p-5 rounded-2xl bg-zinc-50/50 border border-zinc-200/60 flex flex-col gap-3',
+          [
+            div(classes: 'flex items-center justify-between', [
+              div([
+                h4(classes: 'text-xs font-black text-zinc-900', [Component.text('Recent P2P Activity Stream')]),
+                p(classes: 'text-[10px] text-zinc-400 font-bold', [
+                  Component.text('Real-time feed of fiat deposits and cashouts across platform'),
+                ]),
+              ]),
+              div(classes: 'flex items-center gap-2', [
+                a(
+                  href: '/deposits',
+                  classes: 'text-[10px] font-extrabold text-emerald-600 hover:text-emerald-700 transition-colors no-underline',
+                  [Component.text('Deposits Queue →')],
+                ),
+                span(classes: 'text-zinc-300 text-xs', [Component.text('•')]),
+                a(
+                  href: '/withdrawals',
+                  classes: 'text-[10px] font-extrabold text-amber-600 hover:text-amber-700 transition-colors no-underline',
+                  [Component.text('Cashouts Queue →')],
+                ),
+              ]),
+            ]),
+
+            if (p2p.recentActivities.isEmpty)
+              div(classes: 'py-8 text-center text-xs font-bold text-zinc-400', [
+                Component.text('No recent P2P activity recorded'),
+              ])
+            else
+              div(classes: 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5', [
+                for (final act in p2p.recentActivities)
+                  div(
+                    classes:
+                        'p-2.5 rounded-xl bg-white border border-zinc-200/70 shadow-sm flex items-center justify-between gap-3 text-xs',
+                    [
+                      div(classes: 'flex items-center gap-2.5 min-w-0', [
+                        span(
+                          classes:
+                              'px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${act.type == "DEPOSIT" ? "bg-emerald-50 text-[#0fa958] border border-emerald-200/60" : "bg-amber-50 text-amber-700 border border-amber-200/60"}',
+                          [Component.text(act.type)],
+                        ),
+                        div(classes: 'flex flex-col min-w-0', [
+                          span(classes: 'font-bold text-zinc-800 truncate max-w-[110px]', [
+                            Component.text(act.userName),
+                          ]),
+                          span(classes: 'text-[10px] text-zinc-400 font-medium', [
+                            Component.text(act.paymentMethod),
+                          ]),
+                        ]),
+                      ]),
+                      div(classes: 'flex items-center gap-2 flex-shrink-0 text-right', [
+                        div(classes: 'flex flex-col items-end', [
+                          span(classes: 'font-black text-zinc-900 font-mono', [
+                            Component.text('₱${act.amount.toStringAsFixed(2)}'),
+                          ]),
+                          div(classes: 'flex items-center gap-1.5', [
+                            span(
+                              classes:
+                                  'text-[9px] font-bold ${act.status == "APPROVED" ? "text-[#0fa958]" : (act.status.contains("PENDING") || act.status.contains("WAITING") ? "text-amber-600" : "text-zinc-400")}',
+                              [Component.text(act.status)],
+                            ),
+                            span(classes: 'text-[9px] text-zinc-400 font-medium', [
+                              Component.text('• ${_formatRelativeTime(act.timestamp)}'),
+                            ]),
+                          ]),
+                        ]),
+                      ]),
+                    ],
+                  ),
+              ]),
+          ],
+        ),
+      ],
+    );
   }
 }
 

@@ -82,6 +82,38 @@ class WithdrawalRequest {
       paymentMethod.toLowerCase().contains('erc20') ||
       paymentMethod.toLowerCase().contains('polygon');
 
+  WithdrawalRequest mergeWith(WithdrawalRequest other) {
+    return WithdrawalRequest(
+      id: id,
+      uid: other.uid.isNotEmpty ? other.uid : uid,
+      userName: (other.userName.isNotEmpty && other.userName != 'User') ? other.userName : userName,
+      userEmail: other.userEmail.isNotEmpty ? other.userEmail : userEmail,
+      amount: other.amount > 0 ? other.amount : amount,
+      feeAmount: other.feeAmount > 0 ? other.feeAmount : feeAmount,
+      netAmount: other.netAmount > 0 ? other.netAmount : (netAmount > 0 ? netAmount : (other.amount > 0 ? other.amount : amount)),
+      paymentMethod: (other.paymentMethod.isNotEmpty && other.paymentMethod != 'GCash') ? other.paymentMethod : paymentMethod,
+      userAccountName: other.userAccountName.isNotEmpty ? other.userAccountName : userAccountName,
+      userAccountNumber: other.userAccountNumber.isNotEmpty ? other.userAccountNumber : userAccountNumber,
+      userQrUrl: other.userQrUrl.isNotEmpty ? other.userQrUrl : userQrUrl,
+      referenceNumber: other.referenceNumber.isNotEmpty ? other.referenceNumber : referenceNumber,
+      proofImageUrl: other.proofImageUrl.isNotEmpty ? other.proofImageUrl : proofImageUrl,
+      status: (other.status != 'WAITING_FOR_AGENT' || status == 'WAITING_FOR_AGENT') ? other.status : status,
+      rejectionReason: other.rejectionReason ?? rejectionReason,
+      rejectionNote: other.rejectionNote ?? rejectionNote,
+      notes: other.notes ?? notes,
+      category: other.category ?? category,
+      adminUid: other.adminUid ?? adminUid,
+      agentId: other.agentId ?? agentId,
+      agentName: other.agentName ?? agentName,
+      agentPhone: other.agentPhone ?? agentPhone,
+      createdAt: createdAt > 0 ? createdAt : other.createdAt,
+      claimedAt: other.claimedAt ?? claimedAt,
+      proofSubmittedAt: other.proofSubmittedAt ?? proofSubmittedAt,
+      verifiedAt: other.verifiedAt ?? verifiedAt,
+      rawData: {...rawData, ...other.rawData},
+    );
+  }
+
   factory WithdrawalRequest.fromMap(String id, Map<String, dynamic> map) {
     int parseDateTime(dynamic val) {
       if (val is num) return val.toInt();
@@ -203,9 +235,19 @@ class WithdrawalRequest {
       return '';
     }
 
-    final amount = parseAmount(map['amount']);
-    final feeAmount = parseAmount(map['feeAmount']);
-    final netAmount = parseAmount(map['netAmount']) > 0 ? parseAmount(map['netAmount']) : (amount - feeAmount);
+    final amount = parseAmount(
+      map['amount'] ??
+      map['netAmount'] ??
+      map['withdrawalAmount'] ??
+      map['requestedAmount'] ??
+      map['grossAmount'] ??
+      map['payoutAmount'] ??
+      map['totalAmount'] ??
+      map['value']
+    );
+    final feeAmount = parseAmount(map['feeAmount'] ?? map['fee']);
+    final rawNetAmount = parseAmount(map['netAmount'] ?? map['payoutAmount'] ?? map['receiveAmount']);
+    final netAmount = rawNetAmount > 0 ? rawNetAmount : (amount - feeAmount > 0 ? (amount - feeAmount) : amount);
 
     final rawStatus = (map['status'] ?? map['state'] ?? 'WAITING_FOR_AGENT').toString().toUpperCase();
     String normalizedStatus;
@@ -309,7 +351,14 @@ class PlatformTransaction {
       id: id,
       uid: (map['uid'] ?? map['userId'] ?? '').toString(),
       type: (map['type'] ?? map['category'] ?? 'transaction').toString().toLowerCase(),
-      amount: parseAmount(map['amount'] ?? map['netAmount']),
+      amount: parseAmount(
+        map['amount'] ??
+        map['netAmount'] ??
+        map['withdrawalAmount'] ??
+        map['depositAmount'] ??
+        map['totalAmount'] ??
+        map['value']
+      ),
       status: (map['status'] ?? 'COMPLETED').toString().toUpperCase(),
       title: (map['title'] ?? map['name'] ?? map['type'] ?? 'Transaction').toString(),
       description: (map['desc'] ?? map['description'] ?? map['note'] ?? '').toString(),
@@ -341,7 +390,12 @@ final withdrawalRequestsStreamProvider = StreamProvider<List<WithdrawalRequest>>
     final Map<String, WithdrawalRequest> merged = {};
     for (final list in sourceMap.values) {
       for (final item in list) {
-        merged[item.id] = item;
+        if (!merged.containsKey(item.id)) {
+          merged[item.id] = item;
+        } else {
+          final existing = merged[item.id]!;
+          merged[item.id] = existing.mergeWith(item);
+        }
       }
     }
     final result = merged.values.toList()
@@ -576,30 +630,70 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
       final currentSnap = await docRef.get();
       if (currentSnap.exists) {
         final data = currentSnap.data()!;
-        final currentAgent = data['agentId'];
-        if (currentAgent != null && currentAgent != agentUid && data['status'] == 'AWAITING_AGENT_PAYMENT') {
-          final otherName = data['agentName'] ?? 'another agent';
-          _triggerToast('Order already claimed by $otherName. Conflict prevented.');
-          setState(() => _isProcessing = false);
+        final rawStatus = (data['status'] ?? '').toString().toUpperCase();
+        final currentAgent = (data['agentId'] ?? '').toString().trim();
+        final otherName = (data['agentName'] ?? (currentAgent.isNotEmpty ? currentAgent : 'another agent')).toString();
+
+        // 1. Check if already claimed by someone else
+        if (currentAgent.isNotEmpty && currentAgent != agentUid) {
+          _triggerToast('🔒 Action Blocked: Order was already claimed by $otherName. Conflict prevented.');
+          setState(() {
+            _isProcessing = false;
+            _activeInterruptWithdrawal = null;
+          });
+          _closeInspector();
+          return;
+        }
+
+        // 2. Check if status is no longer open/waiting
+        final isAvailable = rawStatus == 'WAITING_FOR_AGENT' ||
+            rawStatus == 'REQUESTED' ||
+            rawStatus == 'OPEN' ||
+            rawStatus == 'PENDING';
+
+        if (!isAvailable) {
+          _triggerToast('🔒 Action Blocked: Order is no longer available (Status: $rawStatus, handled by $otherName).');
+          setState(() {
+            _isProcessing = false;
+            _activeInterruptWithdrawal = null;
+          });
+          _closeInspector();
           return;
         }
       }
 
-      // Update withdrawal request
-      await docRef.set({
+      // Update withdrawal request across collections
+      final claimPayload = {
         'status': 'AWAITING_AGENT_PAYMENT',
+        'amount': req.amount,
+        'feeAmount': req.feeAmount,
+        'netAmount': req.netAmount,
+        'paymentMethod': req.paymentMethod,
+        'accountName': req.userAccountName,
+        'accountNumber': req.userAccountNumber,
+        'userAccountName': req.userAccountName,
+        'userAccountNumber': req.userAccountNumber,
+        'userId': req.uid,
+        'uid': req.uid,
+        'userName': req.userName,
         'agentId': agentUid,
         'agentName': agentName,
         'agentPhone': agentPhone,
         'claimedAt': nowMs,
         'updatedAt': nowMs,
-      }, SetOptions(merge: true));
+      };
+      await docRef.set(claimPayload, SetOptions(merge: true));
+
+      try {
+        await firestore.collection('withdrawals').doc(req.id).set(claimPayload, SetOptions(merge: true));
+      } catch (_) {}
 
       // Update linked transaction
       try {
         final txDocRef = firestore.collection('transactions').doc('p2p_with_${req.id}');
         await txDocRef.set({
           'status': 'AWAITING_AGENT_PAYMENT',
+          'amount': req.amount,
           'desc': 'Agent $agentName claimed your order and is transferring ₱${req.amount.toStringAsFixed(2)} to your ${req.paymentMethod}.',
           'agentId': agentUid,
           'agentName': agentName,
@@ -763,8 +857,19 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
 
     try {
       final docRef = firestore.collection('withdrawal_requests').doc(req.id);
-      await docRef.set({
+      final proofUpdateData = {
         'status': 'PENDING_CONFIRMATION',
+        'amount': req.amount,
+        'feeAmount': req.feeAmount,
+        'netAmount': req.netAmount,
+        'paymentMethod': req.paymentMethod,
+        'accountName': req.userAccountName,
+        'accountNumber': req.userAccountNumber,
+        'userAccountName': req.userAccountName,
+        'userAccountNumber': req.userAccountNumber,
+        'userId': req.uid,
+        'uid': req.uid,
+        'userName': req.userName,
         'referenceNumber': refNum,
         'proofImageUrl': finalProofUrl,
         'proofSubmittedAt': nowMs,
@@ -772,12 +877,18 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
         'agentId': req.agentId ?? agentUid,
         'agentName': agentName,
         'updatedAt': nowMs,
-      }, SetOptions(merge: true));
+      };
+      await docRef.set(proofUpdateData, SetOptions(merge: true));
+
+      try {
+        await firestore.collection('withdrawals').doc(req.id).set(proofUpdateData, SetOptions(merge: true));
+      } catch (_) {}
 
       // Update linked transactions
       try {
         final txDocData = {
           'status': 'PENDING_CONFIRMATION',
+          'amount': req.amount,
           'referenceNumber': refNum,
           'proofImageUrl': finalProofUrl,
           'desc': 'Agent transferred ₱${req.amount.toStringAsFixed(2)} via ${req.paymentMethod} (Ref: #$refNum). Awaiting final confirmation.',
@@ -859,26 +970,33 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
 
     try {
       final docRef = firestore.collection('withdrawal_requests').doc(req.id);
-      await docRef.set({
+      final approveUpdateData = {
         'status': 'APPROVED',
+        'amount': req.amount,
+        'feeAmount': req.feeAmount,
+        'netAmount': req.netAmount,
+        'paymentMethod': req.paymentMethod,
+        'accountName': req.userAccountName,
+        'accountNumber': req.userAccountNumber,
+        'userAccountName': req.userAccountName,
+        'userAccountNumber': req.userAccountNumber,
+        'userId': req.uid,
+        'uid': req.uid,
+        'userName': req.userName,
+        'referenceNumber': refNum,
+        'proofImageUrl': req.proofImageUrl,
         'adminUid': adminUid,
         'reviewedByAdminId': adminUid,
         'reviewedByAdminName': adminName,
         'verifiedAt': nowMs,
+        'approvedAt': nowMs,
         'action': 'APPROVED',
         'updatedAt': nowMs,
-      }, SetOptions(merge: true));
+      };
+      await docRef.set(approveUpdateData, SetOptions(merge: true));
 
       try {
-        await firestore.collection('withdrawals').doc(req.id).set({
-          'status': 'APPROVED',
-          'adminUid': adminUid,
-          'reviewedByAdminId': adminUid,
-          'reviewedByAdminName': adminName,
-          'verifiedAt': nowMs,
-          'action': 'APPROVED',
-          'updatedAt': nowMs,
-        }, SetOptions(merge: true));
+        await firestore.collection('withdrawals').doc(req.id).set(approveUpdateData, SetOptions(merge: true));
       } catch (_) {}
 
       // User Wallet Sub-collection Ledger: /wallets/{userId}/transactions/{requestId}
@@ -1090,8 +1208,19 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
 
       // 2. Mark withdrawal request as REJECTED in all target collections
       final docRef = firestore.collection('withdrawal_requests').doc(req.id);
-      await docRef.set({
+      final rejectUpdateData = {
         'status': 'REJECTED',
+        'amount': req.amount,
+        'feeAmount': req.feeAmount,
+        'netAmount': req.netAmount,
+        'paymentMethod': req.paymentMethod,
+        'accountName': req.userAccountName,
+        'accountNumber': req.userAccountNumber,
+        'userAccountName': req.userAccountName,
+        'userAccountNumber': req.userAccountNumber,
+        'userId': req.uid,
+        'uid': req.uid,
+        'userName': req.userName,
         'adminUid': adminUid,
         'reviewedByAdminId': adminUid,
         'reviewedByAdminName': adminName,
@@ -1101,21 +1230,11 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
         'rejectionNote': _customRejectNote.trim(),
         'verifiedAt': nowMs,
         'updatedAt': nowMs,
-      }, SetOptions(merge: true));
+      };
+      await docRef.set(rejectUpdateData, SetOptions(merge: true));
 
       try {
-        await firestore.collection('withdrawals').doc(req.id).set({
-          'status': 'REJECTED',
-          'adminUid': adminUid,
-          'reviewedByAdminId': adminUid,
-          'reviewedByAdminName': adminName,
-          'reviewedAt': nowMs,
-          'action': 'REJECTED',
-          'rejectionReason': finalReason,
-          'rejectionNote': _customRejectNote.trim(),
-          'verifiedAt': nowMs,
-          'updatedAt': nowMs,
-        }, SetOptions(merge: true));
+        await firestore.collection('withdrawals').doc(req.id).set(rejectUpdateData, SetOptions(merge: true));
       } catch (_) {}
 
       // Update User Wallet Sub-collection: /wallets/{userId}/transactions/{requestId}
@@ -1540,9 +1659,30 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
 
     final pendingDepositsCount = allDeposits.where((d) => !d.isOnChain && (d.status == 'PENDING_AGENT' || d.status == 'PENDING_VERIFICATION')).length;
 
-    // Check for NEW unhandled incoming requests to trigger Interrupt Popup (Excluding On-Chain Crypto)
+    // Auto-dismiss active interrupt if it was claimed, proof submitted, or approved by another agent
+    if (_activeInterruptWithdrawal != null) {
+      final currentMatch = allWithdrawals.where((w) => w.id == _activeInterruptWithdrawal!.id).firstOrNull;
+      if (currentMatch == null ||
+          currentMatch.status != 'WAITING_FOR_AGENT' ||
+          (currentMatch.agentId != null && currentMatch.agentId!.isNotEmpty)) {
+        _activeInterruptWithdrawal = null;
+      }
+    }
+
+    // Auto-sync active inspector to real-time stream data
+    if (_inspectingWithdrawal != null) {
+      final updated = allWithdrawals.where((w) => w.id == _inspectingWithdrawal!.id).firstOrNull;
+      if (updated != null) {
+        _inspectingWithdrawal = updated;
+      }
+    }
+
+    // Check for NEW strictly unhandled incoming requests to trigger Interrupt Popup (Excluding On-Chain Crypto)
     final unhandledNewRequests = allWithdrawals.where((w) {
-      return !w.isOnChain && (w.status == 'WAITING_FOR_AGENT' && w.agentId == null) &&
+      final isUnassigned = w.agentId == null || w.agentId!.isEmpty;
+      return !w.isOnChain &&
+          (w.status == 'WAITING_FOR_AGENT' || w.status == 'REQUESTED' || w.status == 'OPEN' || w.status == 'PENDING') &&
+          isUnassigned &&
           !_acknowledgedInterruptIds.contains(w.id);
     }).toList();
 
@@ -2633,7 +2773,15 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
 
               // Right: Primary Step Progression Actions
               div(classes: 'flex items-center gap-2', [
-                if (req.status == 'WAITING_FOR_AGENT')
+                if (req.agentId != null && req.agentId!.isNotEmpty && !isClaimedByMe && req.status != 'APPROVED' && req.status != 'REJECTED')
+                  span(
+                    classes: 'px-4 py-2 rounded-2xl bg-zinc-200 text-zinc-700 font-bold text-xs flex items-center gap-1.5',
+                    [
+                      span([Component.text('🔒')]),
+                      Component.text('Claimed by ${req.agentName ?? req.agentId}'),
+                    ],
+                  )
+                else if (req.status == 'WAITING_FOR_AGENT')
                   button(
                     onClick: () => _executeClaimCashout(req, adminUser),
                     classes:

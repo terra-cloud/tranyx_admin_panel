@@ -101,36 +101,38 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
           m.contains('blockchain');
     }
 
-    // 1. Gather all unassigned deposit requests needing immediate attention (Excluding On-Chain Crypto/USDT)
+    // 1. Gather all strictly unassigned deposit requests needing immediate attention (Excluding On-Chain Crypto/USDT)
     final unhandledDeposits = deposits.where((d) {
       if (isOnChainCrypto(d.paymentMethod)) return false;
-      final isActionable = ((d.status == 'PENDING_AGENT' && (d.assignedAgentId == null || d.assignedAgentId!.isEmpty)) ||
-              d.status == 'PENDING_VERIFICATION' ||
-              d.status == 'AWAITING_QR' ||
-              d.status == 'WAITING_FOR_QR' ||
-              d.status == 'REQUESTED' ||
-              d.status == 'OPEN' ||
-              d.status == 'PENDING') &&
-          d.status != 'APPROVED' &&
-          d.status != 'REJECTED' &&
-          d.status != 'CANCELLED';
-      return isActionable && !_acknowledgedInterruptIds.contains(d.id);
+      final isUnassigned = d.assignedAgentId == null || d.assignedAgentId!.isEmpty;
+      final isWaitingStatus = d.status == 'PENDING_AGENT' ||
+          d.status == 'AWAITING_QR' ||
+          d.status == 'WAITING_FOR_QR' ||
+          d.status == 'REQUESTED' ||
+          d.status == 'OPEN' ||
+          d.status == 'PENDING';
+      final isResolved = d.status == 'APPROVED' ||
+          d.status == 'REJECTED' ||
+          d.status == 'CANCELLED' ||
+          d.status == 'AWAITING_PAYMENT';
+      return isUnassigned && isWaitingStatus && !isResolved && !_acknowledgedInterruptIds.contains(d.id);
     }).toList();
 
-    // 2. Gather all unassigned cashout requests needing immediate attention (Excluding On-Chain Crypto/USDT)
+    // 2. Gather all strictly unassigned cashout requests needing immediate attention (Excluding On-Chain Crypto/USDT)
     final unhandledWithdrawals = withdrawals.where((w) {
       if (isOnChainCrypto(w.paymentMethod)) return false;
-      final isActionable = (w.status == 'WAITING_FOR_AGENT' ||
-              w.status == 'PENDING_CONFIRMATION' ||
-              w.status == 'PENDING_AGENT' ||
-              w.status == 'REQUESTED' ||
-              w.status == 'OPEN' ||
-              w.status == 'PENDING' ||
-              (w.agentId == null || w.agentId!.isEmpty)) &&
-          w.status != 'APPROVED' &&
-          w.status != 'REJECTED' &&
-          w.status != 'CANCELLED';
-      return isActionable && !_acknowledgedInterruptIds.contains(w.id);
+      final isUnassigned = w.agentId == null || w.agentId!.isEmpty;
+      final isWaitingStatus = w.status == 'WAITING_FOR_AGENT' ||
+          w.status == 'PENDING_AGENT' ||
+          w.status == 'REQUESTED' ||
+          w.status == 'OPEN' ||
+          w.status == 'PENDING';
+      final isResolved = w.status == 'APPROVED' ||
+          w.status == 'REJECTED' ||
+          w.status == 'CANCELLED' ||
+          w.status == 'AWAITING_AGENT_PAYMENT' ||
+          w.status == 'PENDING_CONFIRMATION';
+      return isUnassigned && isWaitingStatus && !isResolved && !_acknowledgedInterruptIds.contains(w.id);
     }).toList();
 
     // Check if new items arrived
@@ -165,7 +167,7 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
       }
     }
 
-    // Set active interrupt item if not currently displaying or current is resolved
+    // Set active interrupt item if not currently displaying or current is resolved/claimed
     if (actionableItems.isNotEmpty) {
       if (_activeInterruptItem == null ||
           !actionableItems.any((item) => item.id == _activeInterruptItem!.id)) {

@@ -75,6 +75,35 @@ class DepositRequest {
     this.rawData = const {},
   });
 
+  DepositRequest mergeWith(DepositRequest other) {
+    return DepositRequest(
+      id: id,
+      userId: other.userId.isNotEmpty ? other.userId : userId,
+      userName: (other.userName.isNotEmpty && other.userName != 'Unknown User') ? other.userName : userName,
+      userEmail: other.userEmail.isNotEmpty ? other.userEmail : userEmail,
+      amount: other.amount > 0 ? other.amount : amount,
+      paymentMethod: (other.paymentMethod.isNotEmpty && other.paymentMethod != 'GCash') ? other.paymentMethod : paymentMethod,
+      referenceNumber: (other.referenceNumber.isNotEmpty && other.referenceNumber != 'N/A') ? other.referenceNumber : referenceNumber,
+      status: (other.status != 'PENDING_AGENT' || status == 'PENDING_AGENT') ? other.status : status,
+      submittedAt: submittedAt > 0 ? submittedAt : other.submittedAt,
+      receiptUrl: other.receiptUrl.isNotEmpty ? other.receiptUrl : receiptUrl,
+      targetWallet: (other.targetWallet.isNotEmpty && other.targetWallet != 'Main Wallet') ? other.targetWallet : targetWallet,
+      assignedAgentId: other.assignedAgentId ?? assignedAgentId,
+      assignedAgentName: other.assignedAgentName ?? assignedAgentName,
+      assignedAt: other.assignedAt ?? assignedAt,
+      agentQrUrl: other.agentQrUrl ?? agentQrUrl,
+      agentPaymentNumber: other.agentPaymentNumber ?? agentPaymentNumber,
+      agentPaymentName: other.agentPaymentName ?? agentPaymentName,
+      reviewedByAdminId: other.reviewedByAdminId ?? reviewedByAdminId,
+      reviewedByAdminName: other.reviewedByAdminName ?? reviewedByAdminName,
+      reviewedAt: other.reviewedAt ?? reviewedAt,
+      action: other.action ?? action,
+      rejectionReason: other.rejectionReason ?? rejectionReason,
+      rejectionNote: other.rejectionNote ?? rejectionNote,
+      rawData: {...rawData, ...other.rawData},
+    );
+  }
+
   factory DepositRequest.fromMap(String id, Map<String, dynamic> map) {
     int parseDateTime(dynamic val) {
       if (val is num) return val.toInt();
@@ -138,33 +167,23 @@ class DepositRequest {
         'proofOfPayment',
         'proof_of_payment',
         'proofOfPaymentUrl',
-        'proof_of_payment_url',
-        'paymentProof',
-        'payment_proof',
-        'paymentProofUrl',
-        'payment_proof_url',
-        'paymentScreenshot',
-        'payment_screenshot',
         'screenshotUrl',
-        'screenshot_url',
         'screenshot',
         'imageUrl',
         'image_url',
-        'image',
-        'proofImage',
-        'proof_image',
-        'receiptImage',
-        'receipt_image',
-        'attachmentUrl',
-        'attachment_url',
+        'paymentProofUrl',
+        'paymentProof',
+        'payment_proof',
+        'transferProof',
+        'transfer_proof',
+        'receipt',
+        'proof',
         'attachment',
         'attachments',
         'fileUrl',
         'file_url',
         'mediaUrl',
         'media_url',
-        'proof',
-        'receipt',
         'photoUrl',
         'photo_url',
         'photo',
@@ -286,12 +305,22 @@ class DepositRequest {
 
     final formattedAgentName = formatAgentName(rawAgentName, rawAgentId);
 
+    final amount = parseAmount(
+      map['amount'] ??
+      map['depositAmount'] ??
+      map['requestedAmount'] ??
+      map['grossAmount'] ??
+      map['netAmount'] ??
+      map['totalAmount'] ??
+      map['value']
+    );
+
     return DepositRequest(
       id: id,
       userId: (map['userId'] ?? map['uid'] ?? '').toString(),
       userName: (map['userName'] ?? map['userFullName'] ?? map['name'] ?? 'Unknown User').toString(),
       userEmail: (map['userEmail'] ?? map['email'] ?? '').toString(),
-      amount: parseAmount(map['amount'] ?? map['depositAmount']),
+      amount: amount,
       paymentMethod: normalizedMethod,
       referenceNumber: rawRef,
       status: normalizedStatus,
@@ -469,7 +498,12 @@ final depositRequestsStreamProvider = StreamProvider<List<DepositRequest>>((ref)
     final Map<String, DepositRequest> merged = {};
     for (final list in sourceMap.values) {
       for (final item in list) {
-        merged[item.id] = item;
+        if (!merged.containsKey(item.id)) {
+          merged[item.id] = item;
+        } else {
+          final existing = merged[item.id]!;
+          merged[item.id] = existing.mergeWith(item);
+        }
       }
     }
     final result = merged.values.toList()
