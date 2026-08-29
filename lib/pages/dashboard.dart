@@ -2447,18 +2447,18 @@ class _DashboardState extends State<Dashboard> {
           ),
         ]),
 
-        // Table (20px data & legends)
+        // Table (20px column headers, 16px data items, 13px subtitles)
         if (filteredList.isEmpty)
           div(classes: 'py-12 text-center flex flex-col items-center gap-2', [
             span(classes: 'text-2xl', [Component.text('🔍')]),
-            span(classes: 'text-base lg:text-[20px] font-bold text-zinc-600', [Component.text('No agents match this filter status')]),
+            span(classes: 'text-[16px] font-bold text-zinc-600', [Component.text('No agents match this filter status')]),
           ])
         else
           div(classes: 'overflow-x-auto w-full', [
-            div(classes: 'min-w-[800px] flex flex-col', [
-              // Table Header (Legends: 20px)
+            div(classes: 'min-w-[850px] flex flex-col', [
+              // Table Header (Column headers: 20px)
               div(
-                classes: 'grid grid-cols-12 text-sm sm:text-base lg:text-[18px] font-extrabold text-zinc-400 uppercase tracking-wider px-3 pb-3 border-b border-zinc-100',
+                classes: 'grid grid-cols-12 text-[20px] font-extrabold text-zinc-400 uppercase tracking-wider px-3 pb-3 border-b border-zinc-100',
                 [
                   div(classes: 'col-span-5', [Component.text('Agent / Staff Member')]),
                   div(classes: 'col-span-2 text-center', [Component.text('Role')]),
@@ -2467,13 +2467,13 @@ class _DashboardState extends State<Dashboard> {
                   div(classes: 'col-span-1 text-right', [Component.text('Ping')]),
                 ],
               ),
-              // Table Rows (Data: 20px)
+              // Table Rows (Data items: 16px, Subtitle/email: 13px)
               for (final agent in filteredList)
                 div(
                   classes:
                       'grid grid-cols-12 items-center py-3.5 px-3 border-b border-zinc-50 last:border-0 hover:bg-zinc-50/70 rounded-xl transition-colors',
                   [
-                    // Agent Avatar & Name (20px data)
+                    // Agent Avatar & Name (Name: 16px, Email: 13px)
                     div(classes: 'col-span-5 flex items-center gap-3.5 min-w-0 pr-3', [
                       div(
                         classes: 'relative w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-zinc-700 text-sm flex-shrink-0 overflow-hidden shadow-sm',
@@ -2493,24 +2493,24 @@ class _DashboardState extends State<Dashboard> {
                         ],
                       ),
                       div(classes: 'flex flex-col min-w-0 leading-tight', [
-                        span(classes: 'text-base sm:text-lg lg:text-[20px] font-bold text-zinc-900', [Component.text(agent.name)]),
-                        span(classes: 'text-xs sm:text-sm lg:text-[15px] text-zinc-400 font-normal truncate mt-0.5', [Component.text(agent.email)]),
+                        span(classes: 'text-[16px] font-bold text-zinc-900', [Component.text(agent.name)]),
+                        span(classes: 'text-[13px] text-zinc-400 font-normal truncate mt-0.5', [Component.text(agent.email)]),
                       ]),
                     ]),
 
-                    // Role (20px data)
+                    // Role (Data item: 16px)
                     div(classes: 'col-span-2 flex justify-center', [
                       span(
-                        classes: 'text-xs sm:text-sm lg:text-[16px] font-semibold uppercase tracking-wider px-3 py-1 rounded-lg bg-zinc-100/70 text-zinc-700',
+                        classes: 'text-[16px] font-semibold uppercase tracking-wider px-3 py-1 rounded-lg bg-zinc-100/70 text-zinc-700',
                         [Component.text(agent.role)],
                       ),
                     ]),
 
-                    // Status Pill (20px data)
+                    // Status Pill (Data item: 16px)
                     div(classes: 'col-span-2 flex justify-center', [
                       span(
                         classes:
-                            'inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs sm:text-sm lg:text-[16px] font-bold uppercase tracking-wider border '
+                            'inline-flex items-center gap-2 px-3 py-1 rounded-full text-[16px] font-bold uppercase tracking-wider border '
                             '${agent.isBusy ? "bg-amber-50 text-amber-700 border-amber-200/60" : agent.isWaiting ? "bg-emerald-50 text-emerald-700 border-emerald-200/60" : agent.isAway ? "bg-orange-50 text-orange-700 border-orange-200/60" : "bg-zinc-50 text-zinc-400 border-zinc-200/50"}',
                         [
                           span(
@@ -2532,20 +2532,20 @@ class _DashboardState extends State<Dashboard> {
                       ),
                     ]),
 
-                    // Current Task / Activity (20px data)
+                    // Current Task / Activity (Data item: 16px)
                     div(classes: 'col-span-2 flex flex-col justify-center min-w-0 pr-2', [
                       span(
                         classes:
-                            'text-sm sm:text-base lg:text-[18px] truncate '
+                            'text-[16px] truncate '
                             '${agent.isBusy ? "text-amber-700 font-bold" : agent.isWaiting ? "text-emerald-700 font-medium" : agent.isAway ? "text-orange-700 font-medium" : "text-zinc-400 font-normal"}',
                         [Component.text(agent.currentTaskDetail)],
                       ),
                     ]),
 
-                    // Ping (20px data)
+                    // Ping (Data item: 16px)
                     div(classes: 'col-span-1 text-right', [
                       span(
-                        classes: 'text-xs sm:text-sm lg:text-[16px] font-normal text-zinc-400',
+                        classes: 'text-[16px] font-normal text-zinc-400',
                         [
                           Component.text(agent.lastSeenAt > 0 ? _formatRelativeTime(agent.lastSeenAt) : '-'),
                         ],
@@ -2564,7 +2564,7 @@ class _DashboardState extends State<Dashboard> {
     return button(
       onClick: () => setState(() => _rosterFilter = key),
       classes:
-          'px-3 py-1.5 rounded-xl text-xs sm:text-sm lg:text-[15px] font-bold transition-all border-0 cursor-pointer '
+          'px-3 py-1.5 rounded-xl text-[14px] lg:text-[16px] font-bold transition-all border-0 cursor-pointer '
           '${isSelected ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800 bg-transparent"}',
       [Component.text(labelText)],
     );
