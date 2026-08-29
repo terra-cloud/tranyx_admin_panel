@@ -173,7 +173,7 @@ class PresenceService {
 
     // Cancel existing timer if any
     _presenceTimer?.cancel();
-    _presenceTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    _presenceTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       final isHidden = web.document.visibilityState == 'hidden';
       _pingPresence(
         firestore: firestore,
@@ -233,10 +233,10 @@ class PresenceService {
       }).toJS,
     );
 
-    // User activity listener with 5s debounce
+    // User activity listener with 3s debounce
     void onUserActivity() {
       final now = DateTime.now().millisecondsSinceEpoch;
-      if (now - _lastActivityPing > 5000 && _currentAgentUid != null) {
+      if (now - _lastActivityPing > 3000 && _currentAgentUid != null) {
         _lastActivityPing = now;
         _pingPresence(
           firestore: firestore,
@@ -253,6 +253,7 @@ class PresenceService {
 
     web.document.addEventListener('click', ((web.Event e) => onUserActivity()).toJS);
     web.document.addEventListener('keydown', ((web.Event e) => onUserActivity()).toJS);
+    web.document.addEventListener('mousemove', ((web.Event e) => onUserActivity()).toJS);
 
     // Visibility change listener (tab switched / minimized)
     web.document.addEventListener(
