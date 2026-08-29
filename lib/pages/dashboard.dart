@@ -1380,14 +1380,27 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
     result.sort((agentA, agentB) {
       int rank(String s) {
         switch (s) {
-          case 'busy': return 0;
-          case 'online': return 1;
-          case 'away': return 2;
-          default: return 3;
+          case 'busy':
+            return 0;
+          case 'online':
+          case 'waiting':
+          case 'active':
+            return 1;
+          case 'away':
+            return 2;
+          default:
+            return 3;
         }
       }
-      final cmp = rank(agentA.presenceStatus).compareTo(rank(agentB.presenceStatus));
-      if (cmp != 0) return cmp;
+      final cmpPresence = rank(agentA.presenceStatus).compareTo(rank(agentB.presenceStatus));
+      if (cmpPresence != 0) return cmpPresence;
+      final cmpCsat = agentB.csat.compareTo(agentA.csat);
+      if (cmpCsat != 0) return cmpCsat;
+      final cmpResolved = agentB.totalResolved.compareTo(agentA.totalResolved);
+      if (cmpResolved != 0) return cmpResolved;
+      final totalA = agentA.p2pHandled + agentA.ticketsHandled + agentA.liveSupportHandled;
+      final totalB = agentB.p2pHandled + agentB.ticketsHandled + agentB.liveSupportHandled;
+      if (totalB != totalA) return totalB.compareTo(totalA);
       return agentA.name.compareTo(agentB.name);
     });
 
@@ -2718,8 +2731,8 @@ class _DashboardState extends State<Dashboard> {
                         )
                       else
                         span(
-                          classes: 'text-xs font-medium text-zinc-400',
-                          [Component.text('-')],
+                          classes: 'text-xs font-semibold text-zinc-500 bg-zinc-100/90 px-2 py-0.5 rounded-md border border-zinc-200/50',
+                          [Component.text('0%')],
                         ),
                     ]),
 
@@ -3350,7 +3363,7 @@ class _DashboardState extends State<Dashboard> {
             : 'bg-orange-100 text-orange-900 border-orange-300');
 
     final initials = agent.name.length >= 2 ? agent.name.substring(0, 2).toUpperCase() : agent.name.toUpperCase();
-    final csatText = agent.csat > 0 ? '${agent.csat.toStringAsFixed(1)}% CSAT' : '—';
+    final csatText = agent.csat > 0 ? '${agent.csat.toStringAsFixed(1)}% CSAT' : '0% CSAT';
     final resolvedShareText = totalPlatformResolved > 0
         ? '(${agent.totalResolved} ÷ $totalPlatformResolved) × 100'
         : '${agent.totalResolved} resolved';
