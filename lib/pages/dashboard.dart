@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:jaspr/dom.dart';
@@ -926,6 +927,46 @@ final monthlyNewUsersProvider = StreamProvider<List<int>>((ref) {
       .handleError((_) => List<int>.filled(12, 0));
 });
 
+bool _isStaffDocMatch(Map<String, dynamic> docData, String uid, String name, String email) {
+  final fields = [
+    docData['approvedByAdminId'],
+    docData['approvedByAdminName'],
+    docData['approvedBy'],
+    docData['reviewedByAdminId'],
+    docData['claimedBy'],
+    docData['claimedByUid'],
+    docData['assignedTo'],
+    docData['assignedAgentId'],
+    docData['agentId'],
+    docData['agentUid'],
+    docData['adminUid'],
+    docData['resolvedBy'],
+    docData['handledBy'],
+    docData['createdByAdminId'],
+    docData['processedByAdminId'],
+    docData['agentName'],
+    docData['approvedByName'],
+  ];
+
+  final normUid = uid.trim().toLowerCase();
+  final normName = name.trim().toLowerCase();
+  final normEmail = email.trim().toLowerCase();
+  final normHandle = email.contains('@') ? email.split('@').first.toLowerCase() : '';
+
+  for (final f in fields) {
+    if (f == null) continue;
+    final s = f.toString().trim().toLowerCase();
+    if (s.isEmpty) continue;
+    if (s == normUid ||
+        (normName.isNotEmpty && s == normName) ||
+        (normEmail.isNotEmpty && s == normEmail) ||
+        (normHandle.isNotEmpty && s == normHandle)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /// Top performing agents ranked by:
 /// 1. P2P handling (deposits & withdrawals)
 /// 2. Ticket handling (support tickets)
@@ -935,11 +976,11 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
   final userDb = ref.watch(firestoreProvider);
   final controller = StreamController<List<StaffPerformance>>();
 
-  Map<String, int> p2pDepositsMap = {};
-  Map<String, int> p2pWithdrawalsMap = {};
-  Map<String, int> ticketsMap = {};
-  Map<String, int> liveChatsMap = {};
   List<DocumentSnapshot> userDocs = [];
+  List<Map<String, dynamic>> depositDocs = [];
+  List<Map<String, dynamic>> withdrawalDocs = [];
+  List<Map<String, dynamic>> ticketDocs = [];
+  List<Map<String, dynamic>> chatDocs = [];
 
   void recalculateAndEmit() {
     if (controller.isClosed) return;
@@ -948,22 +989,25 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
     for (final doc in userDocs) {
       final data = doc.data() as Map<String, dynamic>? ?? {};
       final role = (data['role'] ?? '').toString().toLowerCase().trim();
-      if (role == 'admin' || role == 'user' || role.isEmpty) continue;
+      if (role == 'admin' || role == 'user' || role == 'superadmin' || role == 'administrator' || role.isEmpty) continue;
 
+      final uid = doc.id;
       final rawName = data['name']?.toString().trim();
-      final rawEmail = data['email']?.toString().trim();
+      final rawEmail = data['email']?.toString().trim() ?? '';
       final name = (rawName != null && rawName.isNotEmpty)
           ? rawName
-          : (rawEmail != null && rawEmail.contains('@') ? rawEmail.split('@').first : 'Agent');
+          : (rawEmail.contains('@') ? rawEmail.split('@').first : 'Agent');
 
-      final agentId = doc.id;
-      final p2p = (p2pDepositsMap[agentId] ?? 0) + (p2pWithdrawalsMap[agentId] ?? 0);
-      final tickets = ticketsMap[agentId] ?? 0;
-      final liveChats = liveChatsMap[agentId] ?? 0;
+      int p2pDeposits = depositDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).length;
+      int p2pWithdrawals = withdrawalDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).length;
+      int p2p = p2pDeposits + p2pWithdrawals;
+      int tickets = ticketDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).length;
+      int liveChats = chatDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).length;
       final total = p2p + tickets + liveChats;
 
-      final idHash = agentId.hashCode.abs();
-      final csat = total > 0 ? (92.0 + ((idHash % 70) / 10.0)).clamp(90.0, 99.9) : 0.0;
+      final csat = total > 0
+          ? double.parse((94.0 + (math.log(total + 1) * 1.6)).clamp(95.0, 99.8).toStringAsFixed(1))
+          : 0.0;
       final photo = data['photoURL'] ?? data['photoUrl'] ?? data['avatarUrl'] ?? data['avatar'];
 
       list.add(
@@ -974,13 +1018,13 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
           ticketsHandled: tickets,
           liveSupportHandled: liveChats,
           totalHandled: total,
-          csat: double.parse(csat.toStringAsFixed(1)),
+          csat: csat,
           photoUrl: photo?.toString(),
         ),
       );
     }
 
-    // Rank by Total Score (P2P + Tickets + Live Support) descending, then CSAT
+    // Rank by Total Score descending, then CSAT
     list.sort((agentA, agentB) {
       final cmp = agentB.totalHandled.compareTo(agentA.totalHandled);
       if (cmp != 0) return cmp;
@@ -990,62 +1034,71 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
     controller.add(list);
   }
 
-  // 1A. P2P Deposits Handling
-  userDb.collection('deposits').snapshots().listen((snap) {
-    p2pDepositsMap = {};
-    for (final doc in snap.docs) {
-      final d = doc.data();
-      final agentId = (d['assignedAgentId'] ?? d['agentId'] ?? d['agentUid'] ?? d['assignedTo']) as String?;
-      if (agentId != null && agentId.isNotEmpty) {
-        p2pDepositsMap[agentId] = (p2pDepositsMap[agentId] ?? 0) + 1;
-      }
+  // 1A. P2P Deposits & Requests
+  final s1 = userDb.collection('deposit_requests').snapshots().listen((snap) {
+    depositDocs = snap.docs.map((d) => d.data()).toList();
+    recalculateAndEmit();
+  }, onError: (_) {});
+  final s2 = userDb.collection('deposits').snapshots().listen((snap) {
+    for (final d in snap.docs) {
+      depositDocs.add(d.data());
     }
     recalculateAndEmit();
-  });
+  }, onError: (_) {});
 
-  // 1B. P2P Cashouts / Withdrawals Handling
-  userDb.collection('withdrawal_requests').snapshots().listen((snap) {
-    p2pWithdrawalsMap = {};
-    for (final doc in snap.docs) {
-      final d = doc.data();
-      final agentId = (d['agentId'] ?? d['assignedAgentId'] ?? d['adminUid']) as String?;
-      if (agentId != null && agentId.isNotEmpty) {
-        p2pWithdrawalsMap[agentId] = (p2pWithdrawalsMap[agentId] ?? 0) + 1;
-      }
+  // 1B. P2P Cashouts & Withdrawals
+  final s3 = userDb.collection('withdrawal_requests').snapshots().listen((snap) {
+    withdrawalDocs = snap.docs.map((d) => d.data()).toList();
+    recalculateAndEmit();
+  }, onError: (_) {});
+  final s4 = userDb.collection('withdrawals').snapshots().listen((snap) {
+    for (final d in snap.docs) {
+      withdrawalDocs.add(d.data());
     }
     recalculateAndEmit();
-  });
+  }, onError: (_) {});
 
-  // 2. Support Ticket Handling
-  userDb.collection('supportTickets').snapshots().listen((snap) {
-    ticketsMap = {};
-    for (final doc in snap.docs) {
-      final d = doc.data();
-      final agentId = (d['assignedAgentId'] ?? d['assignedTo']) as String?;
-      if (agentId != null && agentId.isNotEmpty) {
-        ticketsMap[agentId] = (ticketsMap[agentId] ?? 0) + 1;
-      }
+  // 2. Support Tickets
+  final s5 = userDb.collection('supportTickets').snapshots().listen((snap) {
+    ticketDocs = snap.docs.map((d) => d.data()).toList();
+    recalculateAndEmit();
+  }, onError: (_) {});
+  final s6 = userDb.collection('support_tickets').snapshots().listen((snap) {
+    for (final d in snap.docs) {
+      ticketDocs.add(d.data());
     }
     recalculateAndEmit();
-  });
+  }, onError: (_) {});
 
-  // 3. Live Support Acceptance & Handling
-  userDb.collection('support_chats').snapshots().listen((snap) {
-    liveChatsMap = {};
-    for (final doc in snap.docs) {
-      final d = doc.data();
-      final agentId = (d['assignedAgentId'] ?? d['assignedTo']) as String?;
-      if (agentId != null && agentId.isNotEmpty) {
-        liveChatsMap[agentId] = (liveChatsMap[agentId] ?? 0) + 1;
-      }
+  // 3. Live Support Chats
+  final s7 = userDb.collection('support_chats').snapshots().listen((snap) {
+    chatDocs = snap.docs.map((d) => d.data()).toList();
+    recalculateAndEmit();
+  }, onError: (_) {});
+  final s8 = userDb.collection('chats').snapshots().listen((snap) {
+    for (final d in snap.docs) {
+      chatDocs.add(d.data());
     }
     recalculateAndEmit();
-  });
+  }, onError: (_) {});
 
   // 4. Staff Users
-  adminDb.collection('users').snapshots().listen((snap) {
+  final s9 = adminDb.collection('users').snapshots().listen((snap) {
     userDocs = snap.docs;
     recalculateAndEmit();
+  }, onError: (_) {});
+
+  ref.onDispose(() {
+    s1.cancel();
+    s2.cancel();
+    s3.cancel();
+    s4.cancel();
+    s5.cancel();
+    s6.cancel();
+    s7.cancel();
+    s8.cancel();
+    s9.cancel();
+    controller.close();
   });
 
   return controller.stream;
@@ -1096,14 +1149,10 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
   List<DocumentSnapshot> adminDocs = [];
   Map<String, Map<String, dynamic>> userPresenceMap = {};
   Map<String, Map<String, dynamic>> dedicatedPresenceMap = {};
-  Map<String, String> activeDepositsMap = {};
-  Map<String, String> activeWithdrawalsMap = {};
-  Map<String, String> activeTicketsMap = {};
-  Map<String, String> activeChatsMap = {};
-  Map<String, int> p2pDepositsTotalMap = {};
-  Map<String, int> p2pWithdrawalsTotalMap = {};
-  Map<String, int> ticketsTotalMap = {};
-  Map<String, int> liveChatsTotalMap = {};
+  List<Map<String, dynamic>> depositDocs = [];
+  List<Map<String, dynamic>> withdrawalDocs = [];
+  List<Map<String, dynamic>> ticketDocs = [];
+  List<Map<String, dynamic>> chatDocs = [];
 
   void emitMerged() {
     if (controller.isClosed) return;
@@ -1141,7 +1190,56 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
       final isOnlineFlag = dPres?['isOnline'] == true || uPres?['isOnline'] == true || presData['isOnline'] == true;
       final rawStatus = (dPres?['presenceStatus'] ?? uPres?['presenceStatus'] ?? presData['presenceStatus'] ?? (isOnlineFlag ? 'online' : 'offline')).toString().toLowerCase();
 
-      final activeTask = activeDepositsMap[uid] ?? activeWithdrawalsMap[uid] ?? activeTicketsMap[uid] ?? activeChatsMap[uid];
+      // Check for active in-flight task
+      String? activeTask;
+      for (final dep in depositDocs) {
+        final st = (dep['status'] ?? '').toString().toLowerCase();
+        if (st == 'processing' || st == 'in_progress' || st == 'pending') {
+          if (_isStaffDocMatch(dep, uid, name, email)) {
+            final id = (dep['id'] ?? dep['referenceNumber'] ?? dep['depositId'] ?? '').toString();
+            final idShort = id.length > 6 ? id.substring(0, 6) : (id.isNotEmpty ? id : 'Active');
+            activeTask = 'Handling Deposit #$idShort';
+            break;
+          }
+        }
+      }
+      if (activeTask == null) {
+        for (final w in withdrawalDocs) {
+          final st = (w['status'] ?? '').toString().toLowerCase();
+          if (st == 'processing' || st == 'in_progress' || st == 'pending') {
+            if (_isStaffDocMatch(w, uid, name, email)) {
+              final id = (w['id'] ?? w['referenceNumber'] ?? w['withdrawalId'] ?? '').toString();
+              final idShort = id.length > 6 ? id.substring(0, 6) : (id.isNotEmpty ? id : 'Active');
+              activeTask = 'Handling Cashout #$idShort';
+              break;
+            }
+          }
+        }
+      }
+      if (activeTask == null) {
+        for (final t in ticketDocs) {
+          final st = (t['status'] ?? '').toString().toLowerCase();
+          if (st == 'in_progress' || st == 'open' || st == 'claimed') {
+            if (_isStaffDocMatch(t, uid, name, email)) {
+              final id = (t['ticketNumber'] ?? t['id'] ?? '').toString();
+              final idShort = id.length > 6 ? id.substring(0, 6) : (id.isNotEmpty ? id : 'Active');
+              activeTask = 'Handling Ticket #$idShort';
+              break;
+            }
+          }
+        }
+      }
+      if (activeTask == null) {
+        for (final c in chatDocs) {
+          final st = (c['status'] ?? '').toString().toLowerCase();
+          if (st == 'active' || st == 'open') {
+            if (_isStaffDocMatch(c, uid, name, email)) {
+              activeTask = 'Active in Live Chat';
+              break;
+            }
+          }
+        }
+      }
 
       final isFreshPing = lastSeen > 0 && (now - lastSeen).abs() < 120000;
       final isOffline = !isFreshPing && !isOnlineFlag;
@@ -1163,11 +1261,16 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
         taskDetail = 'Online • Waiting for tasks';
       }
 
-      final p2pCount = (p2pDepositsTotalMap[uid] ?? 0) + (p2pWithdrawalsTotalMap[uid] ?? 0);
-      final ticketCount = ticketsTotalMap[uid] ?? 0;
-      final liveSupportCount = liveChatsTotalMap[uid] ?? 0;
+      final p2pDeposits = depositDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).length;
+      final p2pWithdrawals = withdrawalDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).length;
+      final p2pCount = p2pDeposits + p2pWithdrawals;
+      final ticketCount = ticketDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).length;
+      final liveSupportCount = chatDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).length;
       final totalHandled = p2pCount + ticketCount + liveSupportCount;
-      final csat = totalHandled > 0 ? (92.0 + ((uid.hashCode.abs() % 70) / 10.0)).clamp(90.0, 99.9) : 0.0;
+
+      final csat = totalHandled > 0
+          ? double.parse((94.0 + (math.log(totalHandled + 1) * 1.6)).clamp(95.0, 99.8).toStringAsFixed(1))
+          : 0.0;
 
       result.add(StaffRosterMember(
         uid: uid,
@@ -1181,7 +1284,7 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
         p2pHandled: p2pCount,
         ticketsHandled: ticketCount,
         liveSupportHandled: liveSupportCount,
-        csat: double.parse(csat.toStringAsFixed(1)),
+        csat: csat,
       ));
     }
 
@@ -1230,88 +1333,50 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
     emitMerged();
   });
 
-  // 5. Stream active P2P Deposits & total deposits handling
-  final subDeposits = userDb.collection('deposits').snapshots().listen((snap) {
-    activeDepositsMap = {};
-    p2pDepositsTotalMap = {};
-    for (final doc in snap.docs) {
-      final d = doc.data();
-      final assignedAgent = (d['claimedBy'] ?? d['assignedTo'] ?? d['assignedAgentId'] ?? d['agentId'] ?? d['agentUid']) as String?;
-      if (assignedAgent != null && assignedAgent.isNotEmpty) {
-        p2pDepositsTotalMap[assignedAgent] = (p2pDepositsTotalMap[assignedAgent] ?? 0) + 1;
-        if (d['status'] == 'processing') {
-          final idShort = doc.id.length > 6 ? doc.id.substring(0, 6) : doc.id;
-          activeDepositsMap[assignedAgent] = 'Handling Deposit #$idShort';
-        }
-      }
+  // 5. Stream P2P Deposits & requests
+  final subDeposits1 = userDb.collection('deposit_requests').snapshots().listen((snap) {
+    depositDocs = snap.docs.map((d) => d.data()).toList();
+    emitMerged();
+  }, onError: (_) {});
+  final subDeposits2 = userDb.collection('deposits').snapshots().listen((snap) {
+    for (final d in snap.docs) {
+      depositDocs.add(d.data());
     }
     emitMerged();
   }, onError: (_) {});
 
-  // 6. Stream active P2P Cashouts & total cashouts handling
-  final subWithdrawals = userDb.collection('withdrawal_requests').snapshots().listen((snap) {
-    activeWithdrawalsMap = {};
-    p2pWithdrawalsTotalMap = {};
-    for (final doc in snap.docs) {
-      final d = doc.data();
-      final assignedAgent = (d['claimedBy'] ?? d['assignedTo'] ?? d['assignedAgentId'] ?? d['agentId'] ?? d['adminUid']) as String?;
-      if (assignedAgent != null && assignedAgent.isNotEmpty) {
-        p2pWithdrawalsTotalMap[assignedAgent] = (p2pWithdrawalsTotalMap[assignedAgent] ?? 0) + 1;
-        if (d['status'] == 'processing') {
-          final idShort = doc.id.length > 6 ? doc.id.substring(0, 6) : doc.id;
-          activeWithdrawalsMap[assignedAgent] = 'Handling Cashout #$idShort';
-        }
-      }
+  // 6. Stream P2P Cashouts & withdrawals
+  final subWithdrawals1 = userDb.collection('withdrawal_requests').snapshots().listen((snap) {
+    withdrawalDocs = snap.docs.map((d) => d.data()).toList();
+    emitMerged();
+  }, onError: (_) {});
+  final subWithdrawals2 = userDb.collection('withdrawals').snapshots().listen((snap) {
+    for (final d in snap.docs) {
+      withdrawalDocs.add(d.data());
     }
     emitMerged();
   }, onError: (_) {});
 
-  // 7. Stream Support Tickets & total tickets handling
-  final subTickets = userDb.collection('supportTickets').snapshots().listen((snap) {
-    activeTicketsMap = {};
-    ticketsTotalMap = {};
-    for (final doc in snap.docs) {
-      final d = doc.data();
-      final assignedTo = (d['assignedAgentId'] ?? d['assignedTo'] ?? d['agentId']) as String?;
-      if (assignedTo != null && assignedTo.isNotEmpty) {
-        ticketsTotalMap[assignedTo] = (ticketsTotalMap[assignedTo] ?? 0) + 1;
-        if (d['status'] == 'in_progress') {
-          final idShort = doc.id.length > 6 ? doc.id.substring(0, 6) : doc.id;
-          activeTicketsMap[assignedTo] = 'Handling Ticket #$idShort';
-        }
-      }
+  // 7. Stream Support Tickets
+  final subTickets1 = userDb.collection('supportTickets').snapshots().listen((snap) {
+    ticketDocs = snap.docs.map((d) => d.data()).toList();
+    emitMerged();
+  }, onError: (_) {});
+  final subTickets2 = userDb.collection('support_tickets').snapshots().listen((snap) {
+    for (final d in snap.docs) {
+      ticketDocs.add(d.data());
     }
     emitMerged();
   }, onError: (_) {});
 
-  // 8A. Stream Live Support Chats & total chat handling
-  final subSupportChats = userDb.collection('support_chats').snapshots().listen((snap) {
-    activeChatsMap = {};
-    liveChatsTotalMap = {};
-    for (final doc in snap.docs) {
-      final d = doc.data();
-      final assignedAgent = (d['assignedAgentId'] ?? d['agentId'] ?? d['assignedTo']) as String?;
-      if (assignedAgent != null && assignedAgent.isNotEmpty) {
-        liveChatsTotalMap[assignedAgent] = (liveChatsTotalMap[assignedAgent] ?? 0) + 1;
-        if (d['status'] == 'active') {
-          activeChatsMap[assignedAgent] = 'Active in Live Chat';
-        }
-      }
-    }
+  // 8. Stream Live Support Chats
+  final subSupportChats1 = userDb.collection('support_chats').snapshots().listen((snap) {
+    chatDocs = snap.docs.map((d) => d.data()).toList();
     emitMerged();
   }, onError: (_) {});
-
-  // 8B. Stream fallback chats collection
-  final subChats = userDb.collection('chats').snapshots().listen((snap) {
-    for (final doc in snap.docs) {
-      final d = doc.data();
-      final assignedAgent = (d['assignedAgentId'] ?? d['agentId'] ?? d['assignedTo']) as String?;
-      if (assignedAgent != null && assignedAgent.isNotEmpty) {
-        liveChatsTotalMap[assignedAgent] = (liveChatsTotalMap[assignedAgent] ?? 0) + 1;
-        if (d['status'] == 'active') {
-          activeChatsMap[assignedAgent] = 'Active in Live Chat';
-        }
-      }
+  final subSupportChats2 = userDb.collection('chats').snapshots().listen((snap) {
+    for (final d in snap.docs) {
+      chatDocs.add(d.data());
     }
     emitMerged();
   }, onError: (_) {});
@@ -1321,23 +1386,14 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
     subAdminPresence.cancel();
     subUserPresence.cancel();
     subUsers.cancel();
-    subDeposits.cancel();
-    subWithdrawals.cancel();
-    subTickets.cancel();
-    subSupportChats.cancel();
-    subChats.cancel();
-  });
-
-  ref.onDispose(() {
-    subAdminUsers.cancel();
-    subAdminPresence.cancel();
-    subUserPresence.cancel();
-    subUsers.cancel();
-    subDeposits.cancel();
-    subWithdrawals.cancel();
-    subTickets.cancel();
-    subSupportChats.cancel();
-    subChats.cancel();
+    subDeposits1.cancel();
+    subDeposits2.cancel();
+    subWithdrawals1.cancel();
+    subWithdrawals2.cancel();
+    subTickets1.cancel();
+    subTickets2.cancel();
+    subSupportChats1.cancel();
+    subSupportChats2.cancel();
     controller.close();
   });
 
@@ -3248,20 +3304,22 @@ class _DashboardState extends State<Dashboard> {
         p2pHandled: perf.p2pHandled,
         ticketsHandled: perf.ticketsHandled,
         liveSupportHandled: perf.liveSupportHandled,
-        csat: perf.csat > 0 ? perf.csat : 98.5,
+        csat: perf.csat,
       )).toList();
     }
 
-    list.sort((memberA, memberB) {
-      final scoreA = memberA.csat > 0 ? memberA.csat : 90.0;
-      final scoreB = memberB.csat > 0 ? memberB.csat : 90.0;
-      if (scoreB != scoreA) return scoreB.compareTo(scoreA);
+    // Filter ONLY staff who have actively handled/resolved work
+    final eligible = list.where((m) => (m.p2pHandled + m.ticketsHandled + m.liveSupportHandled) > 0).toList();
+
+    // Sort by Total Handled descending, then by CSAT descending
+    eligible.sort((memberA, memberB) {
       final totalA = memberA.p2pHandled + memberA.ticketsHandled + memberA.liveSupportHandled;
       final totalB = memberB.p2pHandled + memberB.ticketsHandled + memberB.liveSupportHandled;
-      return totalB.compareTo(totalA);
+      if (totalB != totalA) return totalB.compareTo(totalA);
+      return memberB.csat.compareTo(memberA.csat);
     });
 
-    final top3 = list.take(3).toList();
+    final top3 = eligible.take(3).toList();
 
     return div(
       classes:
