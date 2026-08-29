@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:jaspr/dom.dart';
@@ -137,6 +136,7 @@ class StaffPerformance {
   final int ticketsHandled;
   final int liveSupportHandled;
   final int totalHandled;
+  final int totalResolved;
   final double csat;
   final String? photoUrl;
 
@@ -147,6 +147,7 @@ class StaffPerformance {
     required this.ticketsHandled,
     required this.liveSupportHandled,
     required this.totalHandled,
+    this.totalResolved = 0,
     required this.csat,
     this.photoUrl,
   });
@@ -927,6 +928,41 @@ final monthlyNewUsersProvider = StreamProvider<List<int>>((ref) {
       .handleError((_) => List<int>.filled(12, 0));
 });
 
+bool _isResolvedDoc(Map<String, dynamic> docData) {
+  final status = (docData['status'] ?? docData['state'] ?? '').toString().toLowerCase().trim();
+  return status == 'approved' ||
+      status == 'completed' ||
+      status == 'success' ||
+      status == 'credited' ||
+      status == 'paid' ||
+      status == 'settled' ||
+      status == 'resolved' ||
+      status == 'closed' ||
+      status == 'ended';
+}
+
+double _calculateDocScore(Map<String, dynamic> docData) {
+  // 1. Direct star rating (1 to 5) if provided by user
+  final rawRating = docData['rating'] ?? docData['satisfaction'] ?? docData['csat'] ?? docData['customerRating'] ?? docData['stars'];
+  if (rawRating != null) {
+    final num? r = rawRating is num ? rawRating : num.tryParse(rawRating.toString());
+    if (r != null && r > 0) {
+      return ((r / 5.0) * 100.0).clamp(0.0, 100.0);
+    }
+  }
+
+  // 2. Status-based resolution score
+  final status = (docData['status'] ?? docData['state'] ?? '').toString().toLowerCase().trim();
+  if (_isResolvedDoc(docData)) {
+    return 100.0;
+  } else if (status == 'processing' || status == 'in_progress' || status == 'in progress' || status == 'pending' || status == 'open' || status == 'active' || status == 'claimed' || status == 'assigned') {
+    return 95.0; // In-flight active work
+  } else if (status == 'rejected' || status == 'cancelled' || status == 'declined' || status == 'failed') {
+    return 60.0;
+  }
+  return 90.0;
+}
+
 bool _isStaffDocMatch(Map<String, dynamic> docData, String uid, String name, String email) {
   final fields = [
     docData['approvedByAdminId'],
@@ -998,16 +1034,31 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
           ? rawName
           : (rawEmail.contains('@') ? rawEmail.split('@').first : 'Agent');
 
-      int p2pDeposits = depositDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).length;
-      int p2pWithdrawals = withdrawalDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).length;
-      int p2p = p2pDeposits + p2pWithdrawals;
-      int tickets = ticketDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).length;
-      int liveChats = chatDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).length;
-      final total = p2p + tickets + liveChats;
+      final matchingDeposits = depositDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).toList();
+      final matchingWithdrawals = withdrawalDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).toList();
+      final matchingTickets = ticketDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).toList();
+      final matchingChats = chatDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).toList();
 
-      final csat = total > 0
-          ? double.parse((94.0 + (math.log(total + 1) * 1.6)).clamp(95.0, 99.8).toStringAsFixed(1))
-          : 0.0;
+      final allMatchingDocs = [
+        ...matchingDeposits,
+        ...matchingWithdrawals,
+        ...matchingTickets,
+        ...matchingChats,
+      ];
+
+      final p2p = matchingDeposits.length + matchingWithdrawals.length;
+      final tickets = matchingTickets.length;
+      final liveChats = matchingChats.length;
+      final total = allMatchingDocs.length;
+      final totalResolved = allMatchingDocs.where(_isResolvedDoc).length;
+
+      // Simple arithmetic average across all handled and resolved items
+      double csat = 0.0;
+      if (total > 0) {
+        final sumScores = allMatchingDocs.fold<double>(0.0, (acc, doc) => acc + _calculateDocScore(doc));
+        csat = double.parse((sumScores / total).toStringAsFixed(1));
+      }
+
       final photo = data['photoURL'] ?? data['photoUrl'] ?? data['avatarUrl'] ?? data['avatar'];
 
       list.add(
@@ -1018,17 +1069,22 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
           ticketsHandled: tickets,
           liveSupportHandled: liveChats,
           totalHandled: total,
+          totalResolved: totalResolved,
           csat: csat,
           photoUrl: photo?.toString(),
         ),
       );
     }
 
-    // Rank by Total Score descending, then CSAT
+    // Rank by CSAT descending, then Total Resolved descending, then Total Handled descending
     list.sort((agentA, agentB) {
-      final cmp = agentB.totalHandled.compareTo(agentA.totalHandled);
-      if (cmp != 0) return cmp;
-      return agentB.csat.compareTo(agentA.csat);
+      final cmpCsat = agentB.csat.compareTo(agentA.csat);
+      if (cmpCsat != 0) return cmpCsat;
+      final cmpResolved = agentB.totalResolved.compareTo(agentA.totalResolved);
+      if (cmpResolved != 0) return cmpResolved;
+      final cmpTotal = agentB.totalHandled.compareTo(agentA.totalHandled);
+      if (cmpTotal != 0) return cmpTotal;
+      return agentA.name.compareTo(agentB.name);
     });
 
     controller.add(list);
@@ -1118,6 +1174,7 @@ class StaffRosterMember {
   final int p2pHandled;
   final int ticketsHandled;
   final int liveSupportHandled;
+  final int totalResolved;
   final double csat;
 
   StaffRosterMember({
@@ -1132,6 +1189,7 @@ class StaffRosterMember {
     this.p2pHandled = 0,
     this.ticketsHandled = 0,
     this.liveSupportHandled = 0,
+    this.totalResolved = 0,
     this.csat = 0.0,
   });
 
@@ -1261,16 +1319,30 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
         taskDetail = 'Online • Waiting for tasks';
       }
 
-      final p2pDeposits = depositDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).length;
-      final p2pWithdrawals = withdrawalDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).length;
-      final p2pCount = p2pDeposits + p2pWithdrawals;
-      final ticketCount = ticketDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).length;
-      final liveSupportCount = chatDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).length;
-      final totalHandled = p2pCount + ticketCount + liveSupportCount;
+      final matchingDeposits = depositDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).toList();
+      final matchingWithdrawals = withdrawalDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).toList();
+      final matchingTickets = ticketDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).toList();
+      final matchingChats = chatDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).toList();
 
-      final csat = totalHandled > 0
-          ? double.parse((94.0 + (math.log(totalHandled + 1) * 1.6)).clamp(95.0, 99.8).toStringAsFixed(1))
-          : 0.0;
+      final allMatchingDocs = [
+        ...matchingDeposits,
+        ...matchingWithdrawals,
+        ...matchingTickets,
+        ...matchingChats,
+      ];
+
+      final p2pCount = matchingDeposits.length + matchingWithdrawals.length;
+      final ticketCount = matchingTickets.length;
+      final liveSupportCount = matchingChats.length;
+      final totalHandled = allMatchingDocs.length;
+      final totalResolved = allMatchingDocs.where(_isResolvedDoc).length;
+
+      // Simple arithmetic average across all handled and resolved items
+      double csat = 0.0;
+      if (totalHandled > 0) {
+        final sumScores = allMatchingDocs.fold<double>(0.0, (acc, doc) => acc + _calculateDocScore(doc));
+        csat = double.parse((sumScores / totalHandled).toStringAsFixed(1));
+      }
 
       result.add(StaffRosterMember(
         uid: uid,
@@ -1284,6 +1356,7 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
         p2pHandled: p2pCount,
         ticketsHandled: ticketCount,
         liveSupportHandled: liveSupportCount,
+        totalResolved: totalResolved,
         csat: csat,
       ));
     }
@@ -3311,12 +3384,16 @@ class _DashboardState extends State<Dashboard> {
     // Filter ONLY staff who have actively handled/resolved work
     final eligible = list.where((m) => (m.p2pHandled + m.ticketsHandled + m.liveSupportHandled) > 0).toList();
 
-    // Sort by Total Handled descending, then by CSAT descending
+    // Sort by CSAT descending, then Total Resolved descending, then Total Handled descending
     eligible.sort((memberA, memberB) {
+      final cmpCsat = memberB.csat.compareTo(memberA.csat);
+      if (cmpCsat != 0) return cmpCsat;
+      final cmpResolved = memberB.totalResolved.compareTo(memberA.totalResolved);
+      if (cmpResolved != 0) return cmpResolved;
       final totalA = memberA.p2pHandled + memberA.ticketsHandled + memberA.liveSupportHandled;
       final totalB = memberB.p2pHandled + memberB.ticketsHandled + memberB.liveSupportHandled;
       if (totalB != totalA) return totalB.compareTo(totalA);
-      return memberB.csat.compareTo(memberA.csat);
+      return memberA.name.compareTo(memberB.name);
     });
 
     final top3 = eligible.take(3).toList();
