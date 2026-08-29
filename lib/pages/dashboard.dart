@@ -941,28 +941,6 @@ bool _isResolvedDoc(Map<String, dynamic> docData) {
       status == 'ended';
 }
 
-double _calculateDocScore(Map<String, dynamic> docData) {
-  // 1. Direct star rating (1 to 5) if provided by user
-  final rawRating = docData['rating'] ?? docData['satisfaction'] ?? docData['csat'] ?? docData['customerRating'] ?? docData['stars'];
-  if (rawRating != null) {
-    final num? r = rawRating is num ? rawRating : num.tryParse(rawRating.toString());
-    if (r != null && r > 0) {
-      return ((r / 5.0) * 100.0).clamp(0.0, 100.0);
-    }
-  }
-
-  // 2. Status-based resolution score
-  final status = (docData['status'] ?? docData['state'] ?? '').toString().toLowerCase().trim();
-  if (_isResolvedDoc(docData)) {
-    return 100.0;
-  } else if (status == 'processing' || status == 'in_progress' || status == 'in progress' || status == 'pending' || status == 'open' || status == 'active' || status == 'claimed' || status == 'assigned') {
-    return 95.0; // In-flight active work
-  } else if (status == 'rejected' || status == 'cancelled' || status == 'declined' || status == 'failed') {
-    return 60.0;
-  }
-  return 90.0;
-}
-
 bool _isStaffDocMatch(Map<String, dynamic> docData, String uid, String name, String email) {
   final fields = [
     docData['approvedByAdminId'],
@@ -1022,6 +1000,13 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
     if (controller.isClosed) return;
     final list = <StaffPerformance>[];
 
+    final totalPlatformResolvedDeposits = depositDocs.where(_isResolvedDoc).length;
+    final totalPlatformResolvedWithdrawals = withdrawalDocs.where(_isResolvedDoc).length;
+    final totalPlatformResolvedP2p = totalPlatformResolvedDeposits + totalPlatformResolvedWithdrawals;
+    final totalPlatformResolvedTickets = ticketDocs.where(_isResolvedDoc).length;
+    final totalPlatformResolvedChats = chatDocs.where(_isResolvedDoc).length;
+    final totalPlatformResolvedAll = totalPlatformResolvedP2p + totalPlatformResolvedTickets + totalPlatformResolvedChats;
+
     for (final doc in userDocs) {
       final data = doc.data() as Map<String, dynamic>? ?? {};
       final role = (data['role'] ?? '').toString().toLowerCase().trim();
@@ -1039,24 +1024,23 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
       final matchingTickets = ticketDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).toList();
       final matchingChats = chatDocs.where((d) => _isStaffDocMatch(d, uid, name, rawEmail)).toList();
 
-      final allMatchingDocs = [
-        ...matchingDeposits,
-        ...matchingWithdrawals,
-        ...matchingTickets,
-        ...matchingChats,
-      ];
+      final p2pResolved = matchingDeposits.where(_isResolvedDoc).length + matchingWithdrawals.where(_isResolvedDoc).length;
+      final ticketsResolved = matchingTickets.where(_isResolvedDoc).length;
+      final chatsResolved = matchingChats.where(_isResolvedDoc).length;
+      final totalResolved = p2pResolved + ticketsResolved + chatsResolved;
 
       final p2p = matchingDeposits.length + matchingWithdrawals.length;
       final tickets = matchingTickets.length;
       final liveChats = matchingChats.length;
-      final total = allMatchingDocs.length;
-      final totalResolved = allMatchingDocs.where(_isResolvedDoc).length;
+      final total = p2p + tickets + liveChats;
 
-      // Simple arithmetic average across all handled and resolved items
+      // CSAT / Resolution Share Formula:
+      // (User resolved tasks / Overall platform count of resolved tasks) * 100
       double csat = 0.0;
-      if (total > 0) {
-        final sumScores = allMatchingDocs.fold<double>(0.0, (acc, doc) => acc + _calculateDocScore(doc));
-        csat = double.parse((sumScores / total).toStringAsFixed(1));
+      if (totalPlatformResolvedAll > 0 && totalResolved > 0) {
+        csat = double.parse(((totalResolved / totalPlatformResolvedAll) * 100.0).toStringAsFixed(1));
+      } else if (totalPlatformResolvedAll == 0 && totalResolved > 0) {
+        csat = 100.0;
       }
 
       final photo = data['photoURL'] ?? data['photoUrl'] ?? data['avatarUrl'] ?? data['avatar'];
@@ -1217,6 +1201,13 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
     final now = DateTime.now().millisecondsSinceEpoch;
     final result = <StaffRosterMember>[];
 
+    final totalPlatformResolvedDeposits = depositDocs.where(_isResolvedDoc).length;
+    final totalPlatformResolvedWithdrawals = withdrawalDocs.where(_isResolvedDoc).length;
+    final totalPlatformResolvedP2p = totalPlatformResolvedDeposits + totalPlatformResolvedWithdrawals;
+    final totalPlatformResolvedTickets = ticketDocs.where(_isResolvedDoc).length;
+    final totalPlatformResolvedChats = chatDocs.where(_isResolvedDoc).length;
+    final totalPlatformResolvedAll = totalPlatformResolvedP2p + totalPlatformResolvedTickets + totalPlatformResolvedChats;
+
     for (final doc in adminDocs) {
       final d = doc.data() as Map<String, dynamic>? ?? {};
       final role = (d['role'] ?? '').toString().toLowerCase().trim();
@@ -1324,24 +1315,22 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
       final matchingTickets = ticketDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).toList();
       final matchingChats = chatDocs.where((d) => _isStaffDocMatch(d, uid, name, email)).toList();
 
-      final allMatchingDocs = [
-        ...matchingDeposits,
-        ...matchingWithdrawals,
-        ...matchingTickets,
-        ...matchingChats,
-      ];
+      final p2pResolved = matchingDeposits.where(_isResolvedDoc).length + matchingWithdrawals.where(_isResolvedDoc).length;
+      final ticketsResolved = matchingTickets.where(_isResolvedDoc).length;
+      final chatsResolved = matchingChats.where(_isResolvedDoc).length;
+      final totalResolved = p2pResolved + ticketsResolved + chatsResolved;
 
       final p2pCount = matchingDeposits.length + matchingWithdrawals.length;
       final ticketCount = matchingTickets.length;
       final liveSupportCount = matchingChats.length;
-      final totalHandled = allMatchingDocs.length;
-      final totalResolved = allMatchingDocs.where(_isResolvedDoc).length;
 
-      // Simple arithmetic average across all handled and resolved items
+      // CSAT / Resolution Share Formula:
+      // (User resolved tasks / Overall platform count of resolved tasks) * 100
       double csat = 0.0;
-      if (totalHandled > 0) {
-        final sumScores = allMatchingDocs.fold<double>(0.0, (acc, doc) => acc + _calculateDocScore(doc));
-        csat = double.parse((sumScores / totalHandled).toStringAsFixed(1));
+      if (totalPlatformResolvedAll > 0 && totalResolved > 0) {
+        csat = double.parse(((totalResolved / totalPlatformResolvedAll) * 100.0).toStringAsFixed(1));
+      } else if (totalPlatformResolvedAll == 0 && totalResolved > 0) {
+        csat = 100.0;
       }
 
       result.add(StaffRosterMember(
