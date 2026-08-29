@@ -17,7 +17,7 @@ const db = getFirestore(app);
 
 async function run() {
   try {
-    const cred = await signInWithEmailAndPassword(auth, "sarah.johnson@tranyx.com", "admin123456");
+    const cred = await signInWithEmailAndPassword(auth, "admin@tranyx.app", "admin123456");
     console.log("Logged in as:", cred.user.email, cred.user.uid);
 
     console.log("=== DEPOSIT REQUESTS ===");
