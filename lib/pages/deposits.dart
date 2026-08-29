@@ -613,7 +613,6 @@ class _DepositsPageState extends State<DepositsPage> {
   final Map<String, AgentQrPreset> _savedPresets = {};
 
   // Dialog workflow states
-  bool _showApproveConfirmModal = false;
   bool _showRejectModal = false;
   bool _isProcessing = false;
   String? _toastMessage;
@@ -849,7 +848,6 @@ class _DepositsPageState extends State<DepositsPage> {
       _zoomLevel = 1.0;
       _panX = 0.0;
       _panY = 0.0;
-      _showApproveConfirmModal = false;
       _showRejectModal = false;
       _selectedRejectReason = _predefinedRejectReasons.first;
       _customRejectNote = '';
@@ -859,7 +857,6 @@ class _DepositsPageState extends State<DepositsPage> {
   void _closeInspector() {
     setState(() {
       _inspectingDeposit = null;
-      _showApproveConfirmModal = false;
       _showRejectModal = false;
       _isFullscreenViewer = false;
     });
@@ -1182,7 +1179,6 @@ class _DepositsPageState extends State<DepositsPage> {
           _triggerToast('Approval blocked: Reference #$normalizedRef was already claimed by $claimant.');
           setState(() {
             _isProcessing = false;
-            _showApproveConfirmModal = false;
           });
           return;
         }
@@ -1395,16 +1391,12 @@ class _DepositsPageState extends State<DepositsPage> {
 
       _triggerToast('Deposit approved! ₱${deposit.amount.toStringAsFixed(2)} credited to ${deposit.userName}.');
       setState(() {
-        _showApproveConfirmModal = false;
         _showRejectModal = false;
       });
       _closeInspector();
     } catch (e) {
       print('[Deposits] Approval error: $e');
       _triggerToast('Approval failed: $e');
-      setState(() {
-        _showApproveConfirmModal = false;
-      });
     } finally {
       if (mounted) {
         setState(() {
@@ -1480,7 +1472,6 @@ class _DepositsPageState extends State<DepositsPage> {
 
       _triggerToast('Deposit rejected. Request marked as REJECTED.');
       setState(() {
-        _showApproveConfirmModal = false;
         _showRejectModal = false;
       });
       _closeInspector();
@@ -1839,13 +1830,6 @@ class _DepositsPageState extends State<DepositsPage> {
         // High-Resolution Receipt Inspector Modal
         if (_inspectingDeposit != null)
           _buildInspectorModal(_inspectingDeposit!, claimedRefsMap, adminUser, usersList, isAdmin: isAdmin),
-
-        // Approve Confirmation Dialog
-        if (_showApproveConfirmModal && _inspectingDeposit != null)
-          _buildApproveConfirmDialog(_inspectingDeposit!, adminUser),
-
-        // Rejection Workflow Modal
-        if (_showRejectModal && _inspectingDeposit != null) _buildRejectDialog(_inspectingDeposit!, adminUser),
       ],
     );
   }
@@ -2966,6 +2950,76 @@ class _DepositsPageState extends State<DepositsPage> {
                   ]),
                 ]),
 
+                // Inline Rejection Form in Inspector Sidebar
+                if (_showRejectModal && (deposit.status == 'PENDING_VERIFICATION'))
+                  div(
+                    classes:
+                        'p-4 rounded-2xl bg-red-50/90 border border-red-200 flex flex-col gap-3 text-xs animate-fade-in shadow-sm',
+                    [
+                      div(classes: 'flex items-center justify-between', [
+                        div(classes: 'flex items-center gap-2', [
+                          span(classes: 'text-red-500 font-bold text-sm', [Component.text('⚠️')]),
+                          span(classes: 'font-black text-red-900', [Component.text('Reject Deposit Request')]),
+                        ]),
+                        button(
+                          onClick: () => setState(() => _showRejectModal = false),
+                          classes:
+                              'text-[11px] font-bold text-zinc-500 hover:text-zinc-800 bg-transparent border-0 cursor-pointer',
+                          [Component.text('✕ Cancel')],
+                        ),
+                      ]),
+                      p(classes: 'text-[11px] text-zinc-500 font-medium leading-relaxed', [
+                        Component.text('Select a reason to inform the user and record in audit logs:'),
+                      ]),
+                      select(
+                        onChange: (dynamic val) {
+                          final selectedList = val is List<String> ? val : <String>[];
+                          final opt = selectedList.isNotEmpty ? selectedList.first : _predefinedRejectReasons.first;
+                          setState(() => _selectedRejectReason = opt);
+                        },
+                        classes:
+                            'w-full px-3 py-2 rounded-xl bg-white border border-zinc-300 text-xs font-bold text-zinc-800 focus:outline-none focus:border-red-500 cursor-pointer',
+                        [
+                          for (final reason in _predefinedRejectReasons)
+                            option(value: reason, selected: _selectedRejectReason == reason, [Component.text(reason)]),
+                        ],
+                      ),
+                      if (_selectedRejectReason == 'Other (Custom text required)')
+                        textarea(
+                          onInput: (dynamic val) => setState(() => _customRejectNote = (val as String?) ?? ''),
+                          attributes: {'placeholder': 'Specify custom rejection reason...'},
+                          classes:
+                              'w-full p-2.5 rounded-xl bg-white border border-zinc-300 text-xs text-zinc-800 h-20 resize-none focus:outline-none focus:border-red-500',
+                          [Component.text(_customRejectNote)],
+                        ),
+                      div(classes: 'flex items-center justify-end gap-2 pt-1', [
+                        button(
+                          onClick: () => setState(() => _showRejectModal = false),
+                          classes:
+                              'px-3.5 py-2 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-700 text-xs font-bold cursor-pointer border-0',
+                          [Component.text('Cancel')],
+                        ),
+                        button(
+                          onClick: () => _executeRejectDeposit(deposit, adminUser),
+                          classes:
+                              'px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all shadow-md shadow-red-500/20 cursor-pointer border-0 flex items-center gap-1.5',
+                          [
+                            if (_isProcessing)
+                              div(
+                                classes:
+                                    'animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full',
+                                [],
+                              )
+                            else ...[
+                              span([Component.text('✕')]),
+                              Component.text('Confirm Rejection'),
+                            ],
+                          ],
+                        ),
+                      ]),
+                    ],
+                  ),
+
                 // Verification Audit Details
                 if (deposit.status == 'APPROVED' || deposit.status == 'REJECTED')
                   div(
@@ -3047,10 +3101,10 @@ class _DepositsPageState extends State<DepositsPage> {
                     if (isClaimedByMe || isUnclaimed) ...[
                       // Reject Button
                       button(
-                        onClick: () => setState(() => _showRejectModal = true),
+                        onClick: () => setState(() => _showRejectModal = !_showRejectModal),
                         classes:
                             'px-5 py-2.5 rounded-xl border border-red-200 bg-red-50/60 hover:bg-red-100 text-red-600 text-xs font-bold transition-all cursor-pointer outline-none',
-                        [Component.text('Reject Deposit')],
+                        [Component.text(_showRejectModal ? 'Close Rejection Form' : 'Reject Deposit')],
                       ),
 
                       // Approve Deposit Button
@@ -3069,12 +3123,20 @@ class _DepositsPageState extends State<DepositsPage> {
                         )
                       else
                         button(
-                          onClick: () => setState(() => _showApproveConfirmModal = true),
+                          onClick: () => _executeApproveDeposit(deposit, adminUser),
                           classes:
                               'px-6 py-2.5 rounded-xl bg-[#0fa958] hover:bg-[#0d924c] text-white text-xs font-bold transition-all shadow-md shadow-emerald-500/20 cursor-pointer border-0 outline-none flex items-center gap-1.5',
                           [
-                            span([Component.text('✓')]),
-                            span([Component.text('Approve Deposit')]),
+                            if (_isProcessing)
+                              div(
+                                classes:
+                                    'animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full',
+                                [],
+                              )
+                            else ...[
+                              span([Component.text('✓')]),
+                              span([Component.text('Approve Deposit')]),
+                            ],
                           ],
                         ),
                     ] else if (isClaimedByOther && !isAdmin) ...[
@@ -3107,206 +3169,6 @@ class _DepositsPageState extends State<DepositsPage> {
                   ),
               ],
             ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  /// Deposit Approval Workflow Confirmation Dialog
-  Component _buildApproveConfirmDialog(DepositRequest deposit, fb.User? adminUser) {
-    return div(
-      classes: 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4',
-      [
-        div(
-          classes:
-              'bg-white rounded-[28px] border border-zinc-200 shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-fade-up',
-          [
-            // Header
-            div(classes: 'p-6 border-b border-zinc-150/80 bg-emerald-50/50 flex items-center gap-3', [
-              div(
-                classes:
-                    'w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center text-lg font-black shadow-md shadow-emerald-500/30 flex-shrink-0',
-                [Component.text('₱')],
-              ),
-              div([
-                h3(classes: 'text-sm font-black text-zinc-950', [Component.text('Confirm Deposit Approval')]),
-                p(classes: 'text-xs text-zinc-400 font-medium', [
-                  Component.text('Funds will be atomically credited to the user wallet.'),
-                ]),
-              ]),
-            ]),
-
-            // Body Summary
-            div(classes: 'p-6 flex flex-col gap-4 text-xs', [
-              div(classes: 'p-4 rounded-2xl bg-zinc-50 border border-zinc-200/70 flex flex-col gap-3', [
-                div(classes: 'flex justify-between items-center', [
-                  span(classes: 'text-zinc-400 font-bold', [Component.text('User Name:')]),
-                  span(classes: 'font-extrabold text-zinc-900', [Component.text(deposit.userName)]),
-                ]),
-                div(classes: 'flex justify-between items-center', [
-                  span(classes: 'text-zinc-400 font-bold', [Component.text('User ID:')]),
-                  span(classes: 'font-mono text-[11px] text-zinc-700', [Component.text(deposit.userId)]),
-                ]),
-                div(classes: 'flex justify-between items-center', [
-                  span(classes: 'text-zinc-400 font-bold', [Component.text('Reference #:')]),
-                  span(classes: 'font-mono font-bold text-zinc-900', [Component.text(deposit.referenceNumber)]),
-                ]),
-                div(classes: 'flex justify-between items-center', [
-                  span(classes: 'text-zinc-400 font-bold', [Component.text('Target Wallet:')]),
-                  span(classes: 'font-mono text-[11px] text-zinc-700', [Component.text(deposit.targetWallet)]),
-                ]),
-                div(
-                  classes:
-                      'pt-3 border-t border-zinc-200/60 flex justify-between items-center text-sm font-black text-emerald-700',
-                  [
-                    span([Component.text('Amount to Credit:')]),
-                    span([Component.text('+₱${deposit.amount.toStringAsFixed(2)}')]),
-                  ],
-                ),
-              ]),
-
-              p(classes: 'text-[11px] text-zinc-500 leading-relaxed font-medium', [
-                Component.text(
-                  'By confirming, the system will mark this request as APPROVED, increment the user availableBalance, and register Reference #${deposit.referenceNumber} in the claimed references registry.',
-                ),
-              ]),
-            ]),
-
-            // Actions
-            div(classes: 'p-5 border-t border-zinc-150/80 bg-zinc-50 flex items-center justify-end gap-3', [
-              button(
-                onClick: () => setState(() => _showApproveConfirmModal = false),
-                classes:
-                    'px-4 py-2.5 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-700 text-xs font-bold transition-all cursor-pointer border-0 outline-none',
-                [Component.text('Cancel')],
-              ),
-              button(
-                onClick: () => _executeApproveDeposit(deposit, adminUser),
-                classes:
-                    'px-5 py-2.5 rounded-xl bg-[#0fa958] hover:bg-[#0d924c] text-white text-xs font-bold transition-all shadow-md shadow-emerald-500/20 cursor-pointer border-0 outline-none flex items-center gap-2',
-                [
-                  if (_isProcessing)
-                    div(classes: 'animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full', [])
-                  else
-                    span([Component.text('Confirm & Credit Wallet')]),
-                ],
-              ),
-            ]),
-          ],
-        ),
-      ],
-    );
-  }
-
-  /// Rejection Workflow Modal with Pre-Defined Reason Dropdown & Custom Note Field
-  Component _buildRejectDialog(DepositRequest deposit, fb.User? adminUser) {
-    final isOther = _selectedRejectReason == 'Other (Custom text required)';
-
-    return div(
-      classes: 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4',
-      [
-        div(
-          classes:
-              'bg-white rounded-[28px] border border-zinc-200 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-fade-up',
-          [
-            // Header
-            div(classes: 'p-6 border-b border-zinc-150/80 bg-red-50/40 flex items-center gap-3', [
-              div(
-                classes:
-                    'w-10 h-10 rounded-2xl bg-red-500 text-white flex items-center justify-center text-lg font-black shadow-md shadow-red-500/30 flex-shrink-0',
-                [Component.text('✕')],
-              ),
-              div([
-                h3(classes: 'text-sm font-black text-zinc-950', [Component.text('Reject Deposit Request')]),
-                p(classes: 'text-xs text-zinc-400 font-medium', [
-                  Component.text('Select a mandatory rejection reason to inform audit logs and user.'),
-                ]),
-              ]),
-            ]),
-
-            // Form Content
-            div(classes: 'p-6 flex flex-col gap-4 text-xs', [
-              // Summary pill
-              div(classes: 'p-3 bg-zinc-50 rounded-xl border border-zinc-200/70 flex justify-between items-center', [
-                span(classes: 'text-zinc-500 font-semibold', [
-                  Component.text('${deposit.userName} • ₱${deposit.amount.toStringAsFixed(2)}'),
-                ]),
-                span(classes: 'font-mono text-zinc-700 font-bold', [
-                  Component.text('Ref: ${deposit.referenceNumber}'),
-                ]),
-              ]),
-
-              // Reason dropdown
-              div(classes: 'flex flex-col gap-1.5', [
-                label(classes: 'text-xs font-bold text-zinc-700', [
-                  Component.text('Mandatory Rejection Reason:'),
-                ]),
-                select(
-                  onChange: (dynamic val) {
-                    final selectedList = val is List<String> ? val : <String>[];
-                    final opt = selectedList.isNotEmpty ? selectedList.first : _predefinedRejectReasons.first;
-                    setState(() => _selectedRejectReason = opt);
-                  },
-                  classes:
-                      'w-full px-3.5 py-2.5 rounded-xl bg-white border border-zinc-300 text-xs font-bold text-zinc-800 focus:outline-none focus:border-red-500 cursor-pointer shadow-sm',
-                  [
-                    for (final reasonItem in _predefinedRejectReasons)
-                      option(
-                        value: reasonItem,
-                        selected: _selectedRejectReason == reasonItem,
-                        [Component.text(reasonItem)],
-                      ),
-                  ],
-                ),
-              ]),
-
-              // Custom Note Textarea
-              div(classes: 'flex flex-col gap-1.5', [
-                label(classes: 'text-xs font-bold text-zinc-700 flex justify-between', [
-                  Component.text(isOther ? 'Custom Rejection Reason (Required):' : 'Additional Internal Notes (Optional):'),
-                  if (isOther) span(classes: 'text-red-500 font-bold', [Component.text('*Required')]),
-                ]),
-                textarea(
-                  onInput: (dynamic val) => setState(() => _customRejectNote = (val as String?) ?? ''),
-                  attributes: {
-                    'placeholder': isOther
-                        ? 'Specify why this deposit submission is rejected...'
-                        : 'Add any supporting investigation details for audit log...',
-                  },
-                  classes:
-                      'w-full p-3 rounded-xl bg-white border border-zinc-300 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-red-500 resize-none h-24 shadow-sm',
-                  [Component.text(_customRejectNote)],
-                ),
-              ]),
-
-              p(classes: 'text-[11px] text-zinc-400 leading-relaxed font-medium', [
-                Component.text(
-                  'Note: Rejecting will leave the user availableBalance untouched (\$0.00 credited). The action is recorded immutably in admin audit logs.',
-                ),
-              ]),
-            ]),
-
-            // Actions
-            div(classes: 'p-5 border-t border-zinc-150/80 bg-zinc-50 flex items-center justify-end gap-3', [
-              button(
-                onClick: () => setState(() => _showRejectModal = false),
-                classes:
-                    'px-4 py-2.5 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-700 text-xs font-bold transition-all cursor-pointer border-0 outline-none',
-                [Component.text('Cancel')],
-              ),
-              button(
-                onClick: () => _executeRejectDeposit(deposit, adminUser),
-                classes:
-                    'px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-all shadow-md shadow-red-500/20 cursor-pointer border-0 outline-none flex items-center gap-2',
-                [
-                  if (_isProcessing)
-                    div(classes: 'animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full', [])
-                  else
-                    span([Component.text('Confirm Rejection')]),
-                ],
-              ),
-            ]),
           ],
         ),
       ],
