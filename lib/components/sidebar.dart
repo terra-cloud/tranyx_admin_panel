@@ -189,16 +189,10 @@ class _SidebarState extends State<Sidebar> {
           div(classes: 'flex flex-col gap-6 w-full', [
             // Logo & Title
             div(classes: 'flex items-center gap-3 px-1', [
-              div(
-                classes:
-                    'w-9 h-9 rounded-2xl bg-[#f3f6f4] border border-zinc-200/60 flex items-center justify-center shadow-sm flex-shrink-0 p-1',
-                [
-                  img(
-                    src: '/images/logo.png',
-                    classes: 'w-7 h-7 object-contain drop-shadow-sm',
-                    alt: 'Tranyx Admin Logo',
-                  ),
-                ],
+              img(
+                src: '/images/logo.png',
+                classes: 'w-8 h-8 object-contain flex-shrink-0',
+                alt: 'Tranyx Admin Logo',
               ),
               if (!_isCollapsed)
                 div(classes: 'flex flex-col', [

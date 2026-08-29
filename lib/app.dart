@@ -177,17 +177,11 @@ class HeaderPanel extends StatelessComponent {
 
     return div(classes: 'px-8 py-5 flex items-center justify-between border-b border-zinc-200/50 bg-[#eff2f0]', [
       // Left: Logo and name
-      div(classes: 'flex items-center gap-3', [
-        div(
-          classes:
-              'w-9 h-9 rounded-2xl bg-white border border-zinc-200/60 flex items-center justify-center shadow-sm p-1',
-          [
-            img(
-              src: '/images/logo.png',
-              classes: 'w-6 h-6 object-contain drop-shadow-sm',
-              alt: 'Tranyx Logo',
-            ),
-          ],
+      div(classes: 'flex items-center gap-2.5', [
+        img(
+          src: '/images/logo.png',
+          classes: 'w-7 h-7 object-contain flex-shrink-0',
+          alt: 'Tranyx Logo',
         ),
         span(classes: 'font-black text-sm tracking-wide text-zinc-900 uppercase', [Component.text('Tranyx')]),
       ]),

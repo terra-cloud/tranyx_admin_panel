@@ -129,15 +129,10 @@ class _LoginPageState extends State<LoginPage> {
           [
             // Brand Header
             div(classes: 'flex flex-col items-center text-center gap-2', [
-              div(
-                classes: 'w-16 h-16 p-2 bg-[#f3f6f4] border border-zinc-200/50 rounded-2xl flex items-center justify-center mb-1 shadow-sm',
-                [
-                  img(
-                    src: '/images/logo.png',
-                    alt: 'Tranyx Logo',
-                    classes: 'w-12 h-12 object-contain drop-shadow-sm',
-                  ),
-                ],
+              img(
+                src: '/images/logo.png',
+                alt: 'Tranyx Logo',
+                classes: 'w-16 h-16 object-contain mb-1',
               ),
               h2(classes: 'text-xl font-black text-zinc-900 tracking-tight', [Component.text('TRANYX PORTAL')]),
               p(classes: 'text-xs text-zinc-400 font-semibold max-w-xs', [
