@@ -77,19 +77,27 @@ class _SettingsPageState extends State<SettingsPage> {
     });
 
     try {
-      final firestore = context.read(adminFirestoreProvider);
-      await firestore.collection('system_config').doc('settings').set({
+      final adminFirestore = context.read(adminFirestoreProvider);
+      final activeFirestore = context.read(firestoreProvider);
+
+      final updateData = {
         'claimTimeoutSeconds': claimSec,
         'heartbeatTimeoutSeconds': heartbeatSec,
         'resendApiKey': _resendApiKey.trim(),
         'resendFromEmail': _resendSenderEmail.trim(),
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
-      }, SetOptions(merge: true));
+      };
+
+      await adminFirestore.collection('system_config').doc('settings').set(updateData, SetOptions(merge: true));
+      await activeFirestore.collection('system_config').doc('settings').set(updateData, SetOptions(merge: true)).catchError((e) {
+        print('[Settings] Active firestore sync notice: $e');
+      });
 
       setState(() {
         _configMessage = 'System request lock timeouts & Resend email credentials updated!';
       });
     } catch (e) {
+      print('[Settings] Failed to update system config: $e');
       setState(() {
         _configError = 'Failed to update system config: $e';
       });
@@ -388,7 +396,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       value: _claimTimeoutStr,
                       classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
                       attributes: {'type': 'number', 'placeholder': '180', 'min': '10', 'max': '3600'},
-                      onInput: (value) => _claimTimeoutStr = value as String,
+                      onInput: (dynamic value) => setState(() => _claimTimeoutStr = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
                       Component.text('If assigned agent fails to accept/claim within this window, the lock automatically returns to PENDING queue.'),
@@ -408,7 +416,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       value: _heartbeatTimeoutStr,
                       classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
                       attributes: {'type': 'number', 'placeholder': '600', 'min': '30', 'max': '7200'},
-                      onInput: (value) => _heartbeatTimeoutStr = value as String,
+                      onInput: (dynamic value) => setState(() => _heartbeatTimeoutStr = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
                       Component.text('If an active agent becomes unresponsive longer than this duration, the request returns to PENDING queue.'),
@@ -428,7 +436,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       value: _resendApiKey,
                       classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 font-mono focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
                       attributes: {'type': 'text', 'placeholder': 're_...'},
-                      onInput: (value) => _resendApiKey = value as String,
+                      onInput: (dynamic value) => setState(() => _resendApiKey = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
                       Component.text('Key used to deliver ticket submission confirmations and response updates to user emails.'),
@@ -443,7 +451,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       value: _resendSenderEmail,
                       classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
                       attributes: {'type': 'text', 'placeholder': 'Tranyx No-Reply <onboarding@resend.dev>'},
-                      onInput: (value) => _resendSenderEmail = value as String,
+                      onInput: (dynamic value) => setState(() => _resendSenderEmail = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
                       Component.text('Sender address for automated ticket emails (e.g. Tranyx No-Reply <noreply@yourdomain.com>).'),

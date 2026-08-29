@@ -120,8 +120,7 @@ service cloud.firestore {
 
     // System Config & Settings (Admin-Configurable Timeouts)
     match /system_config/{configDoc} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read, write: if isAuthenticated();
     }
 
     // Unified Requests Collection (Enforces 3-Min Claim Limit & Single-Agent Lock)
