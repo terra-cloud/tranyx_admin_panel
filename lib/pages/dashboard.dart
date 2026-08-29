@@ -25,6 +25,15 @@ int getTimestamp(dynamic val) {
 
 int _oneDayAgo() => DateTime.now().subtract(const Duration(hours: 24)).millisecondsSinceEpoch;
 
+String _formatRelativeTime(int ts) {
+  if (ts <= 0) return 'Just now';
+  final diff = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(ts));
+  if (diff.inMinutes < 1) return 'Just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  return '${diff.inDays}d ago';
+}
+
 // ── Data Models ────────────────────────────────────────────────────────────
 
 class KycStats {
@@ -1079,7 +1088,10 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
   List<DocumentSnapshot> adminDocs = [];
   Map<String, Map<String, dynamic>> userPresenceMap = {};
   Map<String, Map<String, dynamic>> dedicatedPresenceMap = {};
-  Map<String, String> activeTasksMap = {};
+  Map<String, String> activeDepositsMap = {};
+  Map<String, String> activeWithdrawalsMap = {};
+  Map<String, String> activeTicketsMap = {};
+  Map<String, String> activeChatsMap = {};
 
   void emitMerged() {
     if (controller.isClosed) return;
@@ -1107,21 +1119,26 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
       final rawStatus = (presData['presenceStatus'] as String? ?? (presData['isOnline'] == true ? 'online' : 'offline')).toLowerCase();
       final lastSeen = getTimestamp(presData['lastSeenAt'] ?? presData['lastActiveAt'] ?? presData['updatedAt']);
 
-      String status = rawStatus;
-      final isRecentlyActive = lastSeen > 0 && (now - lastSeen).abs() < 180000;
-      if (status != 'offline' && !isRecentlyActive && presData['isOnline'] != true) {
-        status = 'offline';
-      }
+      final activeTask = activeDepositsMap[uid] ?? activeWithdrawalsMap[uid] ?? activeTicketsMap[uid] ?? activeChatsMap[uid];
 
+      final isRecentlyActive = lastSeen > 0 && (now - lastSeen).abs() < 180000;
+      final isExplicitOffline = rawStatus == 'offline' || (!isRecentlyActive && presData['isOnline'] != true);
+
+      String status;
       String taskDetail;
-      if (status == 'busy') {
-        taskDetail = activeTasksMap[uid] ?? (presData['activeTask'] as String? ?? 'Processing active request');
-      } else if (status == 'away') {
+
+      if (isExplicitOffline) {
+        status = 'offline';
+        taskDetail = lastSeen > 0 ? 'Offline (last seen ${_formatRelativeTime(lastSeen)})' : 'Offline';
+      } else if (activeTask != null) {
+        status = 'busy';
+        taskDetail = activeTask;
+      } else if (rawStatus == 'away') {
+        status = 'away';
         taskDetail = 'AFK • Window inactive';
-      } else if (status == 'online') {
-        taskDetail = 'Online • Waiting for tasks';
       } else {
-        taskDetail = 'Offline';
+        status = 'online';
+        taskDetail = 'Online • Waiting for tasks';
       }
 
       result.add(StaffRosterMember(
@@ -1183,46 +1200,61 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
 
   // 5. Stream active P2P Deposits
   final subDeposits = userDb.collection('deposits').where('status', isEqualTo: 'processing').snapshots().listen((snap) {
+    activeDepositsMap = {};
     for (final doc in snap.docs) {
-      final claimedBy = doc.data()['claimedBy'] as String?;
+      final claimedBy = (doc.data()['claimedBy'] ?? doc.data()['assignedTo'] ?? doc.data()['assignedAgentId']) as String?;
       if (claimedBy != null && claimedBy.isNotEmpty) {
         final idShort = doc.id.length > 6 ? doc.id.substring(0, 6) : doc.id;
-        activeTasksMap[claimedBy] = 'Handling Deposit #$idShort';
-      }
-    }
-    emitMerged();
-  });
-
-  // 6. Stream active P2P Cashouts / Withdrawals
-  final subWithdrawals = userDb.collection('withdrawal_requests').where('status', isEqualTo: 'processing').snapshots().listen((snap) {
-    for (final doc in snap.docs) {
-      final claimedBy = doc.data()['claimedBy'] as String?;
-      if (claimedBy != null && claimedBy.isNotEmpty) {
-        final idShort = doc.id.length > 6 ? doc.id.substring(0, 6) : doc.id;
-        activeTasksMap[claimedBy] = 'Handling Cashout #$idShort';
-      }
-    }
-    emitMerged();
-  });
-
-  // 7. Stream active in-progress Support Tickets
-  final subTickets = userDb.collection('supportTickets').where('status', isEqualTo: 'in_progress').snapshots().listen((snap) {
-    for (final doc in snap.docs) {
-      final assignedTo = (doc.data()['assignedAgentId'] ?? doc.data()['assignedTo']) as String?;
-      if (assignedTo != null && assignedTo.isNotEmpty) {
-        final idShort = doc.id.length > 6 ? doc.id.substring(0, 6) : doc.id;
-        activeTasksMap[assignedTo] = 'Handling Ticket #$idShort';
+        activeDepositsMap[claimedBy] = 'Handling Deposit #$idShort';
       }
     }
     emitMerged();
   }, onError: (_) {});
 
-  // 8. Stream active Live Support Chats
+  // 6. Stream active P2P Cashouts / Withdrawals
+  final subWithdrawals = userDb.collection('withdrawal_requests').where('status', isEqualTo: 'processing').snapshots().listen((snap) {
+    activeWithdrawalsMap = {};
+    for (final doc in snap.docs) {
+      final claimedBy = (doc.data()['claimedBy'] ?? doc.data()['assignedTo'] ?? doc.data()['assignedAgentId']) as String?;
+      if (claimedBy != null && claimedBy.isNotEmpty) {
+        final idShort = doc.id.length > 6 ? doc.id.substring(0, 6) : doc.id;
+        activeWithdrawalsMap[claimedBy] = 'Handling Cashout #$idShort';
+      }
+    }
+    emitMerged();
+  }, onError: (_) {});
+
+  // 7. Stream active in-progress Support Tickets
+  final subTickets = userDb.collection('supportTickets').where('status', isEqualTo: 'in_progress').snapshots().listen((snap) {
+    activeTicketsMap = {};
+    for (final doc in snap.docs) {
+      final assignedTo = (doc.data()['assignedAgentId'] ?? doc.data()['assignedTo']) as String?;
+      if (assignedTo != null && assignedTo.isNotEmpty) {
+        final idShort = doc.id.length > 6 ? doc.id.substring(0, 6) : doc.id;
+        activeTicketsMap[assignedTo] = 'Handling Ticket #$idShort';
+      }
+    }
+    emitMerged();
+  }, onError: (_) {});
+
+  // 8A. Stream active Live Support Chats (support_chats)
+  final subSupportChats = userDb.collection('support_chats').where('status', isEqualTo: 'active').snapshots().listen((snap) {
+    activeChatsMap = {};
+    for (final doc in snap.docs) {
+      final assignedAgent = (doc.data()['assignedAgentId'] ?? doc.data()['agentId'] ?? doc.data()['assignedTo']) as String?;
+      if (assignedAgent != null && assignedAgent.isNotEmpty) {
+        activeChatsMap[assignedAgent] = 'Active in Live Chat';
+      }
+    }
+    emitMerged();
+  }, onError: (_) {});
+
+  // 8B. Stream active Live Support Chats (chats fallback)
   final subChats = userDb.collection('chats').where('status', isEqualTo: 'active').snapshots().listen((snap) {
     for (final doc in snap.docs) {
-      final assignedAgent = (doc.data()['assignedAgentId'] ?? doc.data()['agentId']) as String?;
+      final assignedAgent = (doc.data()['assignedAgentId'] ?? doc.data()['agentId'] ?? doc.data()['assignedTo']) as String?;
       if (assignedAgent != null && assignedAgent.isNotEmpty) {
-        activeTasksMap[assignedAgent] = 'Active in Live Chat';
+        activeChatsMap[assignedAgent] = 'Active in Live Chat';
       }
     }
     emitMerged();
@@ -1236,6 +1268,7 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
     subDeposits.cancel();
     subWithdrawals.cancel();
     subTickets.cancel();
+    subSupportChats.cancel();
     subChats.cancel();
     controller.close();
   });
@@ -1921,23 +1954,88 @@ class _DashboardState extends State<Dashboard> {
                     [Component.text('🧑‍💼')],
                   ),
                 ]),
-                div(classes: 'grid grid-cols-2 gap-1 pt-2 border-t border-zinc-100 text-[8px] font-bold text-zinc-600', [
-                  div(classes: 'flex items-center gap-1.5 bg-emerald-50/80 px-2 py-1 rounded-lg text-emerald-800 truncate', [
+
+                // Status Breakdown Summary Strip
+                div(classes: 'grid grid-cols-2 gap-1 pt-1.5 border-t border-zinc-100 text-[8px] font-bold text-zinc-600', [
+                  div(classes: 'flex items-center gap-1 bg-emerald-50/80 px-1.5 py-0.5 rounded-md text-emerald-800 truncate', [
                     span(classes: 'w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0', []),
                     span(classes: 'font-extrabold truncate', [Component.text('$waitingCount Waiting')]),
                   ]),
-                  div(classes: 'flex items-center gap-1.5 bg-amber-50/80 px-2 py-1 rounded-lg text-amber-800 truncate', [
+                  div(classes: 'flex items-center gap-1 bg-amber-50/80 px-1.5 py-0.5 rounded-md text-amber-800 truncate', [
                     span(classes: 'w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0', []),
                     span(classes: 'font-extrabold truncate', [Component.text('$busyCount Busy')]),
                   ]),
-                  div(classes: 'flex items-center gap-1.5 bg-orange-50/80 px-2 py-1 rounded-lg text-orange-800 truncate', [
+                  div(classes: 'flex items-center gap-1 bg-orange-50/80 px-1.5 py-0.5 rounded-md text-orange-800 truncate', [
                     span(classes: 'w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0', []),
                     span(classes: 'font-extrabold truncate', [Component.text('$awayCount AFK')]),
                   ]),
-                  div(classes: 'flex items-center gap-1.5 bg-zinc-100 px-2 py-1 rounded-lg text-zinc-500 truncate', [
+                  div(classes: 'flex items-center gap-1 bg-zinc-100 px-1.5 py-0.5 rounded-md text-zinc-500 truncate', [
                     span(classes: 'w-1.5 h-1.5 rounded-full bg-zinc-400 flex-shrink-0', []),
                     span(classes: 'font-extrabold truncate', [Component.text('$offlineCount Offline')]),
                   ]),
+                ]),
+
+                // List of Agents with Photo, Name & Realtime Status
+                div(classes: 'flex flex-col gap-1.5 pt-1.5 border-t border-zinc-100 max-h-36 overflow-y-auto pr-0.5', [
+                  if (staffRoster.isEmpty)
+                    div(classes: 'py-2 text-center text-[9px] text-zinc-400 font-bold', [
+                      Component.text('No staff accounts found'),
+                    ])
+                  else
+                    for (final member in staffRoster)
+                      div(
+                        classes:
+                            'flex items-center justify-between gap-2 p-1.5 rounded-xl border transition-all '
+                            '${member.isBusy ? "bg-amber-50/50 border-amber-200/60" : member.isWaiting ? "bg-emerald-50/40 border-emerald-200/50" : member.isAway ? "bg-orange-50/40 border-orange-200/50" : "bg-zinc-50/60 border-zinc-100 opacity-70"}',
+                        [
+                          div(classes: 'flex items-center gap-2 min-w-0', [
+                            div(
+                              classes: 'relative w-6 h-6 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-zinc-700 text-[8px] flex-shrink-0 overflow-hidden',
+                              [
+                                if (member.photoUrl != null && member.photoUrl!.isNotEmpty)
+                                  img(src: member.photoUrl!, classes: 'w-full h-full object-cover', alt: member.name)
+                                else
+                                  Component.text(
+                                    member.name.length >= 2 ? member.name.substring(0, 2).toUpperCase() : member.name.toUpperCase(),
+                                  ),
+                                div(
+                                  classes:
+                                      'absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full border border-white '
+                                      '${member.isBusy ? "bg-amber-500 animate-pulse" : member.isWaiting ? "bg-emerald-500" : member.isAway ? "bg-orange-500" : "bg-zinc-400"}',
+                                  [],
+                                ),
+                              ],
+                            ),
+                            div(classes: 'flex flex-col min-w-0', [
+                              span(classes: 'text-[10px] font-black text-zinc-800 truncate leading-tight', [
+                                Component.text(member.name),
+                              ]),
+                              span(
+                                classes:
+                                    'text-[7.5px] font-bold truncate leading-tight '
+                                    '${member.isBusy ? "text-amber-700 font-extrabold" : member.isWaiting ? "text-emerald-700" : member.isAway ? "text-orange-600" : "text-zinc-400"}',
+                                [Component.text(member.currentTaskDetail)],
+                              ),
+                            ]),
+                          ]),
+
+                          span(
+                            classes:
+                                'px-1.5 py-0.5 rounded-md text-[7.5px] font-black uppercase tracking-wider flex-shrink-0 '
+                                '${member.isBusy ? "bg-amber-100 text-amber-800" : member.isWaiting ? "bg-emerald-100 text-emerald-800" : member.isAway ? "bg-orange-100 text-orange-800" : "bg-zinc-100 text-zinc-400"}',
+                            [
+                              if (member.isBusy)
+                                Component.text('Busy')
+                              else if (member.isWaiting)
+                                Component.text('Waiting')
+                              else if (member.isAway)
+                                Component.text('AFK')
+                              else
+                                Component.text('Offline'),
+                            ],
+                          ),
+                        ],
+                      ),
                 ]),
               ],
             );

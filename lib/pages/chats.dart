@@ -403,17 +403,54 @@ class _ChatsPageState extends State<ChatsPage> {
       'reassignCount': chat.reassignCount + 1,
       'updatedAt': now,
     }, SetOptions(merge: true));
+    final currentUser = context.read(adminCurrentUserProvider).value;
+    final adminFirestore = context.read(adminFirestoreProvider);
+    if (currentUser != null) {
+      await PresenceService.setPresenceState(
+        firestore: firestore,
+        adminFirestore: adminFirestore,
+        agentUid: currentUser.uid,
+        state: AgentPresenceState.online,
+        activeRequestId: null,
+        activeTask: null,
+      );
+    }
     _showChatFeedback('Chat returned to general pending queue.');
   }
 
   Future<void> _resolveChat(SupportChat chat) async {
     final firestore = context.read(firestoreProvider);
+    final adminFirestore = context.read(adminFirestoreProvider);
+    final currentUser = context.read(adminCurrentUserProvider).value;
     final now = DateTime.now().millisecondsSinceEpoch;
+
     await firestore.collection('support_chats').doc(chat.id).set({
       'status': 'resolved',
       'resolvedAt': now,
       'updatedAt': now,
     }, SetOptions(merge: true));
+
+    // Also update chats collection if mirrored
+    try {
+      await firestore.collection('chats').doc(chat.id).set({
+        'status': 'resolved',
+        'resolvedAt': now,
+        'updatedAt': now,
+      }, SetOptions(merge: true));
+    } catch (_) {}
+
+    // Reset agent presence to online and clear active task
+    if (currentUser != null) {
+      await PresenceService.setPresenceState(
+        firestore: firestore,
+        adminFirestore: adminFirestore,
+        agentUid: currentUser.uid,
+        state: AgentPresenceState.online,
+        activeRequestId: null,
+        activeTask: null,
+      );
+    }
+
     if (context.read(activeChatRoomIdProvider) == chat.id) {
       context.read(activeChatRoomIdProvider.notifier).state = null;
     }
