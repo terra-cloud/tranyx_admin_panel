@@ -1605,9 +1605,11 @@ class _DashboardState extends State<Dashboard> {
           ],
         ),
 
-      // ── Agent Personal Performance & CSAT Satisfaction (Top Placement) ──
+      // ── Agent Personal Performance (Staff) / Live Active Agents Tracker (Admin) (Top Placement) ──
       if (!isAdmin)
-        _buildAgentTopPerformanceSection(myStaffProfile),
+        _buildAgentTopPerformanceSection(myStaffProfile)
+      else
+        _buildAdminActiveAgentsTrackerSection(staffRoster),
 
       // Quick action links (6 Tiles)
       div(classes: 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3', [
@@ -1954,88 +1956,23 @@ class _DashboardState extends State<Dashboard> {
                     [Component.text('🧑‍💼')],
                   ),
                 ]),
-
-                // Status Breakdown Summary Strip
-                div(classes: 'grid grid-cols-2 gap-1 pt-1.5 border-t border-zinc-100 text-[8px] font-bold text-zinc-600', [
-                  div(classes: 'flex items-center gap-1 bg-emerald-50/80 px-1.5 py-0.5 rounded-md text-emerald-800 truncate', [
+                div(classes: 'grid grid-cols-2 gap-1 pt-2 border-t border-zinc-100 text-[8px] font-bold text-zinc-600', [
+                  div(classes: 'flex items-center gap-1.5 bg-emerald-50/80 px-2 py-1 rounded-lg text-emerald-800 truncate', [
                     span(classes: 'w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0', []),
                     span(classes: 'font-extrabold truncate', [Component.text('$waitingCount Waiting')]),
                   ]),
-                  div(classes: 'flex items-center gap-1 bg-amber-50/80 px-1.5 py-0.5 rounded-md text-amber-800 truncate', [
+                  div(classes: 'flex items-center gap-1.5 bg-amber-50/80 px-2 py-1 rounded-lg text-amber-800 truncate', [
                     span(classes: 'w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0', []),
                     span(classes: 'font-extrabold truncate', [Component.text('$busyCount Busy')]),
                   ]),
-                  div(classes: 'flex items-center gap-1 bg-orange-50/80 px-1.5 py-0.5 rounded-md text-orange-800 truncate', [
+                  div(classes: 'flex items-center gap-1.5 bg-orange-50/80 px-2 py-1 rounded-lg text-orange-800 truncate', [
                     span(classes: 'w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0', []),
                     span(classes: 'font-extrabold truncate', [Component.text('$awayCount AFK')]),
                   ]),
-                  div(classes: 'flex items-center gap-1 bg-zinc-100 px-1.5 py-0.5 rounded-md text-zinc-500 truncate', [
+                  div(classes: 'flex items-center gap-1.5 bg-zinc-100 px-2 py-1 rounded-lg text-zinc-500 truncate', [
                     span(classes: 'w-1.5 h-1.5 rounded-full bg-zinc-400 flex-shrink-0', []),
                     span(classes: 'font-extrabold truncate', [Component.text('$offlineCount Offline')]),
                   ]),
-                ]),
-
-                // List of Agents with Photo, Name & Realtime Status
-                div(classes: 'flex flex-col gap-1.5 pt-1.5 border-t border-zinc-100 max-h-36 overflow-y-auto pr-0.5', [
-                  if (staffRoster.isEmpty)
-                    div(classes: 'py-2 text-center text-[9px] text-zinc-400 font-bold', [
-                      Component.text('No staff accounts found'),
-                    ])
-                  else
-                    for (final member in staffRoster)
-                      div(
-                        classes:
-                            'flex items-center justify-between gap-2 p-1.5 rounded-xl border transition-all '
-                            '${member.isBusy ? "bg-amber-50/50 border-amber-200/60" : member.isWaiting ? "bg-emerald-50/40 border-emerald-200/50" : member.isAway ? "bg-orange-50/40 border-orange-200/50" : "bg-zinc-50/60 border-zinc-100 opacity-70"}',
-                        [
-                          div(classes: 'flex items-center gap-2 min-w-0', [
-                            div(
-                              classes: 'relative w-6 h-6 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-zinc-700 text-[8px] flex-shrink-0 overflow-hidden',
-                              [
-                                if (member.photoUrl != null && member.photoUrl!.isNotEmpty)
-                                  img(src: member.photoUrl!, classes: 'w-full h-full object-cover', alt: member.name)
-                                else
-                                  Component.text(
-                                    member.name.length >= 2 ? member.name.substring(0, 2).toUpperCase() : member.name.toUpperCase(),
-                                  ),
-                                div(
-                                  classes:
-                                      'absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full border border-white '
-                                      '${member.isBusy ? "bg-amber-500 animate-pulse" : member.isWaiting ? "bg-emerald-500" : member.isAway ? "bg-orange-500" : "bg-zinc-400"}',
-                                  [],
-                                ),
-                              ],
-                            ),
-                            div(classes: 'flex flex-col min-w-0', [
-                              span(classes: 'text-[10px] font-black text-zinc-800 truncate leading-tight', [
-                                Component.text(member.name),
-                              ]),
-                              span(
-                                classes:
-                                    'text-[7.5px] font-bold truncate leading-tight '
-                                    '${member.isBusy ? "text-amber-700 font-extrabold" : member.isWaiting ? "text-emerald-700" : member.isAway ? "text-orange-600" : "text-zinc-400"}',
-                                [Component.text(member.currentTaskDetail)],
-                              ),
-                            ]),
-                          ]),
-
-                          span(
-                            classes:
-                                'px-1.5 py-0.5 rounded-md text-[7.5px] font-black uppercase tracking-wider flex-shrink-0 '
-                                '${member.isBusy ? "bg-amber-100 text-amber-800" : member.isWaiting ? "bg-emerald-100 text-emerald-800" : member.isAway ? "bg-orange-100 text-orange-800" : "bg-zinc-100 text-zinc-400"}',
-                            [
-                              if (member.isBusy)
-                                Component.text('Busy')
-                              else if (member.isWaiting)
-                                Component.text('Waiting')
-                              else if (member.isAway)
-                                Component.text('AFK')
-                              else
-                                Component.text('Offline'),
-                            ],
-                          ),
-                        ],
-                      ),
                 ]),
               ],
             );
@@ -2287,9 +2224,6 @@ class _DashboardState extends State<Dashboard> {
           ),
         ]),
 
-      // ── Agent Presence & Live Activity Tracker (Admin Only) ──
-      if (isAdmin)
-        _buildAgentActivityRoster(staffRoster),
 
       // ── Bottom Row: Top Agents + Platform Config (Admin) ──
       if (isAdmin)
@@ -2434,7 +2368,7 @@ class _DashboardState extends State<Dashboard> {
     ]);
   }
 
-  Component _buildAgentActivityRoster(List<StaffRosterMember> roster) {
+  Component _buildAdminActiveAgentsTrackerSection(List<StaffRosterMember> roster) {
     final waitingCount = roster.where((member) => member.isWaiting).length;
     final busyCount = roster.where((member) => member.isBusy).length;
     final awayCount = roster.where((member) => member.isAway).length;
@@ -2451,12 +2385,13 @@ class _DashboardState extends State<Dashboard> {
     return div(
       classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
       [
-        div(classes: 'flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-50 pb-4', [
+        // Header
+        div(classes: 'flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-100 pb-4', [
           div([
-            div(classes: 'flex items-center gap-2', [
-              h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Agent Presence & Live Activity Tracker')]),
+            div(classes: 'flex items-center gap-2.5', [
+              h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Active Agents & Live Operational Presence')]),
               span(
-                classes: 'px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-[#0fa958] border border-emerald-200/60 flex items-center gap-1',
+                classes: 'px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-[#0fa958] border border-emerald-200/60 flex items-center gap-1.5',
                 [
                   span(classes: 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse', []),
                   Component.text('LIVE ROSTER'),
@@ -2464,92 +2399,127 @@ class _DashboardState extends State<Dashboard> {
               ),
             ]),
             p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
-              Component.text('Real-time operational tracking of staff agents: busy in tasks, waiting for requests, AFK, or offline'),
+              Component.text('Real-time tracking of staff agents: busy in operations, waiting for queue items, AFK, or offline'),
             ]),
           ]),
-          // Filter Tabs
-          div(classes: 'flex items-center gap-1 bg-zinc-100/80 p-1 rounded-xl w-max flex-wrap', [
-            _rosterFilterButton('all', 'All (${roster.length})'),
-            _rosterFilterButton('waiting', '🟢 Waiting ($waitingCount)'),
-            _rosterFilterButton('busy', '🟡 Busy ($busyCount)'),
-            _rosterFilterButton('away', '🟠 AFK ($awayCount)'),
-            _rosterFilterButton('offline', '⚪ Offline ($offlineCount)'),
+          div(classes: 'flex items-center gap-2 flex-wrap', [
+            div(classes: 'flex items-center gap-1 bg-zinc-100/80 p-1 rounded-xl w-max flex-wrap', [
+              _rosterFilterButton('all', 'All (${roster.length})'),
+              _rosterFilterButton('waiting', '🟢 Waiting ($waitingCount)'),
+              _rosterFilterButton('busy', '🟡 Busy ($busyCount)'),
+              _rosterFilterButton('away', '🟠 AFK ($awayCount)'),
+              _rosterFilterButton('offline', '⚪ Offline ($offlineCount)'),
+            ]),
+            a(
+              href: '/users',
+              classes: 'text-[10px] font-extrabold text-zinc-500 hover:text-black transition-colors no-underline px-2.5 py-1.5 rounded-xl hover:bg-zinc-100',
+              [Component.text('Manage Staff →')],
+            ),
           ]),
         ]),
 
+        // Clean Table
         if (filteredList.isEmpty)
-          div(classes: 'py-8 text-center flex flex-col items-center gap-2', [
+          div(classes: 'py-10 text-center flex flex-col items-center gap-2', [
             span(classes: 'text-2xl', [Component.text('🔍')]),
-            span(classes: 'text-xs font-bold text-zinc-600', [Component.text('No agents in this filter status')]),
+            span(classes: 'text-xs font-bold text-zinc-600', [Component.text('No agents match this filter status')]),
           ])
         else
-          div(classes: 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3', [
-            for (final agent in filteredList)
+          div(classes: 'overflow-x-auto', [
+            div(classes: 'min-w-[680px] flex flex-col', [
+              // Table Header
               div(
-                classes:
-                    'p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 '
-                    '${agent.isBusy ? "bg-amber-50/40 border-amber-200/60" : agent.isWaiting ? "bg-emerald-50/30 border-emerald-200/50" : agent.isAway ? "bg-orange-50/30 border-orange-200/50" : "bg-[#fafcfa] border-zinc-200/60 opacity-80"}',
+                classes: 'grid grid-cols-12 text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider px-3 pb-2 border-b border-zinc-100',
                 [
-                  div(classes: 'flex items-center gap-3 min-w-0', [
-                    div(
-                      classes: 'relative w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-zinc-700 text-xs flex-shrink-0 overflow-hidden shadow-sm',
-                      [
-                        if (agent.photoUrl != null && agent.photoUrl!.isNotEmpty)
-                          img(src: agent.photoUrl!, classes: 'w-full h-full object-cover', alt: agent.name)
-                        else
-                          Component.text(
-                            agent.name.length >= 2 ? agent.name.substring(0, 2).toUpperCase() : agent.name.toUpperCase(),
+                  div(classes: 'col-span-4', [Component.text('Agent / Staff Member')]),
+                  div(classes: 'col-span-2 text-center', [Component.text('Role')]),
+                  div(classes: 'col-span-2 text-center', [Component.text('Presence Status')]),
+                  div(classes: 'col-span-3', [Component.text('Current Activity / Task')]),
+                  div(classes: 'col-span-1 text-right', [Component.text('Ping')]),
+                ],
+              ),
+              // Table Rows
+              for (final agent in filteredList)
+                div(
+                  classes:
+                      'grid grid-cols-12 items-center py-3 px-3 border-b border-zinc-50 last:border-0 hover:bg-zinc-50/70 rounded-xl transition-colors',
+                  [
+                    // Agent Avatar & Name
+                    div(classes: 'col-span-4 flex items-center gap-3 min-w-0 pr-2', [
+                      div(
+                        classes: 'relative w-9 h-9 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-zinc-700 text-xs flex-shrink-0 overflow-hidden shadow-sm',
+                        [
+                          if (agent.photoUrl != null && agent.photoUrl!.isNotEmpty)
+                            img(src: agent.photoUrl!, classes: 'w-full h-full object-cover', alt: agent.name)
+                          else
+                            Component.text(
+                              agent.name.length >= 2 ? agent.name.substring(0, 2).toUpperCase() : agent.name.toUpperCase(),
+                            ),
+                          div(
+                            classes:
+                                'absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white '
+                                '${agent.isBusy ? "bg-amber-500 animate-pulse" : agent.isWaiting ? "bg-emerald-500" : agent.isAway ? "bg-orange-500" : "bg-zinc-400"}',
+                            [],
                           ),
-                        // Status indicator dot
-                        div(
-                          classes:
-                              'absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white '
-                              '${agent.isBusy ? "bg-amber-500 animate-pulse" : agent.isWaiting ? "bg-emerald-500" : agent.isAway ? "bg-orange-500" : "bg-zinc-400"}',
-                          [],
-                        ),
-                      ],
-                    ),
-                    div(classes: 'flex flex-col min-w-0', [
-                      div(classes: 'flex items-center gap-1.5', [
+                        ],
+                      ),
+                      div(classes: 'flex flex-col min-w-0', [
                         span(classes: 'text-xs font-black text-zinc-900 truncate', [Component.text(agent.name)]),
-                        span(
-                          classes: 'text-[8px] font-extrabold uppercase px-1.5 py-0.2 rounded '
-                              '${agent.role.toLowerCase().contains("admin") ? "bg-amber-100 text-amber-800" : "bg-indigo-50 text-indigo-700 border border-indigo-200/50"}',
-                          [Component.text(agent.role)],
-                        ),
+                        span(classes: 'text-[9.5px] text-zinc-400 font-medium truncate mt-0.5', [Component.text(agent.email)]),
                       ]),
+                    ]),
+
+                    // Role
+                    div(classes: 'col-span-2 flex justify-center', [
+                      span(
+                        classes: 'text-[9px] font-extrabold uppercase px-2.5 py-0.5 rounded-full '
+                            '${agent.role.toLowerCase().contains("admin") ? "bg-amber-100 text-amber-800 border border-amber-200" : "bg-indigo-50 text-indigo-700 border border-indigo-100"}',
+                        [Component.text(agent.role)],
+                      ),
+                    ]),
+
+                    // Status Pill
+                    div(classes: 'col-span-2 flex justify-center', [
                       span(
                         classes:
-                            'text-[10px] font-bold truncate mt-0.5 '
-                            '${agent.isBusy ? "text-amber-700 font-extrabold" : agent.isWaiting ? "text-emerald-700 font-extrabold" : agent.isAway ? "text-orange-600" : "text-zinc-400"}',
+                            'px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border '
+                            '${agent.isBusy ? "bg-amber-100 text-amber-800 border-amber-300" : agent.isWaiting ? "bg-emerald-100 text-emerald-800 border-emerald-300" : agent.isAway ? "bg-orange-100 text-orange-800 border-orange-300" : "bg-zinc-100 text-zinc-500 border-zinc-200"}',
+                        [
+                          if (agent.isBusy)
+                            Component.text('🟡 Busy')
+                          else if (agent.isWaiting)
+                            Component.text('🟢 Waiting')
+                          else if (agent.isAway)
+                            Component.text('🟠 AFK')
+                          else
+                            Component.text('⚪ Offline'),
+                        ],
+                      ),
+                    ]),
+
+                    // Current Task / Activity
+                    div(classes: 'col-span-3 flex flex-col justify-center min-w-0 pr-2', [
+                      span(
+                        classes:
+                            'text-xs font-black truncate '
+                            '${agent.isBusy ? "text-amber-800 font-black" : agent.isWaiting ? "text-emerald-700 font-black" : agent.isAway ? "text-orange-700" : "text-zinc-500 font-medium"}',
                         [Component.text(agent.currentTaskDetail)],
                       ),
                     ]),
-                  ]),
 
-                  div(classes: 'flex flex-col items-end gap-1 flex-shrink-0', [
-                    span(
-                      classes:
-                          'px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border '
-                          '${agent.isBusy ? "bg-amber-100 text-amber-800 border-amber-300" : agent.isWaiting ? "bg-emerald-100 text-emerald-800 border-emerald-300" : agent.isAway ? "bg-orange-100 text-orange-800 border-orange-300" : "bg-zinc-100 text-zinc-500 border-zinc-200"}',
-                      [
-                        if (agent.isBusy)
-                          Component.text('🟡 Busy')
-                        else if (agent.isWaiting)
-                          Component.text('🟢 Waiting')
-                        else if (agent.isAway)
-                          Component.text('🟠 AFK')
-                        else
-                          Component.text('⚪ Offline'),
-                      ],
-                    ),
-                    if (agent.lastSeenAt > 0 && !agent.isOffline)
-                      span(classes: 'text-[8px] text-zinc-400 font-semibold', [
-                        Component.text('Ping: ${_formatRelativeTime(agent.lastSeenAt)}'),
-                      ]),
-                  ]),
-                ],
-              ),
+                    // Ping
+                    div(classes: 'col-span-1 text-right', [
+                      span(
+                        classes: 'text-[9px] font-bold '
+                            '${agent.isOffline ? "text-zinc-400" : "text-zinc-500"}',
+                        [
+                          Component.text(agent.lastSeenAt > 0 ? _formatRelativeTime(agent.lastSeenAt) : '-'),
+                        ],
+                      ),
+                    ]),
+                  ],
+                ),
+            ]),
           ]),
       ],
     );
