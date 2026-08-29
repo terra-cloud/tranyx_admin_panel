@@ -254,14 +254,14 @@ class _SidebarState extends State<Sidebar> {
             if (_isCollapsed)
               div(
                 classes:
-                    'w-8 h-8 mx-auto rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-xs text-indigo-700 flex-shrink-0 overflow-hidden relative',
-                attributes: {'style': 'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px;'},
+                    'avatar-circle-container mx-auto bg-indigo-50 border border-indigo-100 font-bold text-xs text-indigo-700',
+                attributes: {'style': 'width: 36px; height: 36px; min-width: 36px; min-height: 36px; max-width: 36px; max-height: 36px;'},
                 [
                   if (profile.photoUrl != null && profile.photoUrl!.isNotEmpty)
                     img(
                       src: profile.photoUrl!,
-                      classes: 'w-full h-full object-cover block',
-                      attributes: {'style': 'width: 32px; height: 32px; object-fit: cover;'},
+                      classes: 'sidebar-avatar-img',
+                      attributes: {'style': 'width: 36px; height: 36px; max-width: 36px; max-height: 36px; object-fit: cover; border-radius: 9999px;'},
                       alt: 'Avatar',
                     )
                   else
@@ -272,14 +272,14 @@ class _SidebarState extends State<Sidebar> {
               div(classes: 'px-2 flex items-center gap-3 w-full min-w-0', [
                 div(
                   classes:
-                      'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-xs text-indigo-700 flex-shrink-0 overflow-hidden relative',
-                  attributes: {'style': 'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px;'},
+                      'avatar-circle-container bg-indigo-50 border border-indigo-100 font-bold text-xs text-indigo-700',
+                  attributes: {'style': 'width: 36px; height: 36px; min-width: 36px; min-height: 36px; max-width: 36px; max-height: 36px;'},
                   [
                     if (profile.photoUrl != null && profile.photoUrl!.isNotEmpty)
                       img(
                         src: profile.photoUrl!,
-                        classes: 'w-full h-full object-cover block',
-                        attributes: {'style': 'width: 32px; height: 32px; object-fit: cover;'},
+                        classes: 'sidebar-avatar-img',
+                        attributes: {'style': 'width: 36px; height: 36px; max-width: 36px; max-height: 36px; object-fit: cover; border-radius: 9999px;'},
                         alt: 'Avatar',
                       )
                     else
@@ -403,14 +403,14 @@ class _SidebarState extends State<Sidebar> {
               div(classes: 'flex items-center gap-2.5 min-w-0 pr-2', [
                 div(
                   classes:
-                      'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-xs text-indigo-700 flex-shrink-0 overflow-hidden relative',
-                  attributes: {'style': 'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px;'},
+                      'avatar-circle-container bg-indigo-50 border border-indigo-100 font-bold text-xs text-indigo-700',
+                  attributes: {'style': 'width: 36px; height: 36px; min-width: 36px; min-height: 36px; max-width: 36px; max-height: 36px;'},
                   [
                     if (profile.photoUrl != null && profile.photoUrl!.isNotEmpty)
                       img(
                         src: profile.photoUrl!,
-                        classes: 'w-full h-full object-cover block',
-                        attributes: {'style': 'width: 32px; height: 32px; object-fit: cover;'},
+                        classes: 'sidebar-avatar-img',
+                        attributes: {'style': 'width: 36px; height: 36px; max-width: 36px; max-height: 36px; object-fit: cover; border-radius: 9999px;'},
                         alt: 'Avatar',
                       )
                     else
