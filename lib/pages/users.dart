@@ -724,7 +724,7 @@ class _UsersPageState extends State<UsersPage> {
 
     final userEmail = (profile?.email.isNotEmpty == true ? profile!.email : user?.email) ?? '';
     final userRole = profile?.role.toLowerCase() ?? '';
-    final isAdmin = userEmail.toLowerCase().contains('admin') || userEmail == 'admin@tranyx.app' || userRole.contains('admin');
+    final isAdmin = userRole.contains('admin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
 
     if (!isAdmin && (activeTab == 'support' || activeTab == 'admin')) {
       Future.microtask(() => context.read(usersTabProvider.notifier).state = 'platform');

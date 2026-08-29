@@ -346,8 +346,10 @@ class _ChatsPageState extends State<ChatsPage> {
         ? currentUser.displayName!
         : currentUser.email?.split('@').first ?? 'Agent';
 
+    final profile = context.read(currentAdminProfileProvider).value;
     final currentUserEmail = currentUser.email ?? '';
-    final isAdmin = currentUserEmail.toLowerCase().contains('admin') || currentUserEmail == 'sarah.johnson@tranyx.com';
+    final role = profile?.role.toLowerCase() ?? '';
+    final isAdmin = role.contains('admin') || currentUserEmail == 'admin@tranyx.app' || currentUserEmail == 'admin@tranyx.com';
 
     try {
       final firestore = context.read(firestoreProvider);
@@ -472,10 +474,12 @@ class _ChatsPageState extends State<ChatsPage> {
     final currentUser = context.watch(adminCurrentUserProvider).value;
     final onlineAgents = context.watch(onlineAgentsStreamProvider).value ?? [];
     final systemConfig = context.watch(systemConfigStreamProvider).value ?? const SystemConfigModel();
+    final profile = context.watch(currentAdminProfileProvider).value;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
     final userEmail = currentUser?.email ?? '';
-    final isAdmin = userEmail.toLowerCase().contains('admin') || userEmail == 'sarah.johnson@tranyx.com';
+    final role = profile?.role.toLowerCase() ?? '';
+    final isAdmin = role.contains('admin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
     final currentUserId = currentUser?.uid ?? '';
 
     // Helper to resolve customer name

@@ -1488,7 +1488,7 @@ class _DashboardState extends State<Dashboard> {
     final user = context.watch(adminCurrentUserProvider).value;
     final userEmail = (profile?.email.isNotEmpty == true ? profile!.email : user?.email) ?? '';
     final userRole = profile?.role.toLowerCase() ?? '';
-    final isAdmin = userEmail.toLowerCase().contains('admin') || userEmail == 'admin@tranyx.app' || userRole.contains('admin');
+    final isAdmin = userRole.contains('admin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
     if (!isAdmin) {
       _revenueTimeframe = '24h';
     }
@@ -1537,7 +1537,7 @@ class _DashboardState extends State<Dashboard> {
     final maxUsers = monthlyUsers.fold(0, (acc, val) => val > acc ? val : acc);
     final kycTotal = kycStats.total == 0 ? 1 : kycStats.total;
 
-    return div(classes: 'flex-1 p-4 sm:p-6 md:p-8 flex flex-col gap-7 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden bg-[#f2f5f3]', [
+    return div(classes: 'flex-1 p-4 sm:p-6 md:p-8 flex flex-col gap-7 max-w-7xl mx-auto w-full min-w-0 bg-[#eff2f0]', [
       // Header
       div(classes: 'flex flex-col md:flex-row md:items-center justify-between gap-4 pb-1', [
         div(classes: 'flex flex-col gap-1', [

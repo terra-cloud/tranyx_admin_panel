@@ -89,9 +89,13 @@ class _SettingsPageState extends State<SettingsPage> {
       };
 
       await adminFirestore.collection('system_config').doc('settings').set(updateData, SetOptions(merge: true));
-      await activeFirestore.collection('system_config').doc('settings').set(updateData, SetOptions(merge: true)).catchError((e) {
-        print('[Settings] Active firestore sync notice: $e');
-      });
+      await activeFirestore
+          .collection('system_config')
+          .doc('settings')
+          .set(updateData, SetOptions(merge: true))
+          .catchError((e) {
+            print('[Settings] Active firestore sync notice: $e');
+          });
 
       setState(() {
         _configMessage = 'System request lock timeouts & Resend email credentials updated!';
@@ -314,7 +318,8 @@ class _SettingsPageState extends State<SettingsPage> {
   Component build(BuildContext context) {
     final currentEnv = context.watch(activeEnvironmentProvider);
     final user = context.watch(adminCurrentUserProvider).value;
-    final profile = context.watch(currentAdminProfileProvider).value ??
+    final profile =
+        context.watch(currentAdminProfileProvider).value ??
         const AdminStaffProfileModel(
           uid: '',
           name: 'Staff Member',
@@ -325,7 +330,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final systemConfigAsync = context.watch(systemConfigStreamProvider);
 
     final userEmail = profile.email.isNotEmpty ? profile.email : (user?.email ?? '');
-    final isAdmin = userEmail.toLowerCase().contains('admin') || userEmail == 'sarah.johnson@tranyx.com' || profile.role.toLowerCase().contains('admin');
+    final role = profile.role.toLowerCase();
+    final isAdmin = role.contains('admin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
 
     // Populate initial system config values once loaded
     if (!_configInitialized && systemConfigAsync.hasValue) {
@@ -349,7 +355,9 @@ class _SettingsPageState extends State<SettingsPage> {
             Component.text('System Configuration Console'),
           ]),
           p(classes: 'text-xs text-zinc-400 font-medium', [
-            Component.text('Audit controls for staff roles, single-agent request lock timeouts, and platform constraints.'),
+            Component.text(
+              'Audit controls for staff roles, single-agent request lock timeouts, and platform constraints.',
+            ),
           ]),
         ]),
       ]),
@@ -374,7 +382,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
                 if (_configMessage != null)
                   div(
-                    classes: 'p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[#0fa958] text-xs font-semibold',
+                    classes:
+                        'p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[#0fa958] text-xs font-semibold',
                     [Component.text(_configMessage!)],
                   ),
                 if (_configError != null)
@@ -399,7 +408,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       onInput: (dynamic value) => setState(() => _claimTimeoutStr = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
-                      Component.text('If assigned agent fails to accept/claim within this window, the lock automatically returns to PENDING queue.'),
+                      Component.text(
+                        'If assigned agent fails to accept/claim within this window, the lock automatically returns to PENDING queue.',
+                      ),
                     ]),
                   ]),
 
@@ -419,18 +430,24 @@ class _SettingsPageState extends State<SettingsPage> {
                       onInput: (dynamic value) => setState(() => _heartbeatTimeoutStr = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
-                      Component.text('If an active agent becomes unresponsive longer than this duration, the request returns to PENDING queue.'),
+                      Component.text(
+                        'If an active agent becomes unresponsive longer than this duration, the request returns to PENDING queue.',
+                      ),
                     ]),
                   ]),
 
-                    div(classes: 'flex flex-col gap-1.5 border-t border-zinc-100 pt-3', [
+                  div(classes: 'flex flex-col gap-1.5 border-t border-zinc-100 pt-3', [
                     div(classes: 'flex items-center justify-between', [
                       label(classes: 'text-[10px] text-zinc-400 font-bold uppercase tracking-wider', [
                         Component.text('Resend API Key (Transactional Email)'),
                       ]),
-                      span(classes: 'text-[10px] font-mono ${_resendApiKey.isNotEmpty ? 'text-emerald-600' : 'text-amber-500'} font-bold', [
-                        Component.text(_resendApiKey.isNotEmpty ? 'Active / Configured' : 'Not Set (Optional)'),
-                      ]),
+                      span(
+                        classes:
+                            'text-[10px] font-mono ${_resendApiKey.isNotEmpty ? 'text-emerald-600' : 'text-amber-500'} font-bold',
+                        [
+                          Component.text(_resendApiKey.isNotEmpty ? 'Active / Configured' : 'Not Set (Optional)'),
+                        ],
+                      ),
                     ]),
                     input(
                       value: _resendApiKey,
@@ -439,7 +456,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       onInput: (dynamic value) => setState(() => _resendApiKey = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
-                      Component.text('Key used to deliver ticket submission confirmations and response updates to user emails.'),
+                      Component.text(
+                        'Key used to deliver ticket submission confirmations and response updates to user emails.',
+                      ),
                     ]),
                   ]),
 
@@ -454,7 +473,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       onInput: (dynamic value) => setState(() => _resendSenderEmail = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
-                      Component.text('Sender address for automated ticket emails (e.g. Tranyx No-Reply <noreply@yourdomain.com>).'),
+                      Component.text(
+                        'Sender address for automated ticket emails (e.g. Tranyx No-Reply <noreply@yourdomain.com>).',
+                      ),
                     ]),
                   ]),
 
@@ -530,7 +551,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ]),
                 p(classes: 'text-xs text-zinc-500 font-medium leading-relaxed', [
-                  Component.text('Customize your staff display name shown to customers and fellow agents across the portal.'),
+                  Component.text(
+                    'Customize your staff display name shown to customers and fellow agents across the portal.',
+                  ),
                 ]),
 
                 if (_profileMessage != null)
@@ -772,8 +795,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ]),
                 div(classes: 'flex flex-col gap-2 mt-2', [
                   div(
-                    classes:
-                        'p-4 rounded-xl bg-[#f8faf9] border border-zinc-200/50 flex justify-between items-center text-xs',
+                    classes: 'p-4 rounded-xl bg-[#f8faf9] border border-zinc-200/50 flex justify-between items-center text-xs',
                     [
                       span(classes: 'font-semibold text-zinc-600', [Component.text('Security Rules Status')]),
                       span(classes: 'text-[#0fa958] font-extrabold text-[10px] tracking-wider uppercase', [
@@ -782,8 +804,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ],
                   ),
                   div(
-                    classes:
-                        'p-4 rounded-xl bg-[#f8faf9] border border-zinc-200/50 flex justify-between items-center text-xs',
+                    classes: 'p-4 rounded-xl bg-[#f8faf9] border border-zinc-200/50 flex justify-between items-center text-xs',
                     [
                       span(classes: 'font-semibold text-zinc-600', [Component.text('Single-Agent Lock Protocol')]),
                       span(classes: 'text-indigo-500 font-extrabold text-[10px] tracking-wider uppercase', [

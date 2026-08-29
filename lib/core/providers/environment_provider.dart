@@ -104,7 +104,7 @@ class AdminStaffProfileModel {
   }
 }
 
-String _formatHumanStaffName(String? raw, String email, bool isDefaultAdmin) {
+String _formatHumanStaffName(String? raw, String email) {
   if (raw != null && raw.trim().isNotEmpty) {
     var cleaned = raw.trim();
     // If it's a full custom name without emails/dots (e.g. "Zeus Cajurao"), return as is
@@ -125,8 +125,6 @@ String _formatHumanStaffName(String? raw, String email, bool isDefaultAdmin) {
         .join(' ');
   }
 
-  if (isDefaultAdmin) return 'Sarah Johnson';
-
   if (email.isNotEmpty && email.contains('@')) {
     final prefix = email.split('@').first;
     return prefix
@@ -145,6 +143,7 @@ String _formatHumanStaffName(String? raw, String email, bool isDefaultAdmin) {
 final currentAdminProfileProvider = StreamProvider<AdminStaffProfileModel>((ref) {
   final auth = ref.watch(adminAuthProvider);
   final adminFirestore = ref.watch(adminFirestoreProvider);
+  final firestore = ref.watch(firestoreProvider);
 
   return auth.userChanges().asyncExpand((user) {
     if (user == null) {
@@ -160,26 +159,36 @@ final currentAdminProfileProvider = StreamProvider<AdminStaffProfileModel>((ref)
     }
 
     final email = user.email ?? '';
-    final isDefaultAdmin = email.toLowerCase().contains('admin') || email == 'admin@tranyx.app';
-    final defaultName = _formatHumanStaffName(user.displayName, email, isDefaultAdmin);
-    final defaultRole = isDefaultAdmin ? 'Admin' : 'Staff';
+    final defaultName = _formatHumanStaffName(user.displayName, email);
+    final isExplicitAdmin = email == 'admin@tranyx.app' || email == 'admin@tranyx.com';
+    final defaultRole = isExplicitAdmin ? 'Admin' : 'Staff';
 
     return adminFirestore
         .collection('users')
         .doc(user.uid)
         .snapshots()
-        .map((doc) {
-          if (doc.exists) {
-            final d = doc.data() ?? {};
+        .asyncMap((doc) async {
+          Map<String, dynamic> d = {};
+          if (doc.exists && doc.data() != null) {
+            d = doc.data()!;
+          } else {
+            try {
+              final userDoc = await firestore.collection('users').doc(user.uid).get();
+              if (userDoc.exists && userDoc.data() != null) {
+                d = userDoc.data()!;
+              }
+            } catch (_) {}
+          }
+
+          if (d.isNotEmpty) {
             final docName = d['name'] ?? d['displayName'] ?? d['agentName'];
             final docRole = d['role'] ?? d['position'] ?? d['staffRole'] ?? defaultRole;
             final docEmail = d['email'] ?? email;
-            final photo = d['photoURL'] ?? d['avatarUrl'] ?? d['avatar'] ?? user.photoURL;
+            final photo = d['photoURL'] ?? d['photoUrl'] ?? d['avatarUrl'] ?? d['avatar'] ?? user.photoURL;
 
             final resolvedName = _formatHumanStaffName(
               docName?.toString(),
               docEmail.toString(),
-              isDefaultAdmin,
             );
 
             return AdminStaffProfileModel(

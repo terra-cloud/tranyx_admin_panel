@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
@@ -132,7 +133,8 @@ class TicketModel {
     }
 
     final created = parseDateTime(map['createdAt'] ?? map['submittedAt'] ?? map['timestamp']);
-    final refNum = map['ticketNumber'] ??
+    final refNum =
+        map['ticketNumber'] ??
         map['referenceNumber'] ??
         map['ticketRef'] ??
         TicketEmailService.generateReferenceNumber(id, created > 0 ? created : null);
@@ -157,7 +159,9 @@ class TicketModel {
     }
 
     final assignedAtVal = map['assignedAt'] != null ? parseDateTime(map['assignedAt']) : null;
-    final claimDeadlineVal = map['claimDeadline'] != null ? parseDateTime(map['claimDeadline']) : (assignedAtVal != null ? assignedAtVal + (180 * 1000) : null);
+    final claimDeadlineVal = map['claimDeadline'] != null
+        ? parseDateTime(map['claimDeadline'])
+        : (assignedAtVal != null ? assignedAtVal + (180 * 1000) : null);
 
     return TicketModel(
       id: id,
@@ -195,14 +199,18 @@ final ticketsStreamProvider = StreamProvider<List<TicketModel>>((ref) {
     return Stream.value(<TicketModel>[]);
   }
   final firestore = ref.watch(firestoreProvider);
-  return firestore.collection('supportTickets').snapshots().map((snap) {
-    final list = snap.docs.map((doc) => TicketModel.fromMap(doc.id, doc.data())).toList();
-    list.sort((ticketA, ticketB) => ticketB.createdAt.compareTo(ticketA.createdAt));
-    return list;
-  }).handleError((err) {
-    print('[Tickets] Stream failed: $err');
-    return <TicketModel>[];
-  });
+  return firestore
+      .collection('supportTickets')
+      .snapshots()
+      .map((snap) {
+        final list = snap.docs.map((doc) => TicketModel.fromMap(doc.id, doc.data())).toList();
+        list.sort((ticketA, ticketB) => ticketB.createdAt.compareTo(ticketA.createdAt));
+        return list;
+      })
+      .handleError((err) {
+        print('[Tickets] Stream failed: $err');
+        return <TicketModel>[];
+      });
 });
 
 final ticketSearchQueryProvider = StateProvider<String>((ref) => '');
@@ -288,8 +296,11 @@ class _TicketsPageState extends State<TicketsPage> {
         ? currentUser.displayName!
         : (currentUser.email?.split('@').first ?? 'Agent');
 
-    final currentUserEmail = currentUser.email ?? '';
-    final isAdmin = currentUserEmail.toLowerCase().contains('admin') || currentUserEmail == 'sarah.johnson@tranyx.com';
+    final profile = context.read(currentAdminProfileProvider).value;
+    final currentUserEmail = currentUser.email ?? 'admin@tranyx.app';
+    final role = profile?.role.toLowerCase() ?? '';
+    final isAdmin =
+        role.contains('admin') || currentUserEmail == 'admin@tranyx.app' || currentUserEmail == 'admin@tranyx.com';
 
     final firestore = context.read(firestoreProvider);
 
@@ -523,7 +534,7 @@ class _TicketsPageState extends State<TicketsPage> {
     final users = context.watch(usersStreamProvider).value ?? [];
     final currentUser = context.watch(adminCurrentUserProvider).value;
     final currentUserEmail = currentUser?.email ?? '';
-    final isAdmin = currentUserEmail.toLowerCase().contains('admin') || currentUserEmail == 'sarah.johnson@tranyx.com';
+    final isAdmin = currentUserEmail.toLowerCase().contains('admin') || currentUserEmail == 'admin@tranyx.app';
     final currentUserId = currentUser?.uid ?? '';
     final config = context.watch(systemConfigStreamProvider).value ?? const SystemConfigModel();
     final onlineAgents = context.watch(onlineAgentsStreamProvider).value ?? [];
@@ -539,7 +550,15 @@ class _TicketsPageState extends State<TicketsPage> {
       }
       final match = users.firstWhere(
         (usr) => usr.uid == uid,
-        orElse: () => UserProfileModel(uid: '', name: 'Unknown User', email: '', idVerified: false, bgChecked: false, verificationLevel: 0, banned: false),
+        orElse: () => UserProfileModel(
+          uid: '',
+          name: 'Unknown User',
+          email: '',
+          idVerified: false,
+          bgChecked: false,
+          verificationLevel: 0,
+          banned: false,
+        ),
       );
       return match.name.isNotEmpty ? match.name : 'Customer';
     }
@@ -550,7 +569,15 @@ class _TicketsPageState extends State<TicketsPage> {
       }
       final match = users.firstWhere(
         (usr) => usr.uid == uid,
-        orElse: () => UserProfileModel(uid: '', name: '', email: 'N/A', idVerified: false, bgChecked: false, verificationLevel: 0, banned: false),
+        orElse: () => UserProfileModel(
+          uid: '',
+          name: '',
+          email: 'N/A',
+          idVerified: false,
+          bgChecked: false,
+          verificationLevel: 0,
+          banned: false,
+        ),
       );
       return match.email;
     }
@@ -578,7 +605,8 @@ class _TicketsPageState extends State<TicketsPage> {
         final desc = t.description.toLowerCase();
         final uid = t.uid.toLowerCase();
 
-        final matches = refNum.contains(searchQuery) ||
+        final matches =
+            refNum.contains(searchQuery) ||
             id.contains(searchQuery) ||
             email.contains(searchQuery) ||
             name.contains(searchQuery) ||
@@ -629,7 +657,9 @@ class _TicketsPageState extends State<TicketsPage> {
             ),
           ]),
           p(classes: 'text-xs text-zinc-400 font-medium', [
-            Component.text('Review customer concerns, track reference numbers, dispatch email updates, and resolve tickets.'),
+            Component.text(
+              'Review customer concerns, track reference numbers, dispatch email updates, and resolve tickets.',
+            ),
           ]),
         ]),
         div(classes: 'flex items-center gap-3', [
@@ -645,52 +675,61 @@ class _TicketsPageState extends State<TicketsPage> {
       ]),
 
       // Search and Filter Bar
-      div(classes: 'flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-white p-3.5 rounded-2xl border border-zinc-200/60 shadow-sm', [
-        // Search Input
-        div(classes: 'relative flex-1 min-w-[260px]', [
-          input(
-            value: searchQuery,
-            onInput: (v) => context.read(ticketSearchQueryProvider.notifier).state = v as String,
-            classes: 'w-full bg-[#f4f6f5] border border-zinc-200/80 rounded-xl pl-9 pr-4 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-black',
-            attributes: {'placeholder': 'Search by Ticket #, Ref #, Email, Name, Subject, UID...'},
-          ),
-          span(classes: 'absolute left-3 top-2.5 text-zinc-400 text-xs', [Component.text('🔍')]),
-          if (searchQuery.isNotEmpty)
-            button(
-              onClick: () => context.read(ticketSearchQueryProvider.notifier).state = '',
-              classes: 'absolute right-2.5 top-2 text-zinc-400 hover:text-zinc-700 text-xs px-1',
-              [Component.text('✕')],
+      div(
+        classes: 'flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between bg-white p-3.5 rounded-2xl border border-zinc-200/60 shadow-sm',
+        [
+          // Search Input
+          div(classes: 'relative flex-1 min-w-[260px]', [
+            input(
+              value: searchQuery,
+              onInput: (v) => context.read(ticketSearchQueryProvider.notifier).state = v as String,
+              classes: 'w-full bg-[#f4f6f5] border border-zinc-200/80 rounded-xl pl-9 pr-4 py-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-black',
+              attributes: {'placeholder': 'Search by Ticket #, Ref #, Email, Name, Subject, UID...'},
             ),
-        ]),
+            span(classes: 'absolute left-3 top-2.5 text-zinc-400 text-xs', [Component.text('🔍')]),
+            if (searchQuery.isNotEmpty)
+              button(
+                onClick: () => context.read(ticketSearchQueryProvider.notifier).state = '',
+                classes: 'absolute right-2.5 top-2 text-zinc-400 hover:text-zinc-700 text-xs px-1',
+                [Component.text('✕')],
+              ),
+          ]),
 
-        // Status Tabs
-        div(classes: 'flex items-center gap-1 bg-[#eff2f0] p-1 rounded-xl overflow-x-auto no-scrollbar', [
-          _buildFilterTab(context, 'All', 'all', statusFilter),
-          _buildFilterTab(context, 'Open', 'open', statusFilter),
-          _buildFilterTab(context, 'In Progress', 'in_progress', statusFilter),
-          _buildFilterTab(context, 'My Assigned', 'my_assigned', statusFilter),
-          _buildFilterTab(context, 'Resolved', 'resolved', statusFilter),
-        ]),
+          // Status Tabs
+          div(classes: 'flex items-center gap-1 bg-[#eff2f0] p-1 rounded-xl overflow-x-auto no-scrollbar', [
+            _buildFilterTab(context, 'All', 'all', statusFilter),
+            _buildFilterTab(context, 'Open', 'open', statusFilter),
+            _buildFilterTab(context, 'In Progress', 'in_progress', statusFilter),
+            _buildFilterTab(context, 'My Assigned', 'my_assigned', statusFilter),
+            _buildFilterTab(context, 'Resolved', 'resolved', statusFilter),
+          ]),
 
-        // Category Select
-        select(
-          classes: 'bg-[#f4f6f5] border border-zinc-200/80 rounded-xl px-3 py-2 text-xs font-bold text-zinc-700 focus:outline-none cursor-pointer',
-          onChange: (val) {
-            final sel = val.isNotEmpty ? val.first : 'all';
-            context.read(ticketCategoryFilterProvider.notifier).state = sel;
-          },
-          [
-            option(value: 'all', selected: categoryFilter == 'all', [Component.text('All Categories')]),
-            option(value: 'General', selected: categoryFilter == 'General', [Component.text('General')]),
-            option(value: 'Payment / P2P', selected: categoryFilter == 'Payment / P2P', [Component.text('Payment / P2P')]),
-            option(value: 'Account', selected: categoryFilter == 'Account', [Component.text('Account')]),
-            option(value: 'KYC Verification', selected: categoryFilter == 'KYC Verification', [Component.text('KYC Verification')]),
-            option(value: 'Booking / Rental', selected: categoryFilter == 'Booking / Rental', [Component.text('Booking / Rental')]),
-            option(value: 'Technical', selected: categoryFilter == 'Technical', [Component.text('Technical')]),
-            option(value: 'Security', selected: categoryFilter == 'Security', [Component.text('Security')]),
-          ],
-        ),
-      ]),
+          // Category Select
+          select(
+            classes: 'bg-[#f4f6f5] border border-zinc-200/80 rounded-xl px-3 py-2 text-xs font-bold text-zinc-700 focus:outline-none cursor-pointer',
+            onChange: (val) {
+              final sel = val.isNotEmpty ? val.first : 'all';
+              context.read(ticketCategoryFilterProvider.notifier).state = sel;
+            },
+            [
+              option(value: 'all', selected: categoryFilter == 'all', [Component.text('All Categories')]),
+              option(value: 'General', selected: categoryFilter == 'General', [Component.text('General')]),
+              option(value: 'Payment / P2P', selected: categoryFilter == 'Payment / P2P', [
+                Component.text('Payment / P2P'),
+              ]),
+              option(value: 'Account', selected: categoryFilter == 'Account', [Component.text('Account')]),
+              option(value: 'KYC Verification', selected: categoryFilter == 'KYC Verification', [
+                Component.text('KYC Verification'),
+              ]),
+              option(value: 'Booking / Rental', selected: categoryFilter == 'Booking / Rental', [
+                Component.text('Booking / Rental'),
+              ]),
+              option(value: 'Technical', selected: categoryFilter == 'Technical', [Component.text('Technical')]),
+              option(value: 'Security', selected: categoryFilter == 'Security', [Component.text('Security')]),
+            ],
+          ),
+        ],
+      ),
 
       // Main Table / Content List
       ticketsAsync.when(
@@ -799,8 +838,10 @@ class _TicketsPageState extends State<TicketsPage> {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final isClaimedByMe = ticket.assignedAgentId == currentUserId;
     final isClaimExpired = ticket.isClaimExpired(nowMs, claimTimeoutSec);
-    final isClaimedByOther = ticket.assignedAgentId != null && ticket.assignedAgentId!.isNotEmpty && !isClaimedByMe && !isClaimExpired;
-    final canClaim = !ticket.isResolved && (ticket.assignedAgentId == null || isClaimExpired || isClaimedByMe || isAdmin);
+    final isClaimedByOther =
+        ticket.assignedAgentId != null && ticket.assignedAgentId!.isNotEmpty && !isClaimedByMe && !isClaimExpired;
+    final canClaim =
+        !ticket.isResolved && (ticket.assignedAgentId == null || isClaimExpired || isClaimedByMe || isAdmin);
     final assignedAgent = onlineAgents.where((agent) => agent.uid == ticket.assignedAgentId).firstOrNull;
     final isAgentOnline = assignedAgent != null || isClaimedByMe;
 
@@ -852,7 +893,8 @@ class _TicketsPageState extends State<TicketsPage> {
       // Status
       td(classes: 'p-4.5 text-center', [
         span(
-          classes: 'px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider rounded-full border ${statusBadgeStyle(ticket.status)}',
+          classes:
+              'px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider rounded-full border ${statusBadgeStyle(ticket.status)}',
           [Component.text(ticket.status)],
         ),
       ]),
@@ -870,7 +912,11 @@ class _TicketsPageState extends State<TicketsPage> {
               span(
                 classes:
                     'px-2 py-0.5 text-[10px] font-bold rounded-md '
-                    '${isClaimedByMe ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : isClaimExpired ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-zinc-100 text-zinc-700 border border-zinc-200"}',
+                    '${isClaimedByMe
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : isClaimExpired
+                        ? "bg-rose-50 text-rose-700 border border-rose-200"
+                        : "bg-zinc-100 text-zinc-700 border border-zinc-200"}',
                 [
                   Component.text(
                     isClaimedByMe
@@ -888,9 +934,13 @@ class _TicketsPageState extends State<TicketsPage> {
               span(classes: 'text-[9px] text-zinc-400 font-medium', [Component.text('Offline (Auto-Releasing)')]),
           ])
         else
-          span(classes: 'text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60', [
-            Component.text('Unassigned'),
-          ]),
+          span(
+            classes:
+                'text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60',
+            [
+              Component.text('Unassigned'),
+            ],
+          ),
       ]),
 
       // Created Date
@@ -939,11 +989,14 @@ class _TicketsPageState extends State<TicketsPage> {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final isClaimedByMe = ticket.assignedAgentId == currentUserId;
     final isClaimExpired = ticket.isClaimExpired(nowMs, claimTimeoutSec);
-    final isClaimedByOther = ticket.assignedAgentId != null && ticket.assignedAgentId!.isNotEmpty && !isClaimedByMe && !isClaimExpired;
+    final isClaimedByOther =
+        ticket.assignedAgentId != null && ticket.assignedAgentId!.isNotEmpty && !isClaimedByMe && !isClaimExpired;
     final canRespond = isAdmin || isClaimedByMe || ticket.assignedAgentId == null || isClaimExpired;
     final assignedAgent = onlineAgents.where((agent) => agent.uid == ticket.assignedAgentId).firstOrNull;
     final agentPresenceLabel = assignedAgent != null
-        ? (assignedAgent.status == AgentPresenceState.away ? '🟡 Away' : (assignedAgent.status == AgentPresenceState.busy ? '🔵 Busy' : '🟢 Online'))
+        ? (assignedAgent.status == AgentPresenceState.away
+              ? '🟡 Away'
+              : (assignedAgent.status == AgentPresenceState.busy ? '🔵 Busy' : '🟢 Online'))
         : (isClaimedByMe ? '🟢 Online' : '⚪ Offline');
 
     final formattedSubmitDate = TicketEmailService.formatTimestamp(ticket.createdAt);
@@ -952,8 +1005,7 @@ class _TicketsPageState extends State<TicketsPage> {
       classes: 'fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 md:p-6 animate-fade-in',
       [
         div(
-          classes:
-              'bg-white text-zinc-900 rounded-[28px] border border-zinc-200 shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col animate-scale-up',
+          classes: 'bg-white text-zinc-900 rounded-[28px] border border-zinc-200 shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col animate-scale-up',
           [
             // Modal Top Header
             div(classes: 'px-7 py-5 bg-[#f8faf9] border-b border-zinc-200 flex items-center justify-between gap-4', [
@@ -962,12 +1014,18 @@ class _TicketsPageState extends State<TicketsPage> {
                   span(classes: 'text-xs font-mono font-black px-2.5 py-1 rounded-lg bg-black text-white', [
                     Component.text(ticket.ticketNumber),
                   ]),
-                  span(classes: 'text-xs font-extrabold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200', [
-                    Component.text(ticket.category),
-                  ]),
-                  span(classes: 'text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200', [
-                    Component.text('Status: ${ticket.status}'),
-                  ]),
+                  span(
+                    classes: 'text-xs font-extrabold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200',
+                    [
+                      Component.text(ticket.category),
+                    ],
+                  ),
+                  span(
+                    classes: 'text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200',
+                    [
+                      Component.text('Status: ${ticket.status}'),
+                    ],
+                  ),
                 ]),
                 h2(classes: 'text-base font-black text-zinc-900 mt-1', [Component.text(ticket.subject)]),
               ]),
@@ -982,36 +1040,48 @@ class _TicketsPageState extends State<TicketsPage> {
             // Scrollable Content
             div(classes: 'p-7 overflow-y-auto flex flex-col gap-6 flex-1 bg-[#eff2f0]/30', [
               // Reporter Card
-              div(classes: 'bg-white p-5 rounded-2xl border border-zinc-200/80 shadow-sm flex flex-col md:flex-row justify-between gap-4', [
-                div(classes: 'flex flex-col gap-1', [
-                  span(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [Component.text('Customer Information')]),
-                  div(classes: 'flex items-center gap-2', [
-                    span(classes: 'text-sm font-extrabold text-zinc-900', [Component.text(userName)]),
-                    span(classes: 'text-xs text-zinc-400 font-mono', [Component.text('($userEmail)')]),
+              div(
+                classes: 'bg-white p-5 rounded-2xl border border-zinc-200/80 shadow-sm flex flex-col md:flex-row justify-between gap-4',
+                [
+                  div(classes: 'flex flex-col gap-1', [
+                    span(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [
+                      Component.text('Customer Information'),
+                    ]),
+                    div(classes: 'flex items-center gap-2', [
+                      span(classes: 'text-sm font-extrabold text-zinc-900', [Component.text(userName)]),
+                      span(classes: 'text-xs text-zinc-400 font-mono', [Component.text('($userEmail)')]),
+                    ]),
+                    span(classes: 'text-[10px] text-zinc-400 font-mono', [Component.text('User UID: ${ticket.uid}')]),
                   ]),
-                  span(classes: 'text-[10px] text-zinc-400 font-mono', [Component.text('User UID: ${ticket.uid}')]),
-                ]),
 
-                div(classes: 'flex flex-col md:items-end gap-1.5', [
-                  span(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [Component.text('Submission Time')]),
-                  span(classes: 'text-xs font-bold text-zinc-800', [Component.text(formattedSubmitDate)]),
-                  button(
-                    onClick: () => _resendConfirmationEmail(ticket, userEmail, userName),
-                    classes: 'mt-1 px-3 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-[10px] font-extrabold rounded-lg transition-colors border border-zinc-200 flex items-center gap-1.5',
-                    [
-                      span([Component.text('📧')]),
-                      Component.text('Resend Confirmation Email'),
-                    ],
-                  ),
-                ]),
-              ]),
+                  div(classes: 'flex flex-col md:items-end gap-1.5', [
+                    span(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [
+                      Component.text('Submission Time'),
+                    ]),
+                    span(classes: 'text-xs font-bold text-zinc-800', [Component.text(formattedSubmitDate)]),
+                    button(
+                      onClick: () => _resendConfirmationEmail(ticket, userEmail, userName),
+                      classes: 'mt-1 px-3 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-[10px] font-extrabold rounded-lg transition-colors border border-zinc-200 flex items-center gap-1.5',
+                      [
+                        span([Component.text('📧')]),
+                        Component.text('Resend Confirmation Email'),
+                      ],
+                    ),
+                  ]),
+                ],
+              ),
 
               // Concern Details
               div(classes: 'bg-white p-5 rounded-2xl border border-zinc-200/80 shadow-sm flex flex-col gap-2', [
-                span(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [Component.text('User Concern & Submitted Details')]),
-                div(classes: 'p-4 rounded-xl bg-[#fafafa] border border-zinc-200 text-xs text-zinc-800 leading-relaxed font-medium whitespace-pre-wrap', [
-                  Component.text(ticket.description),
+                span(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('User Concern & Submitted Details'),
                 ]),
+                div(
+                  classes: 'p-4 rounded-xl bg-[#fafafa] border border-zinc-200 text-xs text-zinc-800 leading-relaxed font-medium whitespace-pre-wrap',
+                  [
+                    Component.text(ticket.description),
+                  ],
+                ),
               ]),
 
               // Action Feedback Notice inside modal
@@ -1037,10 +1107,26 @@ class _TicketsPageState extends State<TicketsPage> {
               div(
                 classes:
                     'p-4 rounded-2xl border flex items-center justify-between gap-3 '
-                    '${isClaimedByMe ? "bg-emerald-50 border-emerald-200" : isClaimExpired ? "bg-rose-50 border-rose-200" : isClaimedByOther ? "bg-amber-50 border-amber-200" : "bg-blue-50 border-blue-200"}',
+                    '${isClaimedByMe
+                        ? "bg-emerald-50 border-emerald-200"
+                        : isClaimExpired
+                        ? "bg-rose-50 border-rose-200"
+                        : isClaimedByOther
+                        ? "bg-amber-50 border-amber-200"
+                        : "bg-blue-50 border-blue-200"}',
                 [
                   div(classes: 'flex items-center gap-2.5', [
-                    span(classes: 'text-lg', [Component.text(isClaimedByMe ? '👤' : isClaimExpired ? '⏱️' : isClaimedByOther ? '🔒' : '🔔')]),
+                    span(classes: 'text-lg', [
+                      Component.text(
+                        isClaimedByMe
+                            ? '👤'
+                            : isClaimExpired
+                            ? '⏱️'
+                            : isClaimedByOther
+                            ? '🔒'
+                            : '🔔',
+                      ),
+                    ]),
                     div(classes: 'flex flex-col', [
                       span(classes: 'text-xs font-black text-zinc-900', [
                         Component.text(
@@ -1075,7 +1161,13 @@ class _TicketsPageState extends State<TicketsPage> {
                       button(
                         onClick: () => _claimTicket(ticket, userEmail),
                         classes: 'px-4 py-2 bg-black hover:bg-zinc-800 text-white text-xs font-black rounded-xl transition-colors shrink-0 shadow-sm cursor-pointer',
-                        [Component.text(isClaimExpired ? 'Override Lock' : (isClaimedByOther ? 'Take Over (Admin)' : 'Claim Ticket'))],
+                        [
+                          Component.text(
+                            isClaimExpired
+                                ? 'Override Lock'
+                                : (isClaimedByOther ? 'Take Over (Admin)' : 'Claim Ticket'),
+                          ),
+                        ],
                       ),
                   ]),
                 ],
@@ -1084,35 +1176,49 @@ class _TicketsPageState extends State<TicketsPage> {
               // Conversation & Update History
               if (ticket.responses.isNotEmpty)
                 div(classes: 'flex flex-col gap-3', [
-                  span(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [Component.text('Update & Response History')]),
+                  span(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [
+                    Component.text('Update & Response History'),
+                  ]),
                   for (final resp in ticket.responses)
                     div(classes: 'bg-white p-4 rounded-2xl border border-zinc-200/80 shadow-sm flex flex-col gap-1.5', [
                       div(classes: 'flex items-center justify-between gap-2', [
                         div(classes: 'flex items-center gap-2', [
                           span(classes: 'text-xs font-extrabold text-zinc-900', [Component.text(resp.senderName)]),
                           if (resp.statusChange != null)
-                            span(classes: 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200', [
-                              Component.text('Status → ${resp.statusChange}'),
-                            ]),
+                            span(
+                              classes: 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200',
+                              [
+                                Component.text('Status → ${resp.statusChange}'),
+                              ],
+                            ),
                         ]),
                         span(classes: 'text-[10px] text-zinc-400 font-medium', [
                           Component.text(TicketEmailService.formatTimestamp(resp.createdAt)),
                         ]),
                       ]),
                       if (resp.message.isNotEmpty)
-                        p(classes: 'text-xs text-zinc-700 font-medium leading-relaxed mt-1', [Component.text(resp.message)]),
+                        p(classes: 'text-xs text-zinc-700 font-medium leading-relaxed mt-1', [
+                          Component.text(resp.message),
+                        ]),
                     ]),
                 ]),
 
               // Response Composer (Locked if claimed by other and not admin)
               if (!canRespond)
-                div(classes: 'p-5 bg-zinc-100 border border-zinc-200 rounded-2xl text-center text-xs font-bold text-zinc-500 flex items-center justify-center gap-2', [
-                  span([Component.text('🔒')]),
-                  Component.text('Ticket locked: Only ${ticket.assignedAgentName ?? "the assigned agent"} or Admin can send replies.'),
-                ])
+                div(
+                  classes: 'p-5 bg-zinc-100 border border-zinc-200 rounded-2xl text-center text-xs font-bold text-zinc-500 flex items-center justify-center gap-2',
+                  [
+                    span([Component.text('🔒')]),
+                    Component.text(
+                      'Ticket locked: Only ${ticket.assignedAgentName ?? "the assigned agent"} or Admin can send replies.',
+                    ),
+                  ],
+                )
               else
                 div(classes: 'bg-white p-5 rounded-2xl border border-zinc-200/80 shadow-sm flex flex-col gap-3', [
-                  span(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [Component.text('Post Agent Update / Response')]),
+                  span(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [
+                    Component.text('Post Agent Update / Response'),
+                  ]),
 
                   textarea(
                     placeholder: 'Type official response or resolution notes to customer...',
@@ -1127,10 +1233,18 @@ class _TicketsPageState extends State<TicketsPage> {
                         classes: 'bg-[#f4f6f5] border border-zinc-200 rounded-xl px-3 py-2 text-xs font-bold text-zinc-700 focus:outline-none cursor-pointer',
                         onChange: (val) => setState(() => _targetStatus = val.isNotEmpty ? val.first : ''),
                         [
-                          option(value: '', selected: _targetStatus.isEmpty, [Component.text('Keep Status (${ticket.status})')]),
-                          option(value: 'In Progress', selected: _targetStatus == 'In Progress', [Component.text('Set to IN PROGRESS')]),
-                          option(value: 'Resolved', selected: _targetStatus == 'Resolved', [Component.text('Set to RESOLVED')]),
-                          option(value: 'Closed', selected: _targetStatus == 'Closed', [Component.text('Set to CLOSED')]),
+                          option(value: '', selected: _targetStatus.isEmpty, [
+                            Component.text('Keep Status (${ticket.status})'),
+                          ]),
+                          option(value: 'In Progress', selected: _targetStatus == 'In Progress', [
+                            Component.text('Set to IN PROGRESS'),
+                          ]),
+                          option(value: 'Resolved', selected: _targetStatus == 'Resolved', [
+                            Component.text('Set to RESOLVED'),
+                          ]),
+                          option(value: 'Closed', selected: _targetStatus == 'Closed', [
+                            Component.text('Set to CLOSED'),
+                          ]),
                         ],
                       ),
 
@@ -1152,7 +1266,10 @@ class _TicketsPageState extends State<TicketsPage> {
                           '${_isSubmitting ? "opacity-50 cursor-not-allowed" : ""}',
                       [
                         if (_isSubmitting)
-                          span(classes: 'animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full', [])
+                          span(
+                            classes: 'animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full',
+                            [],
+                          )
                         else
                           span([Component.text('✉️')]),
                         Component.text(_isSubmitting ? 'Sending...' : 'Post Update & Email'),
@@ -1200,7 +1317,9 @@ class _TicketsPageState extends State<TicketsPage> {
             div(classes: 'px-7 py-5 bg-[#f8faf9] border-b border-zinc-200 flex items-center justify-between', [
               div(classes: 'flex flex-col', [
                 h2(classes: 'text-base font-black text-zinc-900', [Component.text('Create Manual Support Ticket')]),
-                p(classes: 'text-xs text-zinc-400', [Component.text('Log an inbound customer phone or email support request.')]),
+                p(classes: 'text-xs text-zinc-400', [
+                  Component.text('Log an inbound customer phone or email support request.'),
+                ]),
               ]),
               button(
                 onClick: () => setState(() => _showCreateModal = false),
@@ -1211,7 +1330,9 @@ class _TicketsPageState extends State<TicketsPage> {
 
             div(classes: 'p-7 flex flex-col gap-4', [
               div(classes: 'flex flex-col gap-1', [
-                label(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [Component.text('Customer Email Address *')]),
+                label(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('Customer Email Address *'),
+                ]),
                 input(
                   value: _newTicketEmail,
                   onInput: (v) => setState(() => _newTicketEmail = v as String),
@@ -1221,7 +1342,9 @@ class _TicketsPageState extends State<TicketsPage> {
               ]),
 
               div(classes: 'flex flex-col gap-1', [
-                label(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [Component.text('Customer Name')]),
+                label(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('Customer Name'),
+                ]),
                 input(
                   value: _newTicketName,
                   onInput: (v) => setState(() => _newTicketName = v as String),
@@ -1231,24 +1354,42 @@ class _TicketsPageState extends State<TicketsPage> {
               ]),
 
               div(classes: 'flex flex-col gap-1', [
-                label(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [Component.text('Ticket Category')]),
+                label(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('Ticket Category'),
+                ]),
                 select(
                   classes: 'bg-[#f4f6f5] border border-zinc-200 rounded-xl px-3 py-2.5 text-xs font-bold text-zinc-800 focus:outline-none cursor-pointer',
                   onChange: (val) => setState(() => _newTicketCategory = val.isNotEmpty ? val.first : 'General'),
                   [
-                    option(value: 'General', selected: _newTicketCategory == 'General', [Component.text('General Concern')]),
-                    option(value: 'Payment / P2P', selected: _newTicketCategory == 'Payment / P2P', [Component.text('Payment / P2P')]),
-                    option(value: 'Account', selected: _newTicketCategory == 'Account', [Component.text('Account Management')]),
-                    option(value: 'KYC Verification', selected: _newTicketCategory == 'KYC Verification', [Component.text('KYC Verification')]),
-                    option(value: 'Booking / Rental', selected: _newTicketCategory == 'Booking / Rental', [Component.text('Booking / Rental')]),
-                    option(value: 'Technical', selected: _newTicketCategory == 'Technical', [Component.text('Technical Issue')]),
-                    option(value: 'Security', selected: _newTicketCategory == 'Security', [Component.text('Security / Fraud')]),
+                    option(value: 'General', selected: _newTicketCategory == 'General', [
+                      Component.text('General Concern'),
+                    ]),
+                    option(value: 'Payment / P2P', selected: _newTicketCategory == 'Payment / P2P', [
+                      Component.text('Payment / P2P'),
+                    ]),
+                    option(value: 'Account', selected: _newTicketCategory == 'Account', [
+                      Component.text('Account Management'),
+                    ]),
+                    option(value: 'KYC Verification', selected: _newTicketCategory == 'KYC Verification', [
+                      Component.text('KYC Verification'),
+                    ]),
+                    option(value: 'Booking / Rental', selected: _newTicketCategory == 'Booking / Rental', [
+                      Component.text('Booking / Rental'),
+                    ]),
+                    option(value: 'Technical', selected: _newTicketCategory == 'Technical', [
+                      Component.text('Technical Issue'),
+                    ]),
+                    option(value: 'Security', selected: _newTicketCategory == 'Security', [
+                      Component.text('Security / Fraud'),
+                    ]),
                   ],
                 ),
               ]),
 
               div(classes: 'flex flex-col gap-1', [
-                label(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [Component.text('Subject / Concern Title *')]),
+                label(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('Subject / Concern Title *'),
+                ]),
                 input(
                   value: _newTicketSubject,
                   onInput: (v) => setState(() => _newTicketSubject = v as String),
@@ -1258,7 +1399,9 @@ class _TicketsPageState extends State<TicketsPage> {
               ]),
 
               div(classes: 'flex flex-col gap-1', [
-                label(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [Component.text('Full Concern Details *')]),
+                label(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('Full Concern Details *'),
+                ]),
                 textarea(
                   placeholder: 'Provide complete details of the customer concern...',
                   classes: 'bg-[#f4f6f5] border border-zinc-200 rounded-xl p-3 text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black min-h-[90px]',

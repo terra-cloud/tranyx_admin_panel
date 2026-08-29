@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
@@ -160,8 +161,10 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
         ? currentUser.displayName!
         : (currentUser.email?.split('@').first ?? 'Agent');
 
+    final profile = context.read(currentAdminProfileProvider).value;
     final currentUserEmail = currentUser.email ?? '';
-    final isAdmin = currentUserEmail.toLowerCase().contains('admin') || currentUserEmail == 'sarah.johnson@tranyx.com';
+    final role = profile?.role.toLowerCase() ?? '';
+    final isAdmin = role.contains('admin') || currentUserEmail == 'admin@tranyx.app' || currentUserEmail == 'admin@tranyx.com';
     final firestore = context.read(firestoreProvider);
 
     try {
@@ -247,8 +250,10 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
         ? currentUser.displayName!
         : (currentUser.email?.split('@').first ?? 'Agent');
 
+    final profile = context.read(currentAdminProfileProvider).value;
     final currentUserEmail = currentUser.email ?? '';
-    final isAdmin = currentUserEmail.toLowerCase().contains('admin') || currentUserEmail == 'sarah.johnson@tranyx.com';
+    final role = profile?.role.toLowerCase() ?? '';
+    final isAdmin = role.contains('admin') || currentUserEmail == 'admin@tranyx.app' || currentUserEmail == 'admin@tranyx.com';
     final firestore = context.read(firestoreProvider);
 
     try {
@@ -313,9 +318,11 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
     final configAsync = context.watch(systemConfigStreamProvider);
     final onlineAgentsAsync = context.watch(onlineAgentsStreamProvider);
     final currentUser = context.watch(adminCurrentUserProvider).value;
+    final profile = context.watch(currentAdminProfileProvider).value;
     final currentUid = currentUser?.uid ?? '';
     final currentUserEmail = currentUser?.email ?? '';
-    final isAdmin = currentUserEmail.toLowerCase().contains('admin') || currentUserEmail == 'sarah.johnson@tranyx.com';
+    final role = profile?.role.toLowerCase() ?? '';
+    final isAdmin = role.contains('admin') || currentUserEmail == 'admin@tranyx.app' || currentUserEmail == 'admin@tranyx.com';
 
     final deposits = depositsAsync.value ?? [];
     final withdrawals = withdrawalsAsync.value ?? [];
@@ -344,16 +351,15 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
     final unhandledDeposits = deposits.where((d) {
       if (isOnChainCrypto(d.paymentMethod)) return false;
       final isUnassigned = d.assignedAgentId == null || d.assignedAgentId!.isEmpty;
-      final isWaitingStatus = d.status == 'PENDING_AGENT' ||
+      final isWaitingStatus =
+          d.status == 'PENDING_AGENT' ||
           d.status == 'AWAITING_QR' ||
           d.status == 'WAITING_FOR_QR' ||
           d.status == 'REQUESTED' ||
           d.status == 'OPEN' ||
           d.status == 'PENDING';
-      final isResolved = d.status == 'APPROVED' ||
-          d.status == 'REJECTED' ||
-          d.status == 'CANCELLED' ||
-          d.status == 'AWAITING_PAYMENT';
+      final isResolved =
+          d.status == 'APPROVED' || d.status == 'REJECTED' || d.status == 'CANCELLED' || d.status == 'AWAITING_PAYMENT';
       return isUnassigned && isWaitingStatus && !isResolved && !_acknowledgedInterruptIds.contains(d.id);
     }).toList();
 
@@ -361,12 +367,14 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
     final unhandledWithdrawals = withdrawals.where((w) {
       if (isOnChainCrypto(w.paymentMethod)) return false;
       final isUnassigned = w.agentId == null || w.agentId!.isEmpty;
-      final isWaitingStatus = w.status == 'WAITING_FOR_AGENT' ||
+      final isWaitingStatus =
+          w.status == 'WAITING_FOR_AGENT' ||
           w.status == 'PENDING_AGENT' ||
           w.status == 'REQUESTED' ||
           w.status == 'OPEN' ||
           w.status == 'PENDING';
-      final isResolved = w.status == 'APPROVED' ||
+      final isResolved =
+          w.status == 'APPROVED' ||
           w.status == 'REJECTED' ||
           w.status == 'CANCELLED' ||
           w.status == 'AWAITING_AGENT_PAYMENT' ||
@@ -379,7 +387,10 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
       if (t.isResolved || t.isInProgress) return false;
       if (_acknowledgedInterruptIds.contains(t.id)) return false;
 
-      final rawRejected = t.emailLogs.where((l) => l is Map && l['type'] == 'REJECTED').map((l) => l['agentUid']?.toString()).toList();
+      final rawRejected = t.emailLogs
+          .where((l) => l is Map && l['type'] == 'REJECTED')
+          .map((l) => l['agentUid']?.toString())
+          .toList();
       final allRejected = [...t.rejectedBy, ...rawRejected];
       final isAssignedToMe = t.assignedAgentId == currentUid;
       final isClaimExpired = t.isClaimExpired(nowMs, config.claimTimeoutSeconds);
@@ -502,7 +513,11 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
       ...unhandledChats.map((c) {
         final assignedAtMs = c.assignedAt;
         final claimDeadlineMs = assignedAtMs != null ? assignedAtMs + (config.claimTimeoutSeconds * 1000) : null;
-        final customerName = c.userName ?? (c.userIds.isNotEmpty ? 'Customer #${c.userIds.first.substring(0, min(6, c.userIds.first.length))}' : 'Customer');
+        final customerName =
+            c.userName ??
+            (c.userIds.isNotEmpty
+                ? 'Customer #${c.userIds.first.substring(0, min(6, c.userIds.first.length))}'
+                : 'Customer');
         return P2PInterruptItem(
           id: c.id,
           type: 'chat',
@@ -545,26 +560,30 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
           createdAt: DateTime.fromMillisecondsSinceEpoch(t.createdAt > 0 ? t.createdAt : nowMs),
         );
       }),
-      ...unhandledDeposits.map((d) => P2PInterruptItem(
-            id: d.id,
-            type: 'deposit',
-            userName: d.userName,
-            userId: d.userId,
-            amount: d.amount,
-            paymentMethod: d.paymentMethod,
-            status: d.status,
-            createdAt: DateTime.fromMillisecondsSinceEpoch(d.submittedAt),
-          )),
-      ...unhandledWithdrawals.map((w) => P2PInterruptItem(
-            id: w.id,
-            type: 'withdrawal',
-            userName: w.userAccountName.isNotEmpty ? w.userAccountName : w.userName,
-            userId: w.uid,
-            amount: w.amount,
-            paymentMethod: w.paymentMethod,
-            status: w.status,
-            createdAt: DateTime.fromMillisecondsSinceEpoch(w.createdAt),
-          )),
+      ...unhandledDeposits.map(
+        (d) => P2PInterruptItem(
+          id: d.id,
+          type: 'deposit',
+          userName: d.userName,
+          userId: d.userId,
+          amount: d.amount,
+          paymentMethod: d.paymentMethod,
+          status: d.status,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(d.submittedAt),
+        ),
+      ),
+      ...unhandledWithdrawals.map(
+        (w) => P2PInterruptItem(
+          id: w.id,
+          type: 'withdrawal',
+          userName: w.userAccountName.isNotEmpty ? w.userAccountName : w.userName,
+          userId: w.uid,
+          amount: w.amount,
+          paymentMethod: w.paymentMethod,
+          status: w.status,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(w.createdAt),
+        ),
+      ),
     ];
 
     // Detect brand-new items to trigger audio chime
@@ -577,8 +596,7 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
 
     // Set active interrupt item if not currently displaying or current is resolved/claimed
     if (actionableItems.isNotEmpty) {
-      if (_activeInterruptItem == null ||
-          !actionableItems.any((item) => item.id == _activeInterruptItem!.id)) {
+      if (_activeInterruptItem == null || !actionableItems.any((item) => item.id == _activeInterruptItem!.id)) {
         _activeInterruptItem = actionableItems.first;
       }
     } else {
@@ -625,24 +643,37 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
       attributes: {
         'style': 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; z-index: 999999 !important;',
       },
-      classes:
-          'fixed inset-0 bg-black/65 backdrop-blur-md z-[9999] flex items-center justify-center p-4 md:p-6 animate-fade-in pointer-events-auto',
+      classes: 'fixed inset-0 bg-black/65 backdrop-blur-md z-[9999] flex items-center justify-center p-4 md:p-6 animate-fade-in pointer-events-auto',
       [
         div(
-          classes:
-              'bg-white text-zinc-900 rounded-[28px] border border-zinc-200 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-scale-up',
+          classes: 'bg-white text-zinc-900 rounded-[28px] border border-zinc-200 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col animate-scale-up',
           [
             // Header Bar
             div(
-              classes:
-                  'px-7 py-5.5 md:px-8 md:py-6 bg-[#f8faf9] border-b border-zinc-200/80 flex items-center justify-between gap-4',
+              classes: 'px-7 py-5.5 md:px-8 md:py-6 bg-[#f8faf9] border-b border-zinc-200/80 flex items-center justify-between gap-4',
               [
                 div(classes: 'flex items-center gap-3.5', [
                   div(
                     classes:
                         'w-11 h-11 rounded-2xl flex items-center justify-center text-lg shadow-sm '
-                        '${isChat ? "bg-purple-500 text-white shadow-purple-500/20" : isTicket ? "bg-indigo-600 text-white shadow-indigo-600/20" : isDeposit ? "bg-[#0fa958] text-white shadow-[#0fa958]/20" : "bg-amber-500 text-white shadow-amber-500/20"}',
-                    [Component.text(isChat ? '💬' : isTicket ? '🎫' : isDeposit ? '📥' : '📤')],
+                        '${isChat
+                            ? "bg-purple-500 text-white shadow-purple-500/20"
+                            : isTicket
+                            ? "bg-indigo-600 text-white shadow-indigo-600/20"
+                            : isDeposit
+                            ? "bg-[#0fa958] text-white shadow-[#0fa958]/20"
+                            : "bg-amber-500 text-white shadow-amber-500/20"}',
+                    [
+                      Component.text(
+                        isChat
+                            ? '💬'
+                            : isTicket
+                            ? '🎫'
+                            : isDeposit
+                            ? '📥'
+                            : '📤',
+                      ),
+                    ],
                   ),
                   div(classes: 'flex flex-col gap-0.5', [
                     div(classes: 'flex items-center gap-2 flex-wrap', [
@@ -660,9 +691,25 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                       span(
                         classes:
                             'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-extrabold '
-                            '${isChat ? "bg-purple-50 text-purple-700 border border-purple-200/60" : isTicket ? "bg-indigo-50 text-indigo-700 border border-indigo-200/60" : isDeposit ? "bg-emerald-50 text-[#0fa958] border border-emerald-200/60" : "bg-amber-50 text-amber-700 border border-amber-200/60"}',
+                            '${isChat
+                                ? "bg-purple-50 text-purple-700 border border-purple-200/60"
+                                : isTicket
+                                ? "bg-indigo-50 text-indigo-700 border border-indigo-200/60"
+                                : isDeposit
+                                ? "bg-emerald-50 text-[#0fa958] border border-emerald-200/60"
+                                : "bg-amber-50 text-amber-700 border border-amber-200/60"}',
                         [
-                          span(classes: 'w-1.5 h-1.5 rounded-full ${isChat ? "bg-purple-600 animate-pulse" : isTicket ? "bg-indigo-600 animate-pulse" : isDeposit ? "bg-[#0fa958] animate-pulse" : "bg-amber-500 animate-pulse"}', []),
+                          span(
+                            classes:
+                                'w-1.5 h-1.5 rounded-full ${isChat
+                                    ? "bg-purple-600 animate-pulse"
+                                    : isTicket
+                                    ? "bg-indigo-600 animate-pulse"
+                                    : isDeposit
+                                    ? "bg-[#0fa958] animate-pulse"
+                                    : "bg-amber-500 animate-pulse"}',
+                            [],
+                          ),
                           Component.text('Action Needed'),
                         ],
                       ),
@@ -689,8 +736,7 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                       _claimErrorNotice = null;
                     });
                   },
-                  classes:
-                      'w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200/80 text-zinc-400 hover:text-zinc-700 transition-all flex items-center justify-center text-xs font-bold cursor-pointer border-0 outline-none shrink-0 ml-2',
+                  classes: 'w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200/80 text-zinc-400 hover:text-zinc-700 transition-all flex items-center justify-center text-xs font-bold cursor-pointer border-0 outline-none shrink-0 ml-2',
                   attributes: {'title': 'Dismiss modal'},
                   [Component.text('✕')],
                 ),
@@ -699,10 +745,13 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
 
             // Error notice banner
             if (_claimErrorNotice != null)
-              div(classes: 'p-3.5 bg-rose-50 border-b border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2 animate-fade-in', [
-                span([Component.text('⚠️')]),
-                span(classes: 'flex-1 leading-snug', [Component.text(_claimErrorNotice!)]),
-              ]),
+              div(
+                classes: 'p-3.5 bg-rose-50 border-b border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2 animate-fade-in',
+                [
+                  span([Component.text('⚠️')]),
+                  span(classes: 'flex-1 leading-snug', [Component.text(_claimErrorNotice!)]),
+                ],
+              ),
 
             // Content Body
             div(classes: 'p-7 md:p-8 flex flex-col gap-4.5', [
@@ -710,37 +759,52 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
               if (isTicket || isChat)
                 div(classes: 'p-5 rounded-2xl bg-white border border-zinc-200/80 shadow-sm flex flex-col gap-2.5', [
                   div(classes: 'flex items-center justify-between gap-2', [
-                    span(classes: 'text-[11px] font-mono font-black text-zinc-900 bg-[#eff2f0] px-2.5 py-1 rounded-lg', [
-                      Component.text(item.referenceNumber ?? (isChat ? '#CHAT-${item.id.substring(0, min(8, item.id.length))}' : item.id)),
-                    ]),
-                    span(classes: 'text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${isChat ? "bg-purple-50 text-purple-700 border border-purple-200" : "bg-indigo-50 text-indigo-700 border border-indigo-200"}', [
-                      Component.text(item.paymentMethod),
-                    ]),
+                    span(
+                      classes: 'text-[11px] font-mono font-black text-zinc-900 bg-[#eff2f0] px-2.5 py-1 rounded-lg',
+                      [
+                        Component.text(
+                          item.referenceNumber ??
+                              (isChat ? '#CHAT-${item.id.substring(0, min(8, item.id.length))}' : item.id),
+                        ),
+                      ],
+                    ),
+                    span(
+                      classes:
+                          'text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${isChat ? "bg-purple-50 text-purple-700 border border-purple-200" : "bg-indigo-50 text-indigo-700 border border-indigo-200"}',
+                      [
+                        Component.text(item.paymentMethod),
+                      ],
+                    ),
                   ]),
 
                   // Timeout Badge
-                  div(classes: 'flex items-center justify-between bg-amber-50/80 border border-amber-200/80 px-3 py-1.5 rounded-xl', [
-                    span(classes: 'text-[10px] font-extrabold text-amber-800', [
-                      Component.text(getTimeoutRemainingStr()),
-                    ]),
-                    if (item.assignedToName != null)
-                      span(classes: 'text-[10px] text-amber-700 font-bold', [
-                        Component.text('Assigned: ${item.assignedToName}'),
+                  div(
+                    classes: 'flex items-center justify-between bg-amber-50/80 border border-amber-200/80 px-3 py-1.5 rounded-xl',
+                    [
+                      span(classes: 'text-[10px] font-extrabold text-amber-800', [
+                        Component.text(getTimeoutRemainingStr()),
                       ]),
-                  ]),
+                      if (item.assignedToName != null)
+                        span(classes: 'text-[10px] text-amber-700 font-bold', [
+                          Component.text('Assigned: ${item.assignedToName}'),
+                        ]),
+                    ],
+                  ),
 
                   span(classes: 'text-sm font-extrabold text-zinc-900 leading-snug', [
                     Component.text(item.subject ?? (isChat ? 'Customer Support Message' : 'Customer Support Request')),
                   ]),
                   if (item.description != null && item.description!.isNotEmpty)
-                    p(classes: 'text-xs text-zinc-600 font-medium line-clamp-3 leading-relaxed bg-[#fbfcfb] p-3.5 rounded-xl border border-zinc-100 italic', [
-                      Component.text('"${item.description!}"'),
-                    ]),
+                    p(
+                      classes: 'text-xs text-zinc-600 font-medium line-clamp-3 leading-relaxed bg-[#fbfcfb] p-3.5 rounded-xl border border-zinc-100 italic',
+                      [
+                        Component.text('"${item.description!}"'),
+                      ],
+                    ),
                 ])
               else
                 div(
-                  classes:
-                      'p-5 rounded-2xl bg-white border border-zinc-200/80 shadow-sm flex items-center justify-between gap-4',
+                  classes: 'p-5 rounded-2xl bg-white border border-zinc-200/80 shadow-sm flex items-center justify-between gap-4',
                   [
                     div(classes: 'flex flex-col gap-0.5', [
                       span(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [
@@ -773,8 +837,7 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                 div(classes: 'flex items-center justify-between gap-2', [
                   div(classes: 'flex items-center gap-2.5 min-w-0', [
                     div(
-                      classes:
-                          'w-7.5 h-7.5 rounded-full bg-zinc-200 border border-zinc-300 flex items-center justify-center text-xs font-bold text-zinc-700 shrink-0',
+                      classes: 'w-7.5 h-7.5 rounded-full bg-zinc-200 border border-zinc-300 flex items-center justify-center text-xs font-bold text-zinc-700 shrink-0',
                       [Component.text(initialLetter)],
                     ),
                     div(classes: 'flex flex-col min-w-0', [
@@ -800,21 +863,18 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
 
             // Minimal Footer Actions
             div(
-              classes:
-                  'px-7 py-4.5 md:px-8 md:py-5 border-t border-zinc-100 bg-[#eff2f0]/40 flex items-center justify-between gap-3',
+              classes: 'px-7 py-4.5 md:px-8 md:py-5 border-t border-zinc-100 bg-[#eff2f0]/40 flex items-center justify-between gap-3',
               [
                 if (isTicket)
                   button(
                     onClick: () => _handleRejectTicket(item),
-                    classes:
-                        'px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold transition-all cursor-pointer border border-red-200 outline-none',
+                    classes: 'px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold transition-all cursor-pointer border border-red-200 outline-none',
                     [Component.text('Pass / Reject')],
                   )
                 else if (isChat)
                   button(
                     onClick: () => _handleRejectChat(item),
-                    classes:
-                        'px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold transition-all cursor-pointer border border-red-200 outline-none',
+                    classes: 'px-4 py-2.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold transition-all cursor-pointer border border-red-200 outline-none',
                     [Component.text('Pass / Reject')],
                   )
                 else
@@ -826,16 +886,14 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                         _claimErrorNotice = null;
                       });
                     },
-                    classes:
-                        'px-4.5 py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200/80 text-zinc-600 hover:text-zinc-900 text-xs font-bold transition-all cursor-pointer border-0 outline-none',
+                    classes: 'px-4.5 py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200/80 text-zinc-600 hover:text-zinc-900 text-xs font-bold transition-all cursor-pointer border-0 outline-none',
                     [Component.text('Snooze')],
                   ),
 
                 if (isTicket)
                   button(
                     onClick: () => _handleAcceptTicket(item),
-                    classes:
-                        'px-5.5 py-2.5 rounded-xl bg-black hover:bg-zinc-800 text-white text-xs font-black transition-all shadow-sm cursor-pointer border-0 outline-none flex items-center gap-2',
+                    classes: 'px-5.5 py-2.5 rounded-xl bg-black hover:bg-zinc-800 text-white text-xs font-black transition-all shadow-sm cursor-pointer border-0 outline-none flex items-center gap-2',
                     [
                       Component.text('Accept & Attend Ticket'),
                       span(classes: 'text-xs font-bold', [Component.text('→')]),
@@ -844,8 +902,7 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                 else if (isChat)
                   button(
                     onClick: () => _handleAcceptChat(item),
-                    classes:
-                        'px-5.5 py-2.5 rounded-xl bg-black hover:bg-zinc-800 text-white text-xs font-black transition-all shadow-sm cursor-pointer border-0 outline-none flex items-center gap-2',
+                    classes: 'px-5.5 py-2.5 rounded-xl bg-black hover:bg-zinc-800 text-white text-xs font-black transition-all shadow-sm cursor-pointer border-0 outline-none flex items-center gap-2',
                     [
                       Component.text('Accept & Open Chat'),
                       span(classes: 'text-xs font-bold', [Component.text('→')]),
@@ -865,8 +922,7 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                         Router.of(context).push('/withdrawals');
                       }
                     },
-                    classes:
-                        'px-5.5 py-2.5 rounded-xl bg-black hover:bg-zinc-800 text-white text-xs font-black transition-all shadow-sm cursor-pointer border-0 outline-none flex items-center gap-2',
+                    classes: 'px-5.5 py-2.5 rounded-xl bg-black hover:bg-zinc-800 text-white text-xs font-black transition-all shadow-sm cursor-pointer border-0 outline-none flex items-center gap-2',
                     [
                       Component.text(isDeposit ? 'Open Deposit Queue' : 'Open Cashout Queue'),
                       span(classes: 'text-xs font-bold', [Component.text('→')]),
