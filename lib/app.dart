@@ -59,12 +59,22 @@ class AppShell extends StatelessComponent {
 
           // Start agent real-time presence heartbeat
           final firestore = context.watch(firestoreProvider);
+          final adminFirestore = context.watch(adminFirestoreProvider);
+          final profile = context.watch(currentAdminProfileProvider).value;
+          final role = profile?.role ?? 'staff';
+          final name = (profile?.name.isNotEmpty == true)
+              ? profile!.name
+              : (user.displayName ?? (user.email?.split('@').first ?? 'Staff'));
+          final photo = profile?.photoUrl ?? user.photoURL;
+
           PresenceService.startPresenceHeartbeat(
             firestore: firestore,
+            adminFirestore: adminFirestore,
             agentUid: user.uid,
-            agentName: user.displayName ?? (user.email?.split('@').first ?? 'Staff'),
+            agentName: name,
             email: user.email,
-            role: 'staff',
+            role: role,
+            photoUrl: photo,
           );
 
           return Router(

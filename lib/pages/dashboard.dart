@@ -1078,6 +1078,7 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
 
   List<DocumentSnapshot> adminDocs = [];
   Map<String, Map<String, dynamic>> userPresenceMap = {};
+  Map<String, Map<String, dynamic>> dedicatedPresenceMap = {};
   Map<String, String> activeTasksMap = {};
 
   void emitMerged() {
@@ -1098,19 +1099,23 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
           : (email.contains('@') ? email.split('@').first : 'Agent');
       final photo = d['photoURL'] ?? d['photoUrl'] ?? d['avatarUrl'] ?? d['avatar'];
 
+      // Merge real-time presence data from dedicated presence collection or users collection
+      final dPres = dedicatedPresenceMap[uid];
       final uPres = userPresenceMap[uid] ?? d;
-      final rawStatus = (uPres['presenceStatus'] as String? ?? (uPres['isOnline'] == true ? 'online' : 'offline')).toLowerCase();
-      final lastSeen = getTimestamp(uPres['lastSeenAt'] ?? uPres['lastActiveAt'] ?? uPres['updatedAt']);
+      final presData = dPres ?? uPres;
+
+      final rawStatus = (presData['presenceStatus'] as String? ?? (presData['isOnline'] == true ? 'online' : 'offline')).toLowerCase();
+      final lastSeen = getTimestamp(presData['lastSeenAt'] ?? presData['lastActiveAt'] ?? presData['updatedAt']);
 
       String status = rawStatus;
       final isRecentlyActive = lastSeen > 0 && (now - lastSeen).abs() < 180000;
-      if (status != 'offline' && !isRecentlyActive && uPres['isOnline'] != true) {
+      if (status != 'offline' && !isRecentlyActive && presData['isOnline'] != true) {
         status = 'offline';
       }
 
       String taskDetail;
       if (status == 'busy') {
-        taskDetail = activeTasksMap[uid] ?? (uPres['activeTask'] as String? ?? 'Processing active request');
+        taskDetail = activeTasksMap[uid] ?? (presData['activeTask'] as String? ?? 'Processing active request');
       } else if (status == 'away') {
         taskDetail = 'AFK • Window inactive';
       } else if (status == 'online') {
@@ -1148,17 +1153,36 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
     controller.add(result);
   }
 
-  final sub1 = adminDb.collection('users').snapshots().listen((snap) {
+  // 1. Stream staff accounts from admin portal
+  final subAdminUsers = adminDb.collection('users').snapshots().listen((snap) {
     adminDocs = snap.docs;
     emitMerged();
   });
 
-  final sub2 = userDb.collection('users').snapshots().listen((snap) {
+  // 2. Stream dedicated real-time presence collection from adminDb
+  final subAdminPresence = adminDb.collection('presence').snapshots().listen((snap) {
+    for (final doc in snap.docs) {
+      dedicatedPresenceMap[doc.id] = doc.data();
+    }
+    emitMerged();
+  }, onError: (_) {});
+
+  // 3. Stream dedicated real-time presence collection from userDb (active environment)
+  final subUserPresence = userDb.collection('presence').snapshots().listen((snap) {
+    for (final doc in snap.docs) {
+      dedicatedPresenceMap[doc.id] = doc.data();
+    }
+    emitMerged();
+  }, onError: (_) {});
+
+  // 4. Stream users collection in active environment
+  final subUsers = userDb.collection('users').snapshots().listen((snap) {
     userPresenceMap = {for (final doc in snap.docs) doc.id: doc.data()};
     emitMerged();
   });
 
-  final sub3 = userDb.collection('deposits').where('status', isEqualTo: 'processing').snapshots().listen((snap) {
+  // 5. Stream active P2P Deposits
+  final subDeposits = userDb.collection('deposits').where('status', isEqualTo: 'processing').snapshots().listen((snap) {
     for (final doc in snap.docs) {
       final claimedBy = doc.data()['claimedBy'] as String?;
       if (claimedBy != null && claimedBy.isNotEmpty) {
@@ -1169,7 +1193,8 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
     emitMerged();
   });
 
-  final sub4 = userDb.collection('withdrawal_requests').where('status', isEqualTo: 'processing').snapshots().listen((snap) {
+  // 6. Stream active P2P Cashouts / Withdrawals
+  final subWithdrawals = userDb.collection('withdrawal_requests').where('status', isEqualTo: 'processing').snapshots().listen((snap) {
     for (final doc in snap.docs) {
       final claimedBy = doc.data()['claimedBy'] as String?;
       if (claimedBy != null && claimedBy.isNotEmpty) {
@@ -1180,11 +1205,38 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
     emitMerged();
   });
 
+  // 7. Stream active in-progress Support Tickets
+  final subTickets = userDb.collection('supportTickets').where('status', isEqualTo: 'in_progress').snapshots().listen((snap) {
+    for (final doc in snap.docs) {
+      final assignedTo = (doc.data()['assignedAgentId'] ?? doc.data()['assignedTo']) as String?;
+      if (assignedTo != null && assignedTo.isNotEmpty) {
+        final idShort = doc.id.length > 6 ? doc.id.substring(0, 6) : doc.id;
+        activeTasksMap[assignedTo] = 'Handling Ticket #$idShort';
+      }
+    }
+    emitMerged();
+  }, onError: (_) {});
+
+  // 8. Stream active Live Support Chats
+  final subChats = userDb.collection('chats').where('status', isEqualTo: 'active').snapshots().listen((snap) {
+    for (final doc in snap.docs) {
+      final assignedAgent = (doc.data()['assignedAgentId'] ?? doc.data()['agentId']) as String?;
+      if (assignedAgent != null && assignedAgent.isNotEmpty) {
+        activeTasksMap[assignedAgent] = 'Active in Live Chat';
+      }
+    }
+    emitMerged();
+  }, onError: (_) {});
+
   ref.onDispose(() {
-    sub1.cancel();
-    sub2.cancel();
-    sub3.cancel();
-    sub4.cancel();
+    subAdminUsers.cancel();
+    subAdminPresence.cancel();
+    subUserPresence.cancel();
+    subUsers.cancel();
+    subDeposits.cancel();
+    subWithdrawals.cancel();
+    subTickets.cancel();
+    subChats.cancel();
     controller.close();
   });
 

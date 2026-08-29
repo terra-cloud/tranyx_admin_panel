@@ -84,7 +84,7 @@ class AgentPresenceModel {
   }
 }
 
-/// Stream provider for all online agents & staff
+/// Stream provider for all online agents & staff from presence collection
 final onlineAgentsStreamProvider = StreamProvider<List<AgentPresenceModel>>((ref) {
   final userAsync = ref.watch(activeEnvAuthUserProvider);
   if (userAsync.value == null) {
@@ -92,28 +92,46 @@ final onlineAgentsStreamProvider = StreamProvider<List<AgentPresenceModel>>((ref
   }
 
   final firestore = ref.watch(firestoreProvider);
+  final adminFirestore = ref.watch(adminFirestoreProvider);
+  final controller = StreamController<List<AgentPresenceModel>>();
 
-  return firestore.collection('users').snapshots().map((snap) {
+  Map<String, Map<String, dynamic>> presenceMap = {};
+
+  void emitList() {
+    if (controller.isClosed) return;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final list = <AgentPresenceModel>[];
-    for (final doc in snap.docs) {
-      final data = doc.data();
-      final role = (data['role'] as String? ?? '').toLowerCase();
-      final email = (data['email'] as String? ?? '').toLowerCase();
-      final isOnline = data['isOnline'] == true;
-      final isStaff = role == 'staff' || role == 'agent' || role == 'admin' || role == 'superadmin' || email.contains('admin') || email.contains('@tranyx') || isOnline;
-      if (isStaff) {
-        final agent = AgentPresenceModel.fromMap(doc.id, data);
-        if (agent.isActivelyOnline(nowMs, thresholdSec: 180)) {
-          list.add(agent);
-        }
+    for (final entry in presenceMap.entries) {
+      final data = entry.value;
+      final agent = AgentPresenceModel.fromMap(entry.key, data);
+      if (agent.isActivelyOnline(nowMs, thresholdSec: 180)) {
+        list.add(agent);
       }
     }
-    return list;
-  }).handleError((err) {
-    print('[PresenceService] Stream error: $err');
-    return <AgentPresenceModel>[];
+    controller.add(list);
+  }
+
+  final sub1 = firestore.collection('presence').snapshots().listen((snap) {
+    for (final doc in snap.docs) {
+      presenceMap[doc.id] = doc.data();
+    }
+    emitList();
+  }, onError: (_) {});
+
+  final sub2 = adminFirestore.collection('presence').snapshots().listen((snap) {
+    for (final doc in snap.docs) {
+      presenceMap[doc.id] = doc.data();
+    }
+    emitList();
+  }, onError: (_) {});
+
+  ref.onDispose(() {
+    sub1.cancel();
+    sub2.cancel();
+    controller.close();
   });
+
+  return controller.stream;
 });
 
 /// Agent Presence Management Service
@@ -122,15 +140,19 @@ class PresenceService {
   static String? _currentAgentUid;
   static bool _listenersAttached = false;
   static int _lastActivityPing = 0;
+  static FirebaseFirestore? _cachedAdminFirestore;
 
   /// Starts periodic presence heartbeat for currently authenticated staff agent
   static void startPresenceHeartbeat({
     required FirebaseFirestore firestore,
+    FirebaseFirestore? adminFirestore,
     required String agentUid,
     required String agentName,
     String? email,
     String? role,
+    String? photoUrl,
   }) {
+    _cachedAdminFirestore = adminFirestore;
     if (_currentAgentUid == agentUid && _presenceTimer != null && _presenceTimer!.isActive) {
       return;
     }
@@ -140,9 +162,12 @@ class PresenceService {
     // Immediately send initial online ping
     _pingPresence(
       firestore: firestore,
+      adminFirestore: adminFirestore,
       agentUid: agentUid,
+      agentName: agentName,
       email: email,
       role: role,
+      photoUrl: photoUrl,
       status: AgentPresenceState.online,
     );
 
@@ -152,30 +177,40 @@ class PresenceService {
       final isHidden = web.document.visibilityState == 'hidden';
       _pingPresence(
         firestore: firestore,
+        adminFirestore: _cachedAdminFirestore,
         agentUid: agentUid,
+        agentName: agentName,
         email: email,
         role: role,
+        photoUrl: photoUrl,
         status: isHidden ? AgentPresenceState.away : AgentPresenceState.online,
       );
     });
 
     if (!_listenersAttached) {
-      _attachLifecycleListeners(firestore, agentUid, email, role);
+      _attachLifecycleListeners(firestore, adminFirestore, agentUid, agentName, email, role, photoUrl);
       _listenersAttached = true;
     }
   }
 
   static void _attachLifecycleListeners(
     FirebaseFirestore firestore,
+    FirebaseFirestore? adminFirestore,
     String agentUid,
+    String agentName,
     String? email,
     String? role,
+    String? photoUrl,
   ) {
     // Window beforeunload / page close listener
     web.window.addEventListener(
       'beforeunload',
       ((web.Event e) {
-        markOffline(firestore: firestore, agentUid: agentUid);
+        markOffline(
+          firestore: firestore,
+          adminFirestore: adminFirestore ?? _cachedAdminFirestore,
+          agentUid: agentUid,
+        );
       }).toJS,
     );
 
@@ -186,9 +221,12 @@ class PresenceService {
         if (_currentAgentUid != null) {
           _pingPresence(
             firestore: firestore,
+            adminFirestore: adminFirestore ?? _cachedAdminFirestore,
             agentUid: _currentAgentUid!,
+            agentName: agentName,
             email: email,
             role: role,
+            photoUrl: photoUrl,
             status: AgentPresenceState.online,
           );
         }
@@ -202,9 +240,12 @@ class PresenceService {
         _lastActivityPing = now;
         _pingPresence(
           firestore: firestore,
+          adminFirestore: adminFirestore ?? _cachedAdminFirestore,
           agentUid: _currentAgentUid!,
+          agentName: agentName,
           email: email,
           role: role,
+          photoUrl: photoUrl,
           status: AgentPresenceState.online,
         );
       }
@@ -221,9 +262,12 @@ class PresenceService {
           final isHidden = web.document.visibilityState == 'hidden';
           _pingPresence(
             firestore: firestore,
+            adminFirestore: adminFirestore ?? _cachedAdminFirestore,
             agentUid: _currentAgentUid!,
+            agentName: agentName,
             email: email,
             role: role,
+            photoUrl: photoUrl,
             status: isHidden ? AgentPresenceState.away : AgentPresenceState.online,
           );
         }
@@ -233,57 +277,118 @@ class PresenceService {
 
   static Future<void> _pingPresence({
     required FirebaseFirestore firestore,
+    FirebaseFirestore? adminFirestore,
     required String agentUid,
+    String? agentName,
     String? email,
     String? role,
+    String? photoUrl,
     required AgentPresenceState status,
+    String? activeRequestId,
+    String? activeTask,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
+    final payload = <String, dynamic>{
+      'uid': agentUid,
+      'isOnline': status != AgentPresenceState.offline,
+      'presenceStatus': status.name,
+      'lastSeenAt': now,
+      'lastActiveAt': now,
+      'updatedAt': now,
+      if (agentName != null && agentName.isNotEmpty) 'name': agentName,
+      if (email != null && email.isNotEmpty) 'email': email,
+      if (role != null && role.isNotEmpty) 'role': role,
+      if (photoUrl != null && photoUrl.isNotEmpty) 'photoUrl': photoUrl,
+      'activeRequestId': ?activeRequestId,
+      'activeTask': ?activeTask,
+    };
+
     try {
+      await firestore.collection('presence').doc(agentUid).set(payload, SetOptions(merge: true));
       await firestore.collection('users').doc(agentUid).set({
         'isOnline': status != AgentPresenceState.offline,
         'presenceStatus': status.name,
         'lastSeenAt': now,
         'lastActiveAt': now,
-        if (email != null && email.isNotEmpty) 'email': email,
       }, SetOptions(merge: true));
     } catch (_) {}
+
+    final adminDb = adminFirestore ?? _cachedAdminFirestore;
+    if (adminDb != null) {
+      try {
+        await adminDb.collection('presence').doc(agentUid).set(payload, SetOptions(merge: true));
+        await adminDb.collection('users').doc(agentUid).set({
+          'isOnline': status != AgentPresenceState.offline,
+          'presenceStatus': status.name,
+          'lastSeenAt': now,
+          'lastActiveAt': now,
+        }, SetOptions(merge: true));
+      } catch (_) {}
+    }
   }
 
   /// Sets custom presence state (e.g. busy when taking a ticket)
   static Future<void> setPresenceState({
     required FirebaseFirestore firestore,
+    FirebaseFirestore? adminFirestore,
     required String agentUid,
     required AgentPresenceState state,
     String? activeRequestId,
+    String? activeTask,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
+    final payload = <String, dynamic>{
+      'isOnline': state != AgentPresenceState.offline,
+      'presenceStatus': state.name,
+      'lastSeenAt': now,
+      'lastActiveAt': now,
+      'updatedAt': now,
+      'activeRequestId': ?activeRequestId,
+      'activeTask': ?activeTask,
+    };
+
     try {
-      await firestore.collection('users').doc(agentUid).set({
-        'isOnline': state != AgentPresenceState.offline,
-        'presenceStatus': state.name,
-        'lastSeenAt': now,
-        'lastActiveAt': now,
-        'activeRequestId': activeRequestId,
-      }, SetOptions(merge: true));
+      await firestore.collection('presence').doc(agentUid).set(payload, SetOptions(merge: true));
+      await firestore.collection('users').doc(agentUid).set(payload, SetOptions(merge: true));
     } catch (_) {}
+
+    final adminDb = adminFirestore ?? _cachedAdminFirestore;
+    if (adminDb != null) {
+      try {
+        await adminDb.collection('presence').doc(agentUid).set(payload, SetOptions(merge: true));
+        await adminDb.collection('users').doc(agentUid).set(payload, SetOptions(merge: true));
+      } catch (_) {}
+    }
   }
 
   /// Immediately marks the agent as offline
   static Future<void> markOffline({
     required FirebaseFirestore firestore,
+    FirebaseFirestore? adminFirestore,
     required String agentUid,
   }) async {
     _presenceTimer?.cancel();
     _presenceTimer = null;
     final now = DateTime.now().millisecondsSinceEpoch;
+    final payload = <String, dynamic>{
+      'isOnline': false,
+      'presenceStatus': 'offline',
+      'lastSeenAt': now,
+      'lastActiveAt': now,
+      'updatedAt': now,
+    };
+
     try {
-      await firestore.collection('users').doc(agentUid).set({
-        'isOnline': false,
-        'presenceStatus': 'offline',
-        'lastSeenAt': now,
-        'lastActiveAt': now,
-      }, SetOptions(merge: true));
+      await firestore.collection('presence').doc(agentUid).set(payload, SetOptions(merge: true));
+      await firestore.collection('users').doc(agentUid).set(payload, SetOptions(merge: true));
     } catch (_) {}
+
+    final adminDb = adminFirestore ?? _cachedAdminFirestore;
+    if (adminDb != null) {
+      try {
+        await adminDb.collection('presence').doc(agentUid).set(payload, SetOptions(merge: true));
+        await adminDb.collection('users').doc(agentUid).set(payload, SetOptions(merge: true));
+      } catch (_) {}
+    }
   }
 }
