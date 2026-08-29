@@ -3269,7 +3269,7 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Component _buildCsatRankCard(StaffRosterMember agent, int rank) {
+  Component _buildCsatRankCard(StaffRosterMember agent, int rank, int totalPlatformResolved) {
     final isFirst = rank == 1;
     final isSecond = rank == 2;
     final medal = isFirst ? '🥇 1st Place' : (isSecond ? '🥈 2nd Place' : '🥉 3rd Place');
@@ -3285,7 +3285,10 @@ class _DashboardState extends State<Dashboard> {
             : 'bg-orange-100 text-orange-900 border-orange-300');
 
     final initials = agent.name.length >= 2 ? agent.name.substring(0, 2).toUpperCase() : agent.name.toUpperCase();
-    final csatText = agent.csat > 0 ? '${agent.csat.toStringAsFixed(1)}% CSAT' : '98.5% CSAT';
+    final csatText = agent.csat > 0 ? '${agent.csat.toStringAsFixed(1)}% CSAT' : '—';
+    final resolvedShareText = totalPlatformResolved > 0
+        ? '(${agent.totalResolved} ÷ $totalPlatformResolved) × 100'
+        : '${agent.totalResolved} resolved';
 
     return div(
       classes:
@@ -3326,11 +3329,17 @@ class _DashboardState extends State<Dashboard> {
         ]),
 
         // CSAT Score & Operations Breakdown
-        div(classes: 'flex flex-col items-center gap-1.5 w-full pt-3 border-t border-zinc-200/50', [
+        div(classes: 'flex flex-col items-center gap-2 w-full pt-3 border-t border-zinc-200/50', [
           div(
             classes:
                 'px-3 py-1 rounded-xl text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200/70 shadow-sm',
             [Component.text(csatText)],
+          ),
+          // Formula breakdown badge
+          div(
+            classes:
+                'text-[10px] font-mono font-bold text-zinc-600 bg-white/80 px-2 py-0.5 rounded-md border border-zinc-200/70 shadow-2xs',
+            [Component.text(resolvedShareText)],
           ),
           div(classes: 'flex items-center justify-around w-full text-[10px] text-zinc-500 font-bold mt-1', [
             div(classes: 'flex flex-col items-center', [
@@ -3366,12 +3375,18 @@ class _DashboardState extends State<Dashboard> {
         p2pHandled: perf.p2pHandled,
         ticketsHandled: perf.ticketsHandled,
         liveSupportHandled: perf.liveSupportHandled,
+        totalResolved: perf.totalResolved,
         csat: perf.csat,
       )).toList();
     }
 
+    final totalPlatformResolved = list.fold<int>(0, (acc, m) => acc + m.totalResolved);
+    final totalP2pResolved = list.fold<int>(0, (acc, m) => acc + m.p2pHandled);
+    final totalTicketsResolved = list.fold<int>(0, (acc, m) => acc + m.ticketsHandled);
+    final totalChatsResolved = list.fold<int>(0, (acc, m) => acc + m.liveSupportHandled);
+
     // Filter ONLY staff who have actively handled/resolved work
-    final eligible = list.where((m) => (m.p2pHandled + m.ticketsHandled + m.liveSupportHandled) > 0).toList();
+    final eligible = list.where((m) => m.totalResolved > 0 || (m.p2pHandled + m.ticketsHandled + m.liveSupportHandled) > 0).toList();
 
     // Sort by CSAT descending, then Total Resolved descending, then Total Handled descending
     eligible.sort((memberA, memberB) {
@@ -3437,6 +3452,56 @@ class _DashboardState extends State<Dashboard> {
               ),
             ]),
 
+            // Formula Rubric & Calculation Breakdown Banner
+            div(
+              classes: 'bg-zinc-50 rounded-2xl border border-zinc-200/80 p-4 flex flex-col gap-2.5 shadow-2xs',
+              [
+                div(classes: 'flex items-center justify-between gap-2 flex-wrap', [
+                  div(classes: 'flex items-center gap-2', [
+                    span(classes: 'text-base', [Component.text('📐')]),
+                    span(classes: 'text-xs font-black text-zinc-900', [Component.text('CSAT Rubric & Scoring Formula')]),
+                  ]),
+                  span(
+                    classes: 'text-[10px] font-bold text-zinc-600 bg-white border border-zinc-200 px-2 py-0.5 rounded-md shadow-2xs',
+                    [Component.text('Total Platform Output: $totalPlatformResolved Resolved Tasks')],
+                  ),
+                ]),
+                div(
+                  classes: 'bg-white rounded-xl p-3 border border-zinc-200/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left',
+                  [
+                    div(classes: 'flex flex-col gap-1', [
+                      span(classes: 'text-[10px] font-bold uppercase tracking-wider text-zinc-400', [Component.text('Formula')]),
+                      span(
+                        classes: 'text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200/70',
+                        [Component.text('(Agent Resolved Tasks ÷ Total Platform Resolved Tasks) × 100')],
+                      ),
+                    ]),
+                    div(classes: 'flex items-center gap-2.5 text-[10px] text-zinc-500 font-bold', [
+                      div(classes: 'flex flex-col items-center', [
+                        span(classes: 'font-black text-zinc-800', [Component.text('$totalP2pResolved')]),
+                        span(classes: 'text-[9px] text-zinc-400', [Component.text('P2P')]),
+                      ]),
+                      span(classes: 'text-zinc-300', [Component.text('+')]),
+                      div(classes: 'flex flex-col items-center', [
+                        span(classes: 'font-black text-zinc-800', [Component.text('$totalTicketsResolved')]),
+                        span(classes: 'text-[9px] text-zinc-400', [Component.text('Tickets')]),
+                      ]),
+                      span(classes: 'text-zinc-300', [Component.text('+')]),
+                      div(classes: 'flex flex-col items-center', [
+                        span(classes: 'font-black text-zinc-800', [Component.text('$totalChatsResolved')]),
+                        span(classes: 'text-[9px] text-zinc-400', [Component.text('Chats')]),
+                      ]),
+                      span(classes: 'text-zinc-300', [Component.text('=')]),
+                      div(classes: 'flex flex-col items-center', [
+                        span(classes: 'font-black text-emerald-700', [Component.text('$totalPlatformResolved')]),
+                        span(classes: 'text-[9px] text-emerald-600', [Component.text('Total')]),
+                      ]),
+                    ]),
+                  ],
+                ),
+              ],
+            ),
+
             // Podium / Top 3 Ranking Cards
             if (top3.isEmpty)
               div(classes: 'py-12 text-center flex flex-col items-center gap-2', [
@@ -3446,7 +3511,7 @@ class _DashboardState extends State<Dashboard> {
             else
               div(classes: 'grid grid-cols-1 sm:grid-cols-3 gap-3.5', [
                 for (var i = 0; i < top3.length; i++)
-                  _buildCsatRankCard(top3[i], i + 1),
+                  _buildCsatRankCard(top3[i], i + 1, totalPlatformResolved),
               ]),
 
             // Footer
