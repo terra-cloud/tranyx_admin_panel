@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:jaspr/dom.dart';
@@ -29,6 +30,7 @@ class DepositRequest {
   final String? assignedAgentId;
   final String? assignedAgentName;
   final int? assignedAt;
+  final int? updatedAt;
   final String? agentQrUrl;
   final String? agentPaymentNumber;
   final String? agentPaymentName;
@@ -63,6 +65,7 @@ class DepositRequest {
     this.assignedAgentId,
     this.assignedAgentName,
     this.assignedAt,
+    this.updatedAt,
     this.agentQrUrl,
     this.agentPaymentNumber,
     this.agentPaymentName,
@@ -91,6 +94,7 @@ class DepositRequest {
       assignedAgentId: other.assignedAgentId ?? assignedAgentId,
       assignedAgentName: other.assignedAgentName ?? assignedAgentName,
       assignedAt: other.assignedAt ?? assignedAt,
+      updatedAt: other.updatedAt ?? updatedAt,
       agentQrUrl: other.agentQrUrl ?? agentQrUrl,
       agentPaymentNumber: other.agentPaymentNumber ?? agentPaymentNumber,
       agentPaymentName: other.agentPaymentName ?? agentPaymentName,
@@ -330,6 +334,13 @@ class DepositRequest {
       assignedAgentId: (rawAgentId != null && rawAgentId.isNotEmpty && rawAgentId != 'null') ? rawAgentId : null,
       assignedAgentName: formattedAgentName,
       assignedAt: map['assignedAt'] != null ? parseDateTime(map['assignedAt']) : null,
+      updatedAt: map['updatedAt'] != null
+          ? parseDateTime(map['updatedAt'])
+          : (map['statusUpdatedAt'] != null
+              ? parseDateTime(map['statusUpdatedAt'])
+              : (map['assignedAt'] != null
+                  ? parseDateTime(map['assignedAt'])
+                  : null)),
       agentQrUrl: map['agentQrUrl'] as String?,
       agentPaymentNumber: map['agentPaymentNumber'] as String?,
       agentPaymentName: map['agentPaymentName'] as String?,
@@ -1054,6 +1065,71 @@ class _DepositsPageState extends State<DepositsPage> {
     }
   }
 
+  /// ADMIN TAKEOVER WORKFLOW:
+  /// Allows an Administrator to take over a deposit request if it has been past 5 minutes in verify proof stage.
+  Future<void> _executeAdminTakeover(DepositRequest deposit, fb.User? adminUser) async {
+    if (_isProcessing) return;
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    final firestore = context.read(firestoreProvider);
+    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
+    final adminUid = effectiveUser?.uid ?? 'admin_portal';
+    final adminName = effectiveUser?.displayName?.isNotEmpty == true
+        ? effectiveUser!.displayName!
+        : (effectiveUser?.email?.isNotEmpty == true ? effectiveUser!.email! : 'Admin');
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    try {
+      final depositDocRef = firestore.collection('deposit_requests').doc(deposit.id);
+
+      await depositDocRef.set({
+        'assignedAgentId': adminUid,
+        'assignedAgentName': adminName,
+        'claimedBy': adminUid,
+        'takenOverByAdminId': adminUid,
+        'takenOverByAdminName': adminName,
+        'takenOverAt': nowMs,
+        'updatedAt': nowMs,
+        'statusUpdatedAt': nowMs,
+      }, SetOptions(merge: true));
+
+      // Also update the currently inspecting deposit state if open
+      if (_inspectingDeposit != null && _inspectingDeposit!.id == deposit.id) {
+        _inspectingDeposit = deposit.mergeWith(DepositRequest(
+          id: deposit.id,
+          userId: deposit.userId,
+          userName: deposit.userName,
+          userEmail: deposit.userEmail,
+          amount: deposit.amount,
+          paymentMethod: deposit.paymentMethod,
+          referenceNumber: deposit.referenceNumber,
+          status: deposit.status,
+          submittedAt: deposit.submittedAt,
+          receiptUrl: deposit.receiptUrl,
+          targetWallet: deposit.targetWallet,
+          assignedAgentId: adminUid,
+          assignedAgentName: adminName,
+          assignedAt: nowMs,
+          updatedAt: nowMs,
+        ));
+      }
+
+      _triggerToast('⚡ Successfully taken over deposit request! You are now assigned to verify.');
+    } catch (e) {
+      print('[Deposits] Admin takeover error: $e');
+      _triggerToast('Failed to take over deposit: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
+    }
+  }
+
   /// Deposit Approval Workflow with atomic Firestore execution
   Future<void> _executeApproveDeposit(DepositRequest deposit, fb.User? adminUser) async {
     if (_isProcessing) return;
@@ -1437,6 +1513,10 @@ class _DepositsPageState extends State<DepositsPage> {
     final auditLogsAsync = context.watch(adminAuditLogsStreamProvider);
     final usersAsync = context.watch(usersStreamProvider);
     final adminUser = context.watch(adminCurrentUserProvider).value;
+    final profile = context.watch(currentAdminProfileProvider).value;
+    final userEmail = (profile?.email.isNotEmpty == true ? profile!.email : adminUser?.email) ?? '';
+    final userRole = profile?.role.toLowerCase() ?? '';
+    final isAdmin = userRole.contains('admin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
 
     final allDeposits = depositsAsync.value ?? [];
     final allWithdrawals = withdrawalsAsync.value ?? [];
@@ -1716,7 +1796,7 @@ class _DepositsPageState extends State<DepositsPage> {
               if (filteredDeposits.isEmpty) {
                 return _buildEmptyState();
               }
-              return _buildDepositQueueList(filteredDeposits, claimedRefsMap, usersList, adminUser);
+              return _buildDepositQueueList(filteredDeposits, claimedRefsMap, usersList, adminUser, isAdmin: isAdmin);
             },
             loading: () => div(
               classes:
@@ -1744,7 +1824,7 @@ class _DepositsPageState extends State<DepositsPage> {
 
         // High-Resolution Receipt Inspector Modal
         if (_inspectingDeposit != null)
-          _buildInspectorModal(_inspectingDeposit!, claimedRefsMap, adminUser, usersList),
+          _buildInspectorModal(_inspectingDeposit!, claimedRefsMap, adminUser, usersList, isAdmin: isAdmin),
 
         // Approve Confirmation Dialog
         if (_showApproveConfirmModal && _inspectingDeposit != null)
@@ -1810,8 +1890,9 @@ class _DepositsPageState extends State<DepositsPage> {
     List<DepositRequest> deposits,
     Map<String, ClaimedReference> claimedRefsMap,
     List<UserProfileModel> usersList,
-    fb.User? adminUser,
-  ) {
+    fb.User? adminUser, {
+    bool isAdmin = false,
+  }) {
     return div(classes: 'flex flex-col gap-3.5', [
       for (int i = 0; i < deposits.length; i++)
         () {
@@ -1852,16 +1933,10 @@ class _DepositsPageState extends State<DepositsPage> {
             [
               // Left: Status Indicator, Thumbnail / QR, User and Details
               div(classes: 'flex items-start sm:items-center gap-4.5 flex-1 min-w-0', [
-                // Thumbnail: Receipt Proof or Agent QR
+                // Thumbnail: Receipt Proof or Agent QR (Always clickable to inspect)
                 div(
                   events: {
-                    'click': (_) {
-                      if (deposit.status == 'PENDING_VERIFICATION' && isClaimedByOther) {
-                        _triggerToast('🔒 Restricted: Only Agent ${deposit.assignedAgentName} can inspect and verify this payment.');
-                        return;
-                      }
-                      _openInspector(deposit);
-                    },
+                    'click': (_) => _openInspector(deposit),
                   },
                   classes:
                       'relative w-16 h-16 rounded-2xl bg-zinc-100 border border-zinc-200 overflow-hidden flex-shrink-0 cursor-pointer group shadow-sm',
@@ -1901,13 +1976,7 @@ class _DepositsPageState extends State<DepositsPage> {
                   div(classes: 'flex items-center gap-2.5 flex-wrap', [
                     span(
                       events: {
-                        'click': (_) {
-                          if (deposit.status == 'PENDING_VERIFICATION' && isClaimedByOther) {
-                            _triggerToast('🔒 Restricted: Only Agent ${deposit.assignedAgentName} can inspect and verify this payment.');
-                            return;
-                          }
-                          _openInspector(deposit);
-                        },
+                        'click': (_) => _openInspector(deposit),
                       },
                       classes:
                           'font-extrabold text-sm text-zinc-900 hover:text-emerald-600 transition-colors cursor-pointer truncate',
@@ -2049,7 +2118,7 @@ class _DepositsPageState extends State<DepositsPage> {
                         [Component.text('⏳ Waiting User Payment')],
                       ),
                   ]
-                  // 3. If Pending Verification: Inspect & Review (Only visible to assigned agent)
+                  // 3. If Pending Verification: Inspect & Review (Omnipresent View + 5-Minute Admin Takeover)
                   else if (deposit.status == 'PENDING_VERIFICATION') ...[
                     if (isClaimedByMe || isUnclaimed)
                       button(
@@ -2061,18 +2130,62 @@ class _DepositsPageState extends State<DepositsPage> {
                           span(classes: 'text-[10px]', [Component.text('→')]),
                         ],
                       )
-                    else
-                      span(
-                        attributes: {
-                          'title': 'This payment is assigned to Agent ${deposit.assignedAgentName ?? "Staff"}. Only the assigned agent can inspect and verify.',
-                        },
+                    else if (isAdmin) ...[
+                      Builder(builder: (ctx) {
+                        final lastUpdateMs = deposit.updatedAt ?? deposit.assignedAt ?? deposit.submittedAt;
+                        final nowMs = DateTime.now().millisecondsSinceEpoch;
+                        final elapsedMs = nowMs - lastUpdateMs;
+                        final fiveMinMs = 5 * 60 * 1000;
+                        final canTakeover = elapsedMs >= fiveMinMs;
+                        final remainingSec = math.max(0, ((fiveMinMs - elapsedMs) / 1000).ceil());
+                        final remMin = remainingSec ~/ 60;
+                        final remSec = remainingSec % 60;
+
+                        return div(classes: 'flex items-center gap-1.5', [
+                          button(
+                            onClick: () => _openInspector(deposit),
+                            classes:
+                                'px-3 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold cursor-pointer border border-zinc-200 flex items-center gap-1',
+                            attributes: {'title': 'Inspect receipt proof and details'},
+                            [
+                              span([Component.text('🔎')]),
+                              Component.text('Inspect'),
+                            ],
+                          ),
+                          if (canTakeover)
+                            button(
+                              onClick: () => _executeAdminTakeover(deposit, adminUser),
+                              classes:
+                                  'px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black transition-all shadow-sm cursor-pointer border-0 flex items-center gap-1',
+                              attributes: {'title': 'Take over request from Agent ${deposit.assignedAgentName}'},
+                              [
+                                span([Component.text('⚡')]),
+                                Component.text('Take Over'),
+                              ],
+                            )
+                          else
+                            span(
+                              classes:
+                                  'px-2.5 py-1.5 rounded-xl bg-amber-50 text-amber-800 text-[11px] font-bold border border-amber-200/80',
+                              attributes: {'title': 'Admin takeover unlocked after 5m of status update (${remMin}m ${remSec}s remaining)'},
+                              [
+                                Component.text('⏳ ${remMin}m ${remSec}s'),
+                              ],
+                            ),
+                        ]);
+                      }),
+                    ] else ...[
+                      button(
+                        onClick: () => _openInspector(deposit),
                         classes:
-                            'px-3.5 py-2 rounded-xl bg-zinc-100 text-zinc-500 text-xs font-bold border border-zinc-200 flex items-center gap-1.5 cursor-not-allowed',
+                            'px-3.5 py-2 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold border border-zinc-200 flex items-center gap-1.5 cursor-pointer',
+                        attributes: {'title': 'View payment receipt and details (Handled by Agent ${deposit.assignedAgentName ?? "Staff"})'},
                         [
-                          span([Component.text('🔒')]),
-                          Component.text('Handled by ${deposit.assignedAgentName ?? "Agent"}'),
+                          span([Component.text('🔎')]),
+                          Component.text('View Receipt'),
                         ],
                       ),
+                    ],
                   ]
                   // 4. If Completed: Inspect history
                   else ...[
@@ -2425,8 +2538,14 @@ class _DepositsPageState extends State<DepositsPage> {
     DepositRequest deposit,
     Map<String, ClaimedReference> claimedRefsMap,
     fb.User? adminUser,
-    List<UserProfileModel> usersList,
-  ) {
+    List<UserProfileModel> usersList, {
+    bool isAdmin = false,
+  }) {
+    final isAssigned = _hasAgentAssignment(deposit);
+    final isClaimedByMe = _isClaimedByCurrentAgent(deposit, adminUser);
+    final isClaimedByOther = isAssigned && !isClaimedByMe;
+    final isUnclaimed = !isAssigned;
+
     final normalizedRef = deposit.referenceNumber.trim().toUpperCase();
     final duplicateClaim = claimedRefsMap[normalizedRef];
     final isDuplicate = duplicateClaim != null && duplicateClaim.depositRequestId != deposit.id;
@@ -2876,39 +2995,81 @@ class _DepositsPageState extends State<DepositsPage> {
                 ),
 
                 if (deposit.status == 'PENDING_VERIFICATION')
-                  div(classes: 'flex items-center gap-3', [
-                    // Reject Button
-                    button(
-                      onClick: () => setState(() => _showRejectModal = true),
-                      classes:
-                          'px-5 py-2.5 rounded-xl border border-red-200 bg-red-50/60 hover:bg-red-100 text-red-600 text-xs font-bold transition-all cursor-pointer outline-none',
-                      [Component.text('Reject Deposit')],
-                    ),
+                  div(classes: 'flex items-center gap-3 flex-wrap', [
+                    if (isClaimedByOther && isAdmin) ...[
+                      Builder(builder: (ctx) {
+                        final lastUpdateMs = deposit.updatedAt ?? deposit.assignedAt ?? deposit.submittedAt;
+                        final nowMs = DateTime.now().millisecondsSinceEpoch;
+                        final elapsedMs = nowMs - lastUpdateMs;
+                        final fiveMinMs = 5 * 60 * 1000;
+                        final canTakeover = elapsedMs >= fiveMinMs;
+                        final remainingSec = math.max(0, ((fiveMinMs - elapsedMs) / 1000).ceil());
+                        final remMin = remainingSec ~/ 60;
+                        final remSec = remainingSec % 60;
 
-                    // Approve Deposit Button
-                    if (isDuplicate)
+                        if (canTakeover) {
+                          return button(
+                            onClick: () => _executeAdminTakeover(deposit, adminUser),
+                            classes:
+                                'px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black transition-all shadow-md shadow-amber-500/20 cursor-pointer border-0 flex items-center gap-1.5',
+                            [
+                              span([Component.text('⚡')]),
+                              Component.text('Take Over & Unlock Actions'),
+                            ],
+                          );
+                        } else {
+                          return span(
+                            classes:
+                                'px-4 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold flex items-center gap-1.5',
+                            [
+                              span([Component.text('⏳')]),
+                              Component.text('Takeover unlocks in ${remMin}m ${remSec}s (Claimed by ${deposit.assignedAgentName ?? "Agent"})'),
+                            ],
+                          );
+                        }
+                      }),
+                    ],
+
+                    if (isClaimedByMe || isUnclaimed) ...[
+                      // Reject Button
                       button(
-                        attributes: {
-                          'disabled': 'true',
-                          'title': 'Duplicate reference detected. Approval blocked.',
-                        },
+                        onClick: () => setState(() => _showRejectModal = true),
                         classes:
-                            'px-6 py-2.5 rounded-xl bg-zinc-300 text-zinc-500 text-xs font-bold cursor-not-allowed border-0 opacity-60 flex items-center gap-1.5',
-                        [
-                          span([Component.text('🚫')]),
-                          span([Component.text('Approve Blocked (Duplicate)')]),
-                        ],
-                      )
-                    else
-                      button(
-                        onClick: () => setState(() => _showApproveConfirmModal = true),
-                        classes:
-                            'px-6 py-2.5 rounded-xl bg-[#0fa958] hover:bg-[#0d924c] text-white text-xs font-bold transition-all shadow-md shadow-emerald-500/20 cursor-pointer border-0 outline-none flex items-center gap-1.5',
-                        [
-                          span([Component.text('✓')]),
-                          span([Component.text('Approve Deposit')]),
-                        ],
+                            'px-5 py-2.5 rounded-xl border border-red-200 bg-red-50/60 hover:bg-red-100 text-red-600 text-xs font-bold transition-all cursor-pointer outline-none',
+                        [Component.text('Reject Deposit')],
                       ),
+
+                      // Approve Deposit Button
+                      if (isDuplicate)
+                        button(
+                          attributes: {
+                            'disabled': 'true',
+                            'title': 'Duplicate reference detected. Approval blocked.',
+                          },
+                          classes:
+                              'px-6 py-2.5 rounded-xl bg-zinc-300 text-zinc-500 text-xs font-bold cursor-not-allowed border-0 opacity-60 flex items-center gap-1.5',
+                          [
+                            span([Component.text('🚫')]),
+                            span([Component.text('Approve Blocked (Duplicate)')]),
+                          ],
+                        )
+                      else
+                        button(
+                          onClick: () => setState(() => _showApproveConfirmModal = true),
+                          classes:
+                              'px-6 py-2.5 rounded-xl bg-[#0fa958] hover:bg-[#0d924c] text-white text-xs font-bold transition-all shadow-md shadow-emerald-500/20 cursor-pointer border-0 outline-none flex items-center gap-1.5',
+                          [
+                            span([Component.text('✓')]),
+                            span([Component.text('Approve Deposit')]),
+                          ],
+                        ),
+                    ] else if (isClaimedByOther && !isAdmin) ...[
+                      span(
+                        classes:
+                            'px-4 py-2 rounded-xl bg-zinc-100 border border-zinc-200 text-zinc-600 text-xs font-bold',
+                        [Component.text('View Only • Claimed by Agent ${deposit.assignedAgentName ?? "Staff"}')],
+                      ),
+                    ],
                   ])
                 else if (deposit.status == 'PENDING_AGENT')
                   button(
