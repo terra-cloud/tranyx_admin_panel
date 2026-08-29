@@ -128,6 +128,7 @@ class StaffPerformance {
   final int liveSupportHandled;
   final int totalHandled;
   final double csat;
+  final String? photoUrl;
 
   StaffPerformance({
     required this.name,
@@ -137,6 +138,7 @@ class StaffPerformance {
     required this.liveSupportHandled,
     required this.totalHandled,
     required this.csat,
+    this.photoUrl,
   });
 }
 
@@ -953,6 +955,7 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
 
       final idHash = agentId.hashCode.abs();
       final csat = total > 0 ? (92.0 + ((idHash % 70) / 10.0)).clamp(90.0, 99.9) : 0.0;
+      final photo = data['photoURL'] ?? data['photoUrl'] ?? data['avatarUrl'] ?? data['avatar'];
 
       list.add(
         StaffPerformance(
@@ -963,6 +966,7 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
           liveSupportHandled: liveChats,
           totalHandled: total,
           csat: double.parse(csat.toStringAsFixed(1)),
+          photoUrl: photo?.toString(),
         ),
       );
     }
@@ -1990,13 +1994,16 @@ class _DashboardState extends State<Dashboard> {
                       ]),
                       div(classes: 'col-span-3 flex items-center gap-2.5 min-w-0 pr-2', [
                         div(
-                          classes: 'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-extrabold text-zinc-700 text-[10px] flex-shrink-0',
+                          classes: 'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-extrabold text-zinc-700 text-[10px] flex-shrink-0 overflow-hidden',
                           [
-                            Component.text(
-                              staffList[i].name.length >= 2
-                                  ? staffList[i].name.substring(0, 2).toUpperCase()
-                                  : staffList[i].name.toUpperCase(),
-                            ),
+                            if (staffList[i].photoUrl != null && staffList[i].photoUrl!.isNotEmpty)
+                              img(src: staffList[i].photoUrl!, classes: 'w-full h-full object-cover', alt: staffList[i].name)
+                            else
+                              Component.text(
+                                staffList[i].name.length >= 2
+                                    ? staffList[i].name.substring(0, 2).toUpperCase()
+                                    : staffList[i].name.toUpperCase(),
+                              ),
                           ],
                         ),
                         div(classes: 'flex flex-col min-w-0', [

@@ -1,3 +1,4 @@
+import 'dart:js_interop';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,6 +13,7 @@ import '../core/providers/environment_provider.dart';
 import '../core/config/firebase_environments.dart';
 
 import 'dart:async';
+import 'dart:math' as math;
 
 final usersTabProvider = StateProvider<String>((ref) => 'platform');
 final usersMainTabProvider = StateProvider<String>((ref) => 'directory');
@@ -304,6 +306,7 @@ class UserProfileModel {
   final String? walletPublicKey;
   final String? connectedWalletType;
   final String? role;
+  final String? photoUrl;
   final bool banned;
   final int? suspendedUntil;
   final int terraPoints;
@@ -321,6 +324,7 @@ class UserProfileModel {
     this.walletPublicKey,
     this.connectedWalletType,
     this.role,
+    this.photoUrl,
     required this.banned,
     this.suspendedUntil,
     this.terraPoints = 0,
@@ -340,6 +344,7 @@ class UserProfileModel {
       walletPublicKey: map['walletPublicKey'],
       connectedWalletType: map['connectedWalletType'],
       role: map['role'],
+      photoUrl: map['photoURL'] ?? map['photoUrl'] ?? map['avatarUrl'] ?? map['avatar'],
       banned: map['banned'] ?? false,
       suspendedUntil: map['suspendedUntil'] as int?,
       terraPoints: map['terraPoints'] ?? 0,
@@ -465,6 +470,120 @@ class _UsersPageState extends State<UsersPage> {
   // User detail modal state
   UserProfileModel? _selectedUser;
   String _userModalTab = 'details'; // 'details', 'transactions', 'activity', 'rewards'
+
+  // Staff photo edit state
+  UserProfileModel? _photoEditUser;
+  String _photoInputUrl = '';
+  bool _isSavingPhoto = false;
+
+  void _openPhotoModal(UserProfileModel user) {
+    setState(() {
+      _photoEditUser = user;
+      _photoInputUrl = user.photoUrl ?? '';
+      _isSavingPhoto = false;
+    });
+  }
+
+  void _handlePhotoUpload(web.Event event) {
+    final input = event.target as web.HTMLInputElement?;
+    final files = input?.files;
+    if (files == null || files.length == 0) return;
+    final file = files.item(0)!;
+
+    final reader = web.FileReader();
+    reader.readAsDataURL(file);
+    reader.onLoadEnd.listen((_) {
+      final result = reader.result;
+      if (result != null) {
+        final img = web.HTMLImageElement();
+        img.src = result.toString();
+        img.onLoad.listen((_) {
+          final canvas = web.document.createElement('canvas') as web.HTMLCanvasElement;
+          const maxDim = 256;
+          var w = img.naturalWidth;
+          var h = img.naturalHeight;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = (h * (maxDim / w)).round();
+              w = maxDim;
+            } else {
+              w = (w * (maxDim / h)).round();
+              h = maxDim;
+            }
+          }
+          canvas.width = w;
+          canvas.height = h;
+          final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
+          ctx.drawImage(img, 0, 0, w, h);
+          final compressedDataUrl = canvas.toDataURL('image/jpeg', (0.85).toJS);
+          setState(() {
+            _photoInputUrl = compressedDataUrl;
+          });
+        });
+      }
+    });
+  }
+
+  Future<void> _saveStaffPhoto() async {
+    if (_photoEditUser == null) return;
+    setState(() => _isSavingPhoto = true);
+    try {
+      final adminFirestore = context.read(adminFirestoreProvider);
+      final newUrl = _photoInputUrl.trim();
+      final updateMap = {
+        'photoURL': newUrl,
+        'photoUrl': newUrl,
+        'avatarUrl': newUrl,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      await adminFirestore.collection('users').doc(_photoEditUser!.uid).set(updateMap, SetOptions(merge: true));
+
+      try {
+        final firestore = context.read(firestoreProvider);
+        await firestore.collection('users').doc(_photoEditUser!.uid).set(updateMap, SetOptions(merge: true));
+      } catch (_) {}
+
+      final staffName = _photoEditUser!.name;
+      _showToast('📸 Profile picture updated for $staffName!');
+      setState(() {
+        _photoEditUser = null;
+        _isSavingPhoto = false;
+      });
+    } catch (e) {
+      _showToast('❌ Failed to update photo: $e');
+      setState(() => _isSavingPhoto = false);
+    }
+  }
+
+  Future<void> _removeStaffPhoto() async {
+    if (_photoEditUser == null) return;
+    setState(() => _isSavingPhoto = true);
+    try {
+      final adminFirestore = context.read(adminFirestoreProvider);
+      final updateMap = {
+        'photoURL': '',
+        'photoUrl': '',
+        'avatarUrl': '',
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      await adminFirestore.collection('users').doc(_photoEditUser!.uid).set(updateMap, SetOptions(merge: true));
+
+      try {
+        final firestore = context.read(firestoreProvider);
+        await firestore.collection('users').doc(_photoEditUser!.uid).set(updateMap, SetOptions(merge: true));
+      } catch (_) {}
+
+      final staffName = _photoEditUser!.name;
+      _showToast('🗑️ Profile picture removed for $staffName');
+      setState(() {
+        _photoEditUser = null;
+        _isSavingPhoto = false;
+      });
+    } catch (e) {
+      _showToast('❌ Failed to remove photo: $e');
+      setState(() => _isSavingPhoto = false);
+    }
+  }
 
   // Custom rewards form state
   String _customRewardTitle = '';
@@ -642,6 +761,9 @@ class _UsersPageState extends State<UsersPage> {
           [Component.text('🪙 User Rewards Center')],
         ),
       ]),
+      // Staff Profile Photo Edit Modal
+      if (_photoEditUser != null) _buildStaffPhotoModal(),
+
       // User details modal overlay
       if (_selectedUser != null)
         div(
@@ -1502,19 +1624,29 @@ class _UsersPageState extends State<UsersPage> {
                       for (final u in users)
                         tr(classes: 'hover:bg-[#fcfdfc] transition-colors', [
                           td(classes: 'p-5 font-bold text-zinc-900', [
-                            div(classes: 'flex items-center gap-2.5', [
+                            div(classes: 'flex items-center gap-3', [
                               div(
-                                classes: 'w-7 h-7 rounded-full ${activeTab == "admin" ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-indigo-50 border-indigo-100 text-zinc-700"} border flex items-center justify-center text-[10px] font-extrabold flex-shrink-0',
+                                classes: 'relative group cursor-pointer w-8 h-8 rounded-full ${activeTab == "admin" ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-indigo-50 border-indigo-100 text-zinc-700"} border flex items-center justify-center text-[10px] font-extrabold flex-shrink-0 overflow-hidden shadow-sm',
+                                events: isAdmin ? {'click': (e) { e.stopPropagation(); _openPhotoModal(u); }} : null,
+                                attributes: isAdmin ? {'title': 'Click to update profile photo'} : {},
                                 [
-                                  Component.text(
-                                    u.name.length >= 2 ? u.name.substring(0, 2).toUpperCase() : u.name.toUpperCase(),
-                                  ),
+                                  if (u.photoUrl != null && u.photoUrl!.isNotEmpty)
+                                    img(src: u.photoUrl!, classes: 'w-full h-full object-cover', alt: u.name)
+                                  else
+                                    Component.text(
+                                      u.name.length >= 2 ? u.name.substring(0, 2).toUpperCase() : u.name.toUpperCase(),
+                                    ),
+                                  if (isAdmin)
+                                    div(
+                                      classes: 'absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-[10px]',
+                                      [Component.text('📷')],
+                                    ),
                                 ],
                               ),
                               div(classes: 'flex flex-col', [
                                 span([Component.text(u.name)]),
                                 span(classes: 'text-[9px] text-zinc-400 font-mono', [
-                                  Component.text('UID: ${u.uid.substring(0, mathMin(u.uid.length, 10))}...'),
+                                  Component.text('UID: ${u.uid.substring(0, math.min(u.uid.length, 10))}...'),
                                 ]),
                               ]),
                             ]),
@@ -1537,18 +1669,29 @@ class _UsersPageState extends State<UsersPage> {
                             ),
                           ]),
                           td(classes: 'p-5 text-right', [
-                            if (u.email.toLowerCase() == 'admin@tranyx.app')
-                              span(classes: 'text-[10px] font-bold text-zinc-400 px-3 py-1.5', [Component.text('Protected Root')])
-                            else
-                              button(
-                                onClick: () async {
-                                  final adminFirestore = context.read(adminFirestoreProvider);
-                                  await adminFirestore.collection('users').doc(u.uid).delete();
-                                  _showToast('🗑️ ${activeTab == 'admin' ? 'Admin' : 'Agent'} "${u.name}" removed.');
-                                },
-                                classes: 'px-3 py-1.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-500 text-[10px] font-extrabold rounded-full transition-all',
-                                [Component.text(activeTab == 'admin' ? 'Remove Admin' : 'Remove Agent')],
-                              ),
+                            div(classes: 'flex items-center justify-end gap-2', [
+                              if (isAdmin)
+                                button(
+                                  onClick: () => _openPhotoModal(u),
+                                  classes: 'px-3 py-1.5 border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-extrabold rounded-full transition-all flex items-center gap-1 cursor-pointer',
+                                  [
+                                    span([Component.text('📷')]),
+                                    Component.text('Photo'),
+                                  ],
+                                ),
+                              if (u.email.toLowerCase() == 'admin@tranyx.app')
+                                span(classes: 'text-[10px] font-bold text-zinc-400 px-3 py-1.5', [Component.text('Protected Root')])
+                              else if (isAdmin)
+                                button(
+                                  onClick: () async {
+                                    final adminFirestore = context.read(adminFirestoreProvider);
+                                    await adminFirestore.collection('users').doc(u.uid).delete();
+                                    _showToast('🗑️ ${activeTab == 'admin' ? 'Admin' : 'Agent'} "${u.name}" removed.');
+                                  },
+                                  classes: 'px-3 py-1.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-500 text-[10px] font-extrabold rounded-full transition-all cursor-pointer',
+                                  [Component.text(activeTab == 'admin' ? 'Remove Admin' : 'Remove Agent')],
+                                ),
+                            ]),
                           ]),
                         ]),
                     ]),
@@ -1938,5 +2081,188 @@ class _UsersPageState extends State<UsersPage> {
         ),
       ],
     ]);
+  }
+
+  Component _buildStaffPhotoModal() {
+    if (_photoEditUser == null) return div([]);
+    final u = _photoEditUser!;
+    final previewUrl = _photoInputUrl.trim();
+
+    final presetAvatars = [
+      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces',
+      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=faces',
+      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=faces',
+      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&crop=faces',
+      'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&h=200&fit=crop&crop=faces',
+      'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=faces',
+      'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&h=200&fit=crop&crop=faces',
+      'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=200&h=200&fit=crop&crop=faces',
+    ];
+
+    return div(
+      classes: 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in',
+      events: {
+        'click': (e) {
+          if (!_isSavingPhoto) setState(() => _photoEditUser = null);
+        },
+      },
+      [
+        div(
+          classes: 'bg-white rounded-[28px] max-w-lg w-full p-7 shadow-2xl flex flex-col gap-6 border border-zinc-200/50 transform scale-100 transition-all max-h-[90vh] overflow-y-auto',
+          events: {
+            'click': (e) => e.stopPropagation(),
+          },
+          [
+            // Modal Header
+            div(classes: 'flex items-start justify-between border-b border-zinc-100 pb-4', [
+              div(classes: 'flex items-center gap-3', [
+                div(classes: 'w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-lg', [
+                  Component.text('📷'),
+                ]),
+                div(classes: 'flex flex-col', [
+                  h2(classes: 'text-base font-black text-zinc-950 leading-tight', [
+                    Component.text('Update Profile Picture'),
+                  ]),
+                  p(classes: 'text-xs text-zinc-400 font-medium mt-0.5', [
+                    Component.text('Upload or assign a photo for ${u.name}'),
+                  ]),
+                ]),
+              ]),
+              button(
+                onClick: () {
+                  if (!_isSavingPhoto) setState(() => _photoEditUser = null);
+                },
+                classes: 'w-7 h-7 rounded-full bg-zinc-100 text-zinc-500 font-bold hover:bg-zinc-200 text-xs flex items-center justify-center border-0 cursor-pointer',
+                [Component.text('✕')],
+              ),
+            ]),
+
+            // User Info & Live Preview Area
+            div(classes: 'flex flex-col sm:flex-row items-center gap-5 p-4 bg-[#fafcfa] border border-zinc-200/60 rounded-2xl', [
+              div(
+                classes: 'relative w-20 h-20 rounded-full border-2 border-indigo-200 shadow-md flex items-center justify-center overflow-hidden bg-indigo-50 flex-shrink-0',
+                [
+                  if (previewUrl.isNotEmpty)
+                    img(src: previewUrl, classes: 'w-full h-full object-cover', alt: u.name)
+                  else
+                    span(classes: 'text-xl font-black text-indigo-700', [
+                      Component.text(u.name.length >= 2 ? u.name.substring(0, 2).toUpperCase() : u.name.toUpperCase()),
+                    ]),
+                ],
+              ),
+              div(classes: 'flex flex-col items-center sm:items-start text-center sm:text-left min-w-0 flex-1', [
+                div(classes: 'flex items-center gap-2', [
+                  h3(classes: 'text-sm font-black text-zinc-900 truncate', [Component.text(u.name)]),
+                  span(
+                    classes: 'px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase bg-indigo-50 text-indigo-700 border border-indigo-100',
+                    [Component.text((u.role ?? 'staff').toUpperCase())],
+                  ),
+                ]),
+                span(classes: 'text-xs text-zinc-500 font-medium truncate mt-0.5', [Component.text(u.email)]),
+                span(classes: 'text-[9px] text-zinc-400 font-mono mt-1', [
+                  Component.text('UID: ${u.uid.substring(0, math.min(u.uid.length, 12))}...'),
+                ]),
+              ]),
+            ]),
+
+            // Option 1: File Upload
+            div(classes: 'flex flex-col gap-2', [
+              label(classes: 'text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider', [
+                Component.text('1. Upload Local Image File'),
+              ]),
+              div(classes: 'flex items-center gap-3', [
+                label(
+                  classes: 'px-4 py-2.5 bg-zinc-900 hover:bg-black text-white text-xs font-extrabold rounded-xl cursor-pointer transition-all flex items-center gap-2 shadow-sm',
+                  [
+                    span([Component.text('📁')]),
+                    Component.text('Choose Image File (JPG/PNG/WEBP)'),
+                    input(
+                      classes: 'hidden',
+                      attributes: {'type': 'file', 'accept': 'image/*'},
+                      events: {
+                        'change': _handlePhotoUpload,
+                      },
+                    ),
+                  ],
+                ),
+                if (previewUrl.startsWith('data:image'))
+                  span(classes: 'text-[10px] font-extrabold text-emerald-600 flex items-center gap-1', [
+                    Component.text('✓ File compressed & ready'),
+                  ]),
+              ]),
+            ]),
+
+            // Option 2: Image URL
+            div(classes: 'flex flex-col gap-1.5', [
+              label(classes: 'text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider', [
+                Component.text('2. Or Paste Image Web URL'),
+              ]),
+              input(
+                value: _photoInputUrl.startsWith('data:image') ? '[Uploaded Image File]' : _photoInputUrl,
+                onInput: (v) {
+                  final str = v as String;
+                  if (!str.startsWith('[Uploaded Image')) {
+                    setState(() => _photoInputUrl = str);
+                  }
+                },
+                classes: 'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200 rounded-xl text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-black/10 font-medium',
+                attributes: {'placeholder': 'https://example.com/avatar.jpg', 'type': 'url'},
+              ),
+            ]),
+
+            // Option 3: Curated Presets
+            div(classes: 'flex flex-col gap-2', [
+              label(classes: 'text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider', [
+                Component.text('3. Or Select Curated Preset Avatar'),
+              ]),
+              div(classes: 'grid grid-cols-4 sm:grid-cols-8 gap-2', [
+                for (final preset in presetAvatars)
+                  div(
+                    classes: 'w-10 h-10 rounded-full border-2 cursor-pointer overflow-hidden transition-all hover:scale-110 ${previewUrl == preset ? "border-indigo-600 ring-2 ring-indigo-300" : "border-zinc-200 hover:border-indigo-400"}',
+                    events: {
+                      'click': (e) => setState(() => _photoInputUrl = preset),
+                    },
+                    [
+                      img(src: preset, classes: 'w-full h-full object-cover', alt: 'Preset'),
+                    ],
+                  ),
+              ]),
+            ]),
+
+            // Action Buttons
+            div(classes: 'flex items-center justify-between border-t border-zinc-100 pt-4 mt-2', [
+              if ((u.photoUrl != null && u.photoUrl!.isNotEmpty) || previewUrl.isNotEmpty)
+                button(
+                  onClick: _removeStaffPhoto,
+                  disabled: _isSavingPhoto,
+                  classes: 'px-3.5 py-2 text-rose-600 hover:bg-rose-50 text-xs font-extrabold rounded-xl transition-all border border-rose-200 cursor-pointer disabled:opacity-50',
+                  [Component.text('Remove Photo')],
+                )
+              else
+                div([]),
+              div(classes: 'flex items-center gap-2', [
+                button(
+                  onClick: () => setState(() => _photoEditUser = null),
+                  disabled: _isSavingPhoto,
+                  classes: 'px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold rounded-xl transition-all border-0 cursor-pointer',
+                  [Component.text('Cancel')],
+                ),
+                button(
+                  onClick: _saveStaffPhoto,
+                  disabled: _isSavingPhoto,
+                  classes: 'px-5 py-2.5 bg-black hover:bg-zinc-800 text-white text-xs font-extrabold rounded-xl transition-all shadow-md shadow-black/10 flex items-center gap-2 cursor-pointer disabled:opacity-50 border-0',
+                  [
+                    if (_isSavingPhoto)
+                      div(classes: 'animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full', [])
+                    else
+                      Component.text('Save Picture'),
+                  ],
+                ),
+              ]),
+            ]),
+          ],
+        ),
+      ],
+    );
   }
 }
