@@ -1101,7 +1101,7 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
     for (final doc in adminDocs) {
       final d = doc.data() as Map<String, dynamic>? ?? {};
       final role = (d['role'] ?? '').toString().toLowerCase().trim();
-      if (role == 'user') continue;
+      if (role == 'user' || role == 'admin' || role == 'superadmin' || role == 'administrator' || role.isEmpty) continue;
 
       final uid = doc.id;
       final rawName = d['name'] ?? d['displayName'];
@@ -1145,7 +1145,7 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
         uid: uid,
         name: name,
         email: email,
-        role: role.isEmpty ? 'Staff' : (role == 'admin' ? 'Administrator' : (role == 'support' ? 'Support Agent' : role.toUpperCase())),
+        role: role == 'support' ? 'Support Agent' : (role == 'agent' ? 'P2P Agent' : role.toUpperCase()),
         photoUrl: photo?.toString(),
         presenceStatus: status,
         lastSeenAt: lastSeen,
@@ -2472,8 +2472,7 @@ class _DashboardState extends State<Dashboard> {
                     // Role
                     div(classes: 'col-span-2 flex justify-center', [
                       span(
-                        classes: 'text-[9px] font-extrabold uppercase px-2.5 py-0.5 rounded-full '
-                            '${agent.role.toLowerCase().contains("admin") ? "bg-amber-100 text-amber-800 border border-amber-200" : "bg-indigo-50 text-indigo-700 border border-indigo-100"}',
+                        classes: 'text-[9px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100',
                         [Component.text(agent.role)],
                       ),
                     ]),
