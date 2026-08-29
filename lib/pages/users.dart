@@ -768,7 +768,7 @@ class _UsersPageState extends State<UsersPage> {
       if (_selectedUser != null)
         div(
           classes:
-              'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in',
+              'fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in',
           events: {
             'click': (e) {
               setState(() => _selectedUser = null);
@@ -2118,7 +2118,7 @@ class _UsersPageState extends State<UsersPage> {
     ];
 
     return div(
-      classes: 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in',
+      classes: 'fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in',
       events: {
         'click': (e) {
           if (!_isSavingPhoto) setState(() => _photoEditUser = null);

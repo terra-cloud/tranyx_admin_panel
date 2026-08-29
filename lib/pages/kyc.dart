@@ -329,7 +329,7 @@ class _KycPageState extends State<KycPage> {
           final resolvedName = userProfile.name == 'Unknown User' ? _selectedSubmission!.userName : userProfile.name;
 
           return div(
-            classes: 'fixed inset-0 bg-black/55 backdrop-blur-sm z-50 flex items-center justify-center p-4',
+            classes: 'fixed inset-0 bg-black/55 backdrop-blur-sm z-[9999] flex items-center justify-center p-4',
             events: {
               'click': (e) {
                 final target = e.target as dynamic;

@@ -2466,7 +2466,7 @@ class _DepositsPageState extends State<DepositsPage> {
             .toString();
 
     return div(
-      classes: 'fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-3 md:p-6',
+      classes: 'fixed inset-0 bg-black/75 backdrop-blur-md z-[9999] flex items-center justify-center p-3 md:p-6',
       events: {
         'click': (e) {
           final target = e.target as dynamic;
