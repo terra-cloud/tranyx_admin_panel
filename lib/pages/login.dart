@@ -34,37 +34,42 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       final auth = context.read(adminAuthProvider);
-      // Sign in staff to admin console project with auto-register fallback
-      try {
-        await auth.signInWithEmailAndPassword(
-          email: _email,
-          password: _password,
-        );
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'user-not-found' || e.code == 'invalid-credential' || e.code == 'wrong-password') {
-          try {
-            await auth.createUserWithEmailAndPassword(
-              email: _email,
-              password: _password,
-            );
-          } catch (_) {
-            rethrow;
-          }
-        } else {
-          rethrow;
-        }
-      }
+      await auth.signInWithEmailAndPassword(
+        email: _email.trim(),
+        password: _password,
+      );
 
       // Save credentials for quick session persistence
       try {
-        web.window.localStorage.setItem('tranyx_staff_email', _email);
+        web.window.localStorage.setItem('tranyx_staff_email', _email.trim());
         web.window.localStorage.setItem('tranyx_staff_password', _password);
       } catch (e) {
         print('[Login] Failed to store credentials locally: $e');
       }
     } on FirebaseAuthException catch (e) {
+      String errorMessage;
+      switch (e.code) {
+        case 'user-not-found':
+          errorMessage = 'No staff account found with this email in the admin portal.';
+          break;
+        case 'wrong-password':
+        case 'invalid-credential':
+          errorMessage = 'Incorrect password or invalid credentials.';
+          break;
+        case 'user-disabled':
+          errorMessage = 'This staff account has been disabled. Please contact an administrator.';
+          break;
+        case 'too-many-requests':
+          errorMessage = 'Too many failed login attempts. Please try again later.';
+          break;
+        case 'invalid-email':
+          errorMessage = 'Please enter a valid email address.';
+          break;
+        default:
+          errorMessage = e.message ?? 'Authentication failed.';
+      }
       setState(() {
-        _error = e.message ?? 'Authentication failed.';
+        _error = errorMessage;
       });
     } catch (e) {
       setState(() {
