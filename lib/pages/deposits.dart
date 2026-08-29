@@ -1394,10 +1394,17 @@ class _DepositsPageState extends State<DepositsPage> {
       }
 
       _triggerToast('Deposit approved! ₱${deposit.amount.toStringAsFixed(2)} credited to ${deposit.userName}.');
+      setState(() {
+        _showApproveConfirmModal = false;
+        _showRejectModal = false;
+      });
       _closeInspector();
     } catch (e) {
       print('[Deposits] Approval error: $e');
       _triggerToast('Approval failed: $e');
+      setState(() {
+        _showApproveConfirmModal = false;
+      });
     } finally {
       if (mounted) {
         setState(() {
@@ -1472,10 +1479,17 @@ class _DepositsPageState extends State<DepositsPage> {
       }
 
       _triggerToast('Deposit rejected. Request marked as REJECTED.');
+      setState(() {
+        _showApproveConfirmModal = false;
+        _showRejectModal = false;
+      });
       _closeInspector();
     } catch (e) {
       print('[Deposits] Rejection error: $e');
       _triggerToast('Rejection failed: $e');
+      setState(() {
+        _showRejectModal = false;
+      });
     } finally {
       if (mounted) {
         setState(() {
@@ -1586,7 +1600,7 @@ class _DepositsPageState extends State<DepositsPage> {
         if (_toastMessage != null)
           div(
             classes:
-                'fixed top-6 right-6 z-[9999] bg-zinc-950 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-zinc-800 flex items-center gap-3 animate-fade-up',
+                'fixed top-6 right-6 z-[10010] bg-zinc-950 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-zinc-800 flex items-center gap-3 animate-fade-up',
             [
               span(classes: 'text-base', [Component.text('🔔')]),
               span(classes: 'text-xs font-bold', [Component.text(_toastMessage!)]),
@@ -2209,7 +2223,7 @@ class _DepositsPageState extends State<DepositsPage> {
   /// SEND QR CODE MODAL: Allows agent to send their QR code with locking & preset selection
   Component _buildSendQrModal(DepositRequest deposit, fb.User? adminUser) {
     return div(
-      classes: 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4',
+      classes: 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4',
       [
         div(
           classes:
@@ -2413,7 +2427,7 @@ class _DepositsPageState extends State<DepositsPage> {
   /// AGENT QR PRESET MANAGER MODAL
   Component _buildQrPresetManagerModal() {
     return div(
-      classes: 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[80] flex items-center justify-center p-4',
+      classes: 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4',
       [
         div(
           classes:
@@ -2585,7 +2599,7 @@ class _DepositsPageState extends State<DepositsPage> {
             .toString();
 
     return div(
-      classes: 'fixed inset-0 bg-black/75 backdrop-blur-md z-[9999] flex items-center justify-center p-3 md:p-6',
+      classes: 'fixed inset-0 bg-black/75 backdrop-blur-md z-[9990] flex items-center justify-center p-3 md:p-6',
       events: {
         'click': (e) {
           final target = e.target as dynamic;
@@ -3102,7 +3116,7 @@ class _DepositsPageState extends State<DepositsPage> {
   /// Deposit Approval Workflow Confirmation Dialog
   Component _buildApproveConfirmDialog(DepositRequest deposit, fb.User? adminUser) {
     return div(
-      classes: 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4',
+      classes: 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4',
       [
         div(
           classes:
@@ -3190,7 +3204,7 @@ class _DepositsPageState extends State<DepositsPage> {
     final isOther = _selectedRejectReason == 'Other (Custom text required)';
 
     return div(
-      classes: 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4',
+      classes: 'fixed inset-0 bg-black/80 backdrop-blur-sm z-[10000] flex items-center justify-center p-4',
       [
         div(
           classes:
