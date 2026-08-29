@@ -1364,6 +1364,10 @@ class _DashboardState extends State<Dashboard> {
           ],
         ),
 
+      // ── Agent Personal Performance & CSAT Satisfaction (Top Placement) ──
+      if (!isAdmin)
+        _buildAgentTopPerformanceSection(myStaffProfile),
+
       // Quick action links (6 Tiles)
       div(classes: 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3', [
         _promoBanner(
@@ -2066,123 +2070,123 @@ class _DashboardState extends State<Dashboard> {
               ]),
             ],
           ),
-        ])
-      else
-        div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5', [
-          // My Agent Performance (2/3)
-          div(
-            classes: 'lg:col-span-2 bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
-            [
-              div(classes: 'flex justify-between items-center border-b border-zinc-50 pb-4', [
-                div([
-                  h3(classes: 'text-sm font-black text-zinc-900', [Component.text('My Performance & Score')]),
-                  p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
-                    Component.text('Your active operational throughput and resolution metrics'),
-                  ]),
-                ]),
-                span(
-                  classes: 'px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-full text-indigo-700 text-[10px] font-black uppercase tracking-wider',
-                  [Component.text('Score: ${myStaffProfile.totalHandled} pts')],
-                ),
-              ]),
-              div(classes: 'grid grid-cols-1 sm:grid-cols-3 gap-4 py-2', [
-                div(classes: 'bg-[#fafcfa] border border-zinc-200/60 rounded-2xl p-4 flex flex-col gap-2', [
-                  div(classes: 'flex items-center justify-between', [
-                    span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
-                      Component.text('P2P Handled'),
-                    ]),
-                    span(classes: 'text-base', [Component.text('💳')]),
-                  ]),
-                  h4(classes: 'text-2xl font-black text-zinc-900', [
-                    Component.text('${myStaffProfile.p2pHandled}'),
-                  ]),
-                  span(classes: 'text-[9px] font-bold text-zinc-400', [
-                    Component.text('Deposits & cashouts verified'),
-                  ]),
-                ]),
-                div(classes: 'bg-[#fafcfa] border border-zinc-200/60 rounded-2xl p-4 flex flex-col gap-2', [
-                  div(classes: 'flex items-center justify-between', [
-                    span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
-                      Component.text('Tickets Resolved'),
-                    ]),
-                    span(classes: 'text-base', [Component.text('🎟️')]),
-                  ]),
-                  h4(classes: 'text-2xl font-black text-zinc-900', [
-                    Component.text('${myStaffProfile.ticketsHandled}'),
-                  ]),
-                  span(classes: 'text-[9px] font-bold text-zinc-400', [
-                    Component.text('Customer tickets closed'),
-                  ]),
-                ]),
-                div(classes: 'bg-[#fafcfa] border border-zinc-200/60 rounded-2xl p-4 flex flex-col gap-2', [
-                  div(classes: 'flex items-center justify-between', [
-                    span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
-                      Component.text('Live Chats'),
-                    ]),
-                    span(classes: 'text-base', [Component.text('💬')]),
-                  ]),
-                  h4(classes: 'text-2xl font-black text-zinc-900', [
-                    Component.text('${myStaffProfile.liveSupportHandled}'),
-                  ]),
-                  span(classes: 'text-[9px] font-bold text-zinc-400', [
-                    Component.text('Direct support sessions'),
-                  ]),
-                ]),
-              ]),
-            ],
-          ),
-
-          // CSAT Average Circular Graph Card (1/3)
-          div(
-            classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)] items-center justify-between text-center',
-            [
-              div(classes: 'w-full text-left border-b border-zinc-50 pb-3', [
-                h3(classes: 'text-sm font-black text-zinc-900', [Component.text('CSAT Satisfaction')]),
-                p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
-                  Component.text('Customer satisfaction average score'),
-                ]),
-              ]),
-              () {
-                final csatScore = myStaffProfile.csat > 0 ? myStaffProfile.csat : 98;
-                return div(
-                  classes: 'relative flex items-center justify-center my-2',
-                  [
-                    div(
-                      attributes: {
-                        'style':
-                            'width:130px;height:130px;border-radius:50%;'
-                            'background:conic-gradient(#0fa958 0% $csatScore%, #e2e8f0 $csatScore% 100%);'
-                            'display:flex;align-items:center;justify-content:center;',
-                      },
-                      [
-                        div(
-                          classes: 'bg-white rounded-full flex flex-col items-center justify-center shadow-inner',
-                          attributes: {'style': 'width:96px;height:96px;'},
-                          [
-                            span(classes: 'text-2xl font-black text-zinc-900 tracking-tight', [
-                              Component.text('$csatScore%'),
-                            ]),
-                            span(classes: 'text-[8px] font-extrabold uppercase tracking-wider text-emerald-600', [
-                              Component.text('CSAT'),
-                            ]),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                );
-              }(),
-              div(classes: 'w-full flex flex-col gap-1 border-t border-zinc-50 pt-3', [
-                span(classes: 'text-xs font-black text-zinc-800', [
-                  Component.text('🌟 Excellent Quality Rating'),
-                ]),
-                span(classes: 'text-[10px] text-zinc-400 font-semibold', [
-                  Component.text('Target CSAT benchmark is ≥95% across all support interactions.'),
-                ]),
-              ]),
-            ],
-          ),
         ]),
+    ]);
+  }
+
+  Component _buildAgentTopPerformanceSection(StaffPerformance myStaffProfile) {
+    final csatScore = myStaffProfile.csat > 0 ? myStaffProfile.csat : 98.0;
+    return div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5', [
+      // My Agent Performance (2/3)
+      div(
+        classes: 'lg:col-span-2 bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+        [
+          div(classes: 'flex justify-between items-center border-b border-zinc-50 pb-4', [
+            div([
+              h3(classes: 'text-sm font-black text-zinc-900', [Component.text('My Performance & Score')]),
+              p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
+                Component.text('Your active operational throughput and resolution metrics'),
+              ]),
+            ]),
+            span(
+              classes: 'px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-full text-indigo-700 text-[10px] font-black uppercase tracking-wider',
+              [Component.text('Score: ${myStaffProfile.totalHandled} pts')],
+            ),
+          ]),
+          div(classes: 'grid grid-cols-1 sm:grid-cols-3 gap-4 py-1', [
+            div(classes: 'bg-[#fafcfa] border border-zinc-200/60 rounded-2xl p-4 flex flex-col gap-2', [
+              div(classes: 'flex items-center justify-between', [
+                span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('P2P Handled'),
+                ]),
+                span(classes: 'text-base', [Component.text('💳')]),
+              ]),
+              h4(classes: 'text-2xl font-black text-zinc-900', [
+                Component.text('${myStaffProfile.p2pHandled}'),
+              ]),
+              span(classes: 'text-[9px] font-bold text-zinc-400', [
+                Component.text('Deposits & cashouts verified'),
+              ]),
+            ]),
+            div(classes: 'bg-[#fafcfa] border border-zinc-200/60 rounded-2xl p-4 flex flex-col gap-2', [
+              div(classes: 'flex items-center justify-between', [
+                span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('Tickets Resolved'),
+                ]),
+                span(classes: 'text-base', [Component.text('🎟️')]),
+              ]),
+              h4(classes: 'text-2xl font-black text-zinc-900', [
+                Component.text('${myStaffProfile.ticketsHandled}'),
+              ]),
+              span(classes: 'text-[9px] font-bold text-zinc-400', [
+                Component.text('Customer tickets closed'),
+              ]),
+            ]),
+            div(classes: 'bg-[#fafcfa] border border-zinc-200/60 rounded-2xl p-4 flex flex-col gap-2', [
+              div(classes: 'flex items-center justify-between', [
+                span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                  Component.text('Live Chats'),
+                ]),
+                span(classes: 'text-base', [Component.text('💬')]),
+              ]),
+              h4(classes: 'text-2xl font-black text-zinc-900', [
+                Component.text('${myStaffProfile.liveSupportHandled}'),
+              ]),
+              span(classes: 'text-[9px] font-bold text-zinc-400', [
+                Component.text('Direct support sessions'),
+              ]),
+            ]),
+          ]),
+        ],
+      ),
+
+      // CSAT Average Circular Graph Card (1/3)
+      div(
+        classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)] items-center justify-between text-center',
+        [
+          div(classes: 'w-full text-left border-b border-zinc-50 pb-3', [
+            h3(classes: 'text-sm font-black text-zinc-900', [Component.text('CSAT Satisfaction')]),
+            p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
+              Component.text('Customer satisfaction average score'),
+            ]),
+          ]),
+          div(
+            classes: 'relative flex items-center justify-center my-1',
+            [
+              div(
+                attributes: {
+                  'style':
+                      'width:130px;height:130px;border-radius:50%;'
+                      'background:conic-gradient(#0fa958 0% $csatScore%, #e2e8f0 $csatScore% 100%);'
+                      'display:flex;align-items:center;justify-content:center;',
+                },
+                [
+                  div(
+                    classes: 'bg-white rounded-full flex flex-col items-center justify-center shadow-inner',
+                    attributes: {'style': 'width:96px;height:96px;'},
+                    [
+                      span(classes: 'text-2xl font-black text-zinc-900 tracking-tight', [
+                        Component.text('${csatScore.toStringAsFixed(0)}%'),
+                      ]),
+                      span(classes: 'text-[8px] font-extrabold uppercase tracking-wider text-emerald-600', [
+                        Component.text('CSAT'),
+                      ]),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          div(classes: 'w-full flex flex-col gap-1 border-t border-zinc-50 pt-3', [
+            span(classes: 'text-xs font-black text-zinc-800', [
+              Component.text('🌟 Excellent Quality Rating'),
+            ]),
+            span(classes: 'text-[10px] text-zinc-400 font-semibold', [
+              Component.text('Target CSAT benchmark is ≥95% across all support interactions.'),
+            ]),
+          ]),
+        ],
+      ),
     ]);
   }
 
