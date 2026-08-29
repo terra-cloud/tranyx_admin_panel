@@ -131,12 +131,16 @@ final activeEnvAuthUserProvider = StreamProvider<User?>((ref) {
           email == 'sarah.johnson@tranyx.com';
 
       docRef.get().then((snap) {
+        final existingName = snap.data()?['name'] ?? snap.data()?['displayName'];
         if (!snap.exists || isKnownAdmin) {
-          // Seed or correct admin user
+          // Seed or correct admin user without clobbering existing custom name
+          final resolvedName = (existingName != null && existingName.toString().trim().isNotEmpty)
+              ? existingName.toString().trim()
+              : (user.displayName?.isNotEmpty == true ? user.displayName! : (isKnownAdmin ? 'Admin' : 'Staff Agent'));
           docRef.set({
             'uid': user.uid,
             'email': email,
-            'name': user.displayName?.isNotEmpty == true ? user.displayName! : (isKnownAdmin ? 'Admin' : 'Staff Agent'),
+            'name': resolvedName,
             'role': isKnownAdmin ? 'admin' : 'staff',
             'idVerified': true,
             'bgChecked': true,
@@ -174,4 +178,151 @@ final adminFirestoreProvider = Provider<FirebaseFirestore>((ref) {
 /// Exposes the default (Admin-exclusive) Firebase Auth instance.
 final adminAuthProvider = Provider<FirebaseAuth>((ref) {
   return FirebaseAuth.instance;
+});
+
+/// Structured profile model for the currently authenticated Admin/Staff/Agent user.
+class AdminStaffProfileModel {
+  final String uid;
+  final String name;
+  final String displayName;
+  final String email;
+  final String role;
+  final String? photoUrl;
+
+  const AdminStaffProfileModel({
+    required this.uid,
+    required this.name,
+    required this.displayName,
+    required this.email,
+    required this.role,
+    this.photoUrl,
+  });
+
+  String get initials {
+    if (name.isNotEmpty && name != 'Unknown' && name != 'Staff Agent') {
+      final parts = name.trim().split(RegExp(r'\s+'));
+      if (parts.length >= 2) {
+        return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+      }
+      return name.substring(0, name.length >= 2 ? 2 : 1).toUpperCase();
+    }
+    if (displayName.isNotEmpty && displayName != 'Staff Agent') {
+      return displayName.substring(0, displayName.length >= 2 ? 2 : 1).toUpperCase();
+    }
+    if (email.isNotEmpty) {
+      return email.substring(0, email.length >= 2 ? 2 : 1).toUpperCase();
+    }
+    return 'AD';
+  }
+
+  String get roleDisplay {
+    final r = role.toLowerCase().trim();
+    if (r == 'admin' || r == 'superadmin') return 'Administrator';
+    if (r == 'support' || r == 'support_agent') return 'Support Agent';
+    if (r == 'agent' || r == 'p2p_agent') return 'P2P Agent';
+    if (r == 'staff') return 'Staff Member';
+    if (r.isNotEmpty) return role.toUpperCase();
+    return 'Staff';
+  }
+}
+
+String _formatHumanStaffName(String? raw, String email, bool isDefaultAdmin) {
+  if (raw != null && raw.trim().isNotEmpty) {
+    var cleaned = raw.trim();
+    // If it's a full custom name without emails/dots (e.g. "Zeus Cajurao"), return as is
+    if (!cleaned.contains('@') && !cleaned.contains('.') && !cleaned.contains('_')) {
+      return cleaned;
+    }
+    // If it contains an email (e.g. "zeus.agent@tranyx.app" or "admin@tranyx.com")
+    if (cleaned.contains('@')) {
+      cleaned = cleaned.split('@').first;
+    }
+    // Format dotted/underscored handles into Title Case words (e.g. "zeus.agent" -> "Zeus Agent")
+    return cleaned
+        .replaceAll('.', ' ')
+        .replaceAll('_', ' ')
+        .split(RegExp(r'\s+'))
+        .where((s) => s.isNotEmpty)
+        .map((s) => s[0].toUpperCase() + (s.length > 1 ? s.substring(1) : ''))
+        .join(' ');
+  }
+
+  if (isDefaultAdmin) return 'Sarah Johnson';
+
+  if (email.isNotEmpty && email.contains('@')) {
+    final prefix = email.split('@').first;
+    return prefix
+        .replaceAll('.', ' ')
+        .replaceAll('_', ' ')
+        .split(RegExp(r'\s+'))
+        .where((s) => s.isNotEmpty)
+        .map((s) => s[0].toUpperCase() + (s.length > 1 ? s.substring(1) : ''))
+        .join(' ');
+  }
+
+  return 'Staff Member';
+}
+
+/// Provider streaming the full, real-time profile of the currently logged-in Admin/Staff/Agent.
+final currentAdminProfileProvider = StreamProvider<AdminStaffProfileModel>((ref) {
+  final auth = ref.watch(adminAuthProvider);
+  final firestore = ref.watch(firestoreProvider);
+
+  return auth.userChanges().asyncExpand((user) {
+    if (user == null) {
+      return Stream.value(const AdminStaffProfileModel(
+        uid: '',
+        name: 'Logged Out',
+        displayName: 'Logged Out',
+        email: '',
+        role: 'guest',
+      ));
+    }
+
+    final email = user.email ?? '';
+    final isDefaultAdmin = email.toLowerCase().contains('admin') || email == 'sarah.johnson@tranyx.com';
+    final defaultName = _formatHumanStaffName(user.displayName, email, isDefaultAdmin);
+    final defaultRole = isDefaultAdmin ? 'Admin' : 'Staff';
+
+    return firestore.collection('users').doc(user.uid).snapshots().map((doc) {
+      if (doc.exists) {
+        final d = doc.data() ?? {};
+        final docName = d['name'] ?? d['displayName'] ?? d['agentName'];
+        final docRole = d['role'] ?? d['position'] ?? d['staffRole'] ?? defaultRole;
+        final docEmail = d['email'] ?? email;
+        final photo = d['photoURL'] ?? d['avatarUrl'] ?? d['avatar'] ?? user.photoURL;
+
+        final resolvedName = _formatHumanStaffName(
+          docName?.toString(),
+          docEmail.toString(),
+          isDefaultAdmin,
+        );
+
+        return AdminStaffProfileModel(
+          uid: user.uid,
+          name: resolvedName,
+          displayName: user.displayName?.isNotEmpty == true ? user.displayName! : resolvedName,
+          email: docEmail.toString().trim().isNotEmpty ? docEmail.toString().trim() : email,
+          role: docRole.toString(),
+          photoUrl: photo?.toString(),
+        );
+      }
+
+      return AdminStaffProfileModel(
+        uid: user.uid,
+        name: defaultName,
+        displayName: defaultName,
+        email: email,
+        role: defaultRole,
+        photoUrl: user.photoURL,
+      );
+    }).handleError((_) => AdminStaffProfileModel(
+          uid: user.uid,
+          name: defaultName,
+          displayName: defaultName,
+          email: email,
+          role: defaultRole,
+          photoUrl: user.photoURL,
+        ));
+  });
 });

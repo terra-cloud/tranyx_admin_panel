@@ -9,6 +9,7 @@ import 'components/global_p2p_alert_manager.dart';
 import 'components/sidebar.dart';
 import 'core/config/firebase_environments.dart';
 import 'core/providers/environment_provider.dart';
+import 'core/services/presence_service.dart';
 import 'pages/dashboard.dart';
 import 'pages/listings.dart';
 import 'pages/bookings.dart';
@@ -55,15 +56,23 @@ class AppShell extends StatelessComponent {
           if (user == null) {
             return const LoginPage();
           }
+
+          // Start agent real-time presence heartbeat
+          final firestore = context.watch(firestoreProvider);
+          PresenceService.startPresenceHeartbeat(
+            firestore: firestore,
+            agentUid: user.uid,
+            agentName: user.displayName ?? (user.email?.split('@').first ?? 'Staff'),
+            email: user.email,
+            role: 'staff',
+          );
+
           return Router(
             routes: [
               ShellRoute(
                 builder: (context, state, child) {
                   final envUserAsync = context.watch(activeEnvAuthUserProvider);
-                  return div(classes: 'flex flex-col md:flex-row min-h-screen w-full bg-[#eff2f0]', [
-                    // Global Real-Time P2P Alert & Sound Interrupt Manager
-                    const GlobalP2PAlertManager(),
-
+                  return div(classes: 'relative flex flex-col md:flex-row min-h-screen w-full bg-[#eff2f0]', [
                     const Sidebar(),
                     div(classes: 'flex-1 flex flex-col min-h-screen overflow-y-auto max-h-screen', [
                       const HeaderPanel(),
@@ -100,34 +109,31 @@ class AppShell extends StatelessComponent {
                             ),
                           ],
                         ),
-                        error: (err, _) => div(
-                          classes: 'flex-1 p-8 text-red-500 font-mono text-xs',
-                          [Component.text('Auth sync failed: $err')],
+                        error: (error, stack) => div(
+                          classes: 'flex-1 flex flex-col items-center justify-center p-12 text-red-500 font-bold',
+                          [Component.text('Error authenticating active environment: $error')],
                         ),
                       ),
                     ]),
+
+                    // Global Real-Time P2P Alert & Sound Interrupt Manager (Topmost DOM layer)
+                    const GlobalP2PAlertManager(),
                   ]);
                 },
                 routes: [
-                  Route(path: '/', title: 'Dashboard', builder: (context, state) => const Dashboard()),
-                  Route(path: '/deposits', title: 'Payment Verification', builder: (context, state) => const DepositsPage()),
-                  Route(path: '/payment-verification', title: 'Payment Verification', builder: (context, state) => const DepositsPage()),
-                  Route(path: '/withdrawals', title: 'P2P Cashouts', builder: (context, state) => const WithdrawalsPage()),
-                  Route(path: '/p2p-withdrawals', title: 'P2P Cashouts', builder: (context, state) => const WithdrawalsPage()),
-                  Route(path: '/listings', title: 'Listings', builder: (context, state) => const ListingsPage()),
-                  Route(path: '/bookings', title: 'Bookings', builder: (context, state) => const BookingsPage()),
-                  Route(path: '/kyc', title: 'KYC queue', builder: (context, state) => const KycPage()),
-                  Route(path: '/chats', title: 'Live Support', builder: (context, state) => const ChatsPage()),
-                  Route(path: '/tickets', title: 'Support Tickets', builder: (context, state) => const TicketsPage()),
-                  Route(path: '/users', title: 'Users directory', builder: (context, state) => const UsersPage()),
-                  Route(path: '/promos', title: 'Promotions', builder: (context, state) => const PromosPage()),
-                  Route(path: '/news', title: 'News & Banners', builder: (context, state) => const NewsPage()),
-                  Route(path: '/reports', title: 'Abuse reports', builder: (context, state) => const ReportsPage()),
-                  Route(
-                    path: '/settings',
-                    title: 'Settings console',
-                    builder: (context, state) => const SettingsPage(),
-                  ),
+                  Route(path: '/', builder: (context, state) => const Dashboard()),
+                  Route(path: '/listings', builder: (context, state) => const ListingsPage()),
+                  Route(path: '/bookings', builder: (context, state) => const BookingsPage()),
+                  Route(path: '/kyc', builder: (context, state) => const KycPage()),
+                  Route(path: '/chats', builder: (context, state) => const ChatsPage()),
+                  Route(path: '/tickets', builder: (context, state) => const TicketsPage()),
+                  Route(path: '/deposits', builder: (context, state) => const DepositsPage()),
+                  Route(path: '/withdrawals', builder: (context, state) => const WithdrawalsPage()),
+                  Route(path: '/promos', builder: (context, state) => const PromosPage()),
+                  Route(path: '/news', builder: (context, state) => const NewsPage()),
+                  Route(path: '/reports', builder: (context, state) => const ReportsPage()),
+                  Route(path: '/users', builder: (context, state) => const UsersPage()),
+                  Route(path: '/settings', builder: (context, state) => const SettingsPage()),
                 ],
               ),
             ],
@@ -151,8 +157,16 @@ class HeaderPanel extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     final currentEnv = context.watch(activeEnvironmentProvider);
-    final user = context.watch(adminCurrentUserProvider).value;
+    final profile = context.watch(currentAdminProfileProvider).value ??
+        const AdminStaffProfileModel(
+          uid: '',
+          name: 'Staff Member',
+          displayName: 'Staff Member',
+          email: 'agent@tranyx.com',
+          role: 'staff',
+        );
     final soundEnabled = context.watch(globalAlertSoundEnabledProvider);
+    final onlineAgents = context.watch(onlineAgentsStreamProvider).value ?? [];
 
     Component buildEnvCapsule(String label, Environment value) {
       final isActive = currentEnv == value;
@@ -171,25 +185,44 @@ class HeaderPanel extends StatelessComponent {
       // Left: Logo and name
       div(classes: 'flex items-center gap-3', [
         div(
-          classes: 'bg-[#0fa958] text-white w-9 h-9 rounded-full flex items-center justify-center font-black text-sm',
-          [Component.text('T')],
+          classes:
+              'w-9 h-9 rounded-2xl bg-white border border-zinc-200/60 flex items-center justify-center shadow-sm p-1',
+          [
+            img(
+              src: '/images/logo.png',
+              classes: 'w-6 h-6 object-contain drop-shadow-sm',
+              alt: 'Tranyx Logo',
+            ),
+          ],
         ),
         span(classes: 'font-black text-sm tracking-wide text-zinc-900 uppercase', [Component.text('Tranyx')]),
       ]),
 
-      // Center: Capsules (Overview/Env selector style)
-      div(
-        classes:
-            'hidden lg:flex items-center gap-1 bg-white p-1 border border-zinc-200/50 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.01)]',
-        [
-          buildEnvCapsule('Development', Environment.development),
-          buildEnvCapsule('Staging (UAT)', Environment.staging),
-          buildEnvCapsule('Production', Environment.production),
-        ],
-      ),
+      // Center: Capsules (Overview/Env selector style + Online Presence Counter)
+      div(classes: 'hidden lg:flex items-center gap-3', [
+        div(
+          classes:
+              'flex items-center gap-1 bg-white p-1 border border-zinc-200/50 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.01)]',
+          [
+            buildEnvCapsule('Development', Environment.development),
+            buildEnvCapsule('Staging (UAT)', Environment.staging),
+            buildEnvCapsule('Production', Environment.production),
+          ],
+        ),
 
-      // Right: Bell + Profile avatar
-      div(classes: 'flex items-center gap-4.5', [
+        // Live Online Agents Count Capsule
+        div(
+          classes:
+              'flex items-center gap-2 px-3 py-1.5 bg-white border border-zinc-200/50 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.01)] text-[11px] font-bold text-zinc-700',
+          [
+            span(classes: 'w-2 h-2 rounded-full bg-[#0fa958] animate-pulse', []),
+            Component.text('${onlineAgents.length} ${onlineAgents.length == 1 ? "Agent" : "Agents"} Online'),
+          ],
+        ),
+      ]),
+
+      // Right: Sound chime toggle + Logged Staff / Admin Profile Pill
+      div(classes: 'flex items-center gap-3.5', [
         button(
           onClick: () {
             final nextVal = !soundEnabled;
@@ -205,20 +238,48 @@ class HeaderPanel extends StatelessComponent {
           },
           [Component.text(soundEnabled ? '🔔' : '🔕')],
         ),
-        div(classes: 'flex items-center gap-2.5', [
-          div(
-            classes:
-                'w-8.5 h-8.5 rounded-full bg-zinc-200 border border-zinc-300 flex items-center justify-center text-xs font-bold text-zinc-700 overflow-hidden',
-            [
-              if ((user as dynamic)?.photoURL != null)
-                img(src: (user as dynamic).photoURL!, classes: 'w-full h-full object-cover', alt: 'Avatar')
-              else
-                Component.text(
-                  (user as dynamic)?.email != null ? (user as dynamic).email!.substring(0, 1).toUpperCase() : 'A',
+
+        // Logged-in Staff Profile Pill
+        a(
+          href: '/settings',
+          attributes: {'title': 'View Profile Settings'},
+          classes:
+              'flex items-center gap-3 bg-white pl-2 pr-3.5 py-1.5 rounded-full border border-zinc-200/60 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:border-zinc-300 transition-all no-underline cursor-pointer',
+          [
+            div(classes: 'relative', [
+              div(
+                classes:
+                    'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-xs font-black text-indigo-700 overflow-hidden shrink-0',
+                [
+                  if (profile.photoUrl != null && profile.photoUrl!.isNotEmpty)
+                    img(src: profile.photoUrl!, classes: 'w-full h-full object-cover', alt: 'Avatar')
+                  else
+                    Component.text(profile.initials),
+                ],
+              ),
+              // Real-time online presence dot
+              span(classes: 'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#0fa958] border-2 border-white', []),
+            ]),
+            div(classes: 'hidden sm:flex flex-col min-w-0 text-left', [
+              div(classes: 'flex items-center gap-1.5', [
+                span(classes: 'text-xs font-black text-zinc-900 leading-none truncate max-w-[130px]', [
+                  Component.text(profile.name),
+                ]),
+                span(
+                  classes:
+                      'text-[8px] font-extrabold uppercase px-1.5 py-0.2 rounded-md '
+                      '${profile.role.toLowerCase().contains("admin") ? "bg-black text-white" : "bg-indigo-50 text-indigo-700 border border-indigo-200/60"}',
+                  [
+                    Component.text(profile.roleDisplay),
+                  ],
                 ),
-            ],
-          ),
-        ]),
+              ]),
+              span(classes: 'text-[10px] text-zinc-400 font-semibold leading-tight truncate max-w-[140px]', [
+                Component.text(profile.email),
+              ]),
+            ]),
+          ],
+        ),
       ]),
     ]);
   }

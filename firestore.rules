@@ -118,8 +118,70 @@ service cloud.firestore {
       }
     }
 
-    // Support Tickets
+    // System Config & Settings (Admin-Configurable Timeouts)
+    match /system_config/{configDoc} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Unified Requests Collection (Enforces 3-Min Claim Limit & Single-Agent Lock)
+    match /requests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow delete: if isAdmin();
+      
+      allow update: if isAuthenticated() && (
+        // Admin override
+        isAdmin() ||
+
+        // 1. Agent accepting their assignment WITHIN 3 minutes
+        (
+          resource.data.status == 'ASSIGNED' && 
+          (resource.data.assignedTo == request.auth.uid || resource.data.assignedAgentId == request.auth.uid) &&
+          (resource.data.claimDeadline == null || request.time < resource.data.claimDeadline)
+        ) ||
+
+        // 2. Any agent taking a request whose claimDeadline HAS PASSED
+        (
+          resource.data.status == 'ASSIGNED' && 
+          resource.data.claimDeadline != null &&
+          request.time > resource.data.claimDeadline
+        ) ||
+
+        // 3. Claiming an unassigned pending request
+        (
+          (resource.data.status == 'PENDING' || resource.data.status == 'OPEN') && 
+          (resource.data.assignedTo == null || resource.data.assignedAgentId == null)
+        ) ||
+
+        // 4. Updating an active IN_PROGRESS request owned by self
+        (
+          (resource.data.status == 'IN_PROGRESS' || resource.data.status == 'In Progress') && 
+          (resource.data.assignedTo == request.auth.uid || resource.data.assignedAgentId == request.auth.uid)
+        )
+      );
+    }
+
+    // Support Tickets & Collections
     match /supportTickets/{ticketId} {
+      allow read, write: if isAuthenticated();
+      match /responses/{responseId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+    match /support_tickets/{ticketId} {
+      allow read, write: if isAuthenticated();
+      match /responses/{responseId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+    match /tickets/{ticketId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /mail/{mailId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /emails/{mailId} {
       allow read, write: if isAuthenticated();
     }
 

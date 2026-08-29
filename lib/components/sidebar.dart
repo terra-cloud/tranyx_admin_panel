@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
@@ -7,6 +6,7 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'package:web/web.dart' as web;
 import '../app.dart';
 import '../core/providers/environment_provider.dart';
+import '../core/services/presence_service.dart';
 import '../pages/kyc.dart';
 import '../pages/tickets.dart';
 import '../pages/reports.dart';
@@ -38,7 +38,14 @@ class _SidebarState extends State<Sidebar> {
 
   @override
   Component build(BuildContext context) {
-    final fb.User? user = context.watch(adminCurrentUserProvider).value;
+    final profile = context.watch(currentAdminProfileProvider).value ??
+        const AdminStaffProfileModel(
+          uid: '',
+          name: 'Staff Member',
+          displayName: 'Staff Member',
+          email: 'agent@tranyx.com',
+          role: 'staff',
+        );
     final currentPath = Router.of(context).matchList.uri.path;
 
     final pendingKycCount = context
@@ -65,7 +72,12 @@ class _SidebarState extends State<Sidebar> {
     final openTicketsCount = context
         .watch(ticketsStreamProvider)
         .maybeWhen(
-          data: (list) => list.where((t) => t.status.toLowerCase() != 'resolved').length,
+          data: (list) => list.where((t) {
+            if (t.isResolved) return false;
+            final isUnassigned = t.assignedAgentId == null || t.assignedAgentId!.isEmpty;
+            final isPendingOrOpen = t.isPending || t.status.toLowerCase() == 'open' || t.status.toLowerCase() == 'pending';
+            return isUnassigned || isPendingOrOpen;
+          }).length,
           orElse: () => 0,
         );
 
@@ -92,115 +104,142 @@ class _SidebarState extends State<Sidebar> {
               '${_isCollapsed ? "justify-center px-0 w-11 h-11 mx-auto relative" : "w-full"}',
           [
             span(classes: 'text-base flex-shrink-0 flex items-center justify-center w-5 h-5 relative', [
-              icon.endsWith('.png')
-                  ? img(
-                      src: icon,
-                      classes:
-                          'w-4.5 h-4.5 object-contain transition-all '
-                          '${isActive ? "invert brightness-0" : "opacity-60 hover:opacity-100"}',
-                      alt: label,
-                    )
-                  : Component.text(icon),
+              if (icon.startsWith('/'))
+                img(
+                  src: icon,
+                  classes:
+                      'w-4.5 h-4.5 transition-all duration-200 '
+                      '${isActive ? "brightness-0 invert drop-shadow-[0_2px_4px_rgba(255,255,255,0.3)]" : "opacity-40 grayscale group-hover:opacity-100 group-hover:grayscale-0"}',
+                  alt: label,
+                )
+              else
+                Component.text(icon),
               if (_isCollapsed && badgeCount != null && badgeCount > 0)
                 span(
                   classes:
-                      'absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center border border-white shadow-sm',
-                  [Component.text('$badgeCount')],
+                      'absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-1 bg-red-500 text-white rounded-full text-[8px] font-black flex items-center justify-center border border-white animate-pulse',
+                  [Component.text(badgeCount > 99 ? '99+' : badgeCount.toString())],
                 ),
             ]),
-            if (!_isCollapsed) span(classes: 'truncate font-bold ml-1', [Component.text(label)]),
-            if (!_isCollapsed && badgeCount != null && badgeCount > 0)
-              span(
-                classes:
-                    'ml-auto px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black leading-none flex items-center justify-center min-w-[16px] h-4',
-                [Component.text('$badgeCount')],
-              ),
+            if (!_isCollapsed) ...[
+              span(classes: 'flex-1 text-left whitespace-nowrap', [Component.text(label)]),
+              if (badgeCount != null && badgeCount > 0)
+                span(
+                  classes:
+                      'px-2 py-0.5 rounded-full text-[10px] font-extrabold '
+                      '${isActive ? "bg-white/20 text-white" : "bg-red-50 text-red-600 border border-red-200/60"}',
+                  [Component.text(badgeCount > 99 ? '99+' : badgeCount.toString())],
+                ),
+            ],
           ],
         ),
       ]);
     }
 
+    // Helper for mobile menu items
     Component buildMobileMenuItem(String label, String path, String icon, {int? badgeCount}) {
       final isActive = currentPath == path || (path != '/' && currentPath.startsWith(path));
-      return li([
+      return li(classes: 'w-full', [
         a(
           href: 'javascript:void(0);',
           onClick: () {
-            setState(() {
-              _isMobileMenuOpen = false;
-            });
+            _toggleMobileMenu();
             Router.of(context).push(path);
           },
           classes:
-              'flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold '
-              '${isActive ? "bg-black text-white" : "text-zinc-650 hover:bg-zinc-50"}',
+              'flex items-center justify-between px-4 py-3 rounded-xl text-xs font-bold transition-all duration-200 '
+              '${isActive ? "bg-black text-white shadow-sm" : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"}',
           [
-            span(classes: 'text-base flex-shrink-0 flex items-center justify-center w-5 h-5', [
-              icon.endsWith('.png')
-                  ? img(
-                      src: icon,
-                      classes:
-                          'w-4.5 h-4.5 object-contain transition-all '
-                          '${isActive ? "invert brightness-0" : "opacity-60"}',
-                      alt: label,
-                    )
-                  : Component.text(icon),
+            div(classes: 'flex items-center gap-3', [
+              span(classes: 'text-base flex-shrink-0 flex items-center justify-center w-5 h-5', [
+                if (icon.startsWith('/'))
+                  img(
+                    src: icon,
+                    classes: 'w-4 h-4 ${isActive ? "brightness-0 invert" : "opacity-50"}',
+                    alt: label,
+                  )
+                else
+                  Component.text(icon),
+              ]),
+              span([Component.text(label)]),
             ]),
-            span(classes: 'ml-1', [Component.text(label)]),
             if (badgeCount != null && badgeCount > 0)
               span(
                 classes:
-                    'ml-auto px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black leading-none flex items-center justify-center min-w-[16px] h-4',
-                [Component.text('$badgeCount')],
+                    'px-2 py-0.5 rounded-full text-[10px] font-extrabold '
+                    '${isActive ? "bg-white/20 text-white" : "bg-red-50 text-red-600 border border-red-200/60"}',
+                [Component.text(badgeCount > 99 ? '99+' : badgeCount.toString())],
               ),
           ],
         ),
       ]);
     }
 
-    return .fragment([
-      // Desktop Sidebar Dock (Expandable matching reference design)
+    return div(classes: 'relative z-50 flex-shrink-0', [
+      // Desktop Sidebar
       aside(
         classes:
-            'hidden md:flex flex-col bg-white border-r border-zinc-200/50 p-4 min-h-screen sticky top-0 justify-between items-center transition-all duration-300 '
-            '${_isCollapsed ? "w-20" : "w-64"}',
+            'hidden md:flex flex-col justify-between h-screen bg-white border-r border-zinc-150/80 p-5 sticky top-0 transition-all duration-300 select-none shadow-[2px_0_12px_rgba(0,0,0,0.015)] '
+            '${_isCollapsed ? "w-24 items-center" : "w-64"}',
         [
-          // Top: Brand logo
-          div(classes: 'w-full flex flex-col gap-8', [
-            div(
-              classes:
-                  'flex items-center justify-between gap-2.5 w-full '
-                  '${_isCollapsed ? "justify-center" : "px-2"}',
-              [
-                div(classes: 'flex items-center gap-3', [
+          // Top: App branding + navigation list
+          div(classes: 'flex flex-col gap-6 w-full', [
+            // Logo & Title
+            div(classes: 'flex items-center gap-3 px-1', [
+              div(
+                classes:
+                    'w-9 h-9 rounded-2xl bg-[#f3f6f4] border border-zinc-200/60 flex items-center justify-center shadow-sm flex-shrink-0 p-1',
+                [
                   img(
                     src: '/images/logo.png',
-                    alt: 'Tranyx Logo',
-                    classes: 'w-10 h-10 object-contain flex-shrink-0 drop-shadow-sm',
+                    classes: 'w-7 h-7 object-contain drop-shadow-sm',
+                    alt: 'Tranyx Admin Logo',
                   ),
-                  if (!_isCollapsed)
-                    h2(classes: 'text-sm font-black tracking-wide text-zinc-900 uppercase', [
-                      Component.text('Tranyx Admin'),
-                    ]),
+                ],
+              ),
+              if (!_isCollapsed)
+                div(classes: 'flex flex-col', [
+                  h1(classes: 'text-sm font-black tracking-tight text-zinc-900 leading-none', [Component.text('TRANYX')]),
+                  span(classes: 'text-[9px] font-extrabold tracking-widest text-[#0fa958] uppercase mt-0.5', [
+                    Component.text('Admin Portal'),
+                  ]),
                 ]),
-              ],
-            ),
+            ]),
 
-            // Menu list
-            ul(classes: 'flex flex-col gap-1.5 list-none p-0 m-0 w-full', [
-              buildMenuItem('Dashboard', '/', '/images/icon_dashboard.png'),
-              buildMenuItem('P2P Deposits', '/deposits', '💳', badgeCount: pendingDepositsCount),
-              buildMenuItem('P2P Cashouts', '/withdrawals', '💸', badgeCount: pendingWithdrawalsCount),
-              buildMenuItem('Listings', '/listings', '/images/icon_listings.png'),
-              buildMenuItem('Bookings', '/bookings', '/images/icon_bookings.png'),
-              buildMenuItem('KYC Verification', '/kyc', '/images/icon_kyc.png', badgeCount: pendingKycCount),
-              buildMenuItem('Live Support', '/chats', '/images/icon_chats.png'),
-              buildMenuItem('Support Tickets', '/tickets', '/images/icon_tickets.png', badgeCount: openTicketsCount),
-              buildMenuItem('User Accounts', '/users', '/images/icon_users.png'),
-              buildMenuItem('Promotions', '/promos', '/images/icon_promos.png'),
-              buildMenuItem('News & Banners', '/news', '📰'),
-              buildMenuItem('Abuse Reports', '/reports', '🚩', badgeCount: pendingReportsCount),
-              buildMenuItem('System Console', '/settings', '/images/icon_settings.png'),
+            // Main Nav Items (Grouped)
+            nav(classes: 'w-full overflow-y-auto max-h-[calc(100vh-230px)] no-scrollbar pr-0.5', [
+              ul(classes: 'flex flex-col gap-1.5 list-none p-0 m-0 w-full', [
+                // SECTION: Operations & Core
+                if (!_isCollapsed)
+                  li(classes: 'px-3 pt-2 pb-1 text-[9px] font-black tracking-wider text-zinc-400 uppercase', [
+                    Component.text('Operations'),
+                  ]),
+                buildMenuItem('Dashboard', '/', '/images/icon_dashboard.png'),
+                buildMenuItem('P2P Deposits', '/deposits', '💳', badgeCount: pendingDepositsCount),
+                buildMenuItem('P2P Cashouts', '/withdrawals', '💸', badgeCount: pendingWithdrawalsCount),
+                buildMenuItem('Listings', '/listings', '/images/icon_listings.png'),
+                buildMenuItem('Bookings', '/bookings', '/images/icon_bookings.png'),
+                buildMenuItem('KYC Verification', '/kyc', '/images/icon_kyc.png', badgeCount: pendingKycCount),
+
+                // SECTION: Support & Assistance
+                if (!_isCollapsed)
+                  li(classes: 'px-3 pt-3 pb-1 text-[9px] font-black tracking-wider text-zinc-400 uppercase', [
+                    Component.text('Support & CRM'),
+                  ]),
+                buildMenuItem('Live Support', '/chats', '/images/icon_chats.png'),
+                buildMenuItem('Support Tickets', '/tickets', '/images/icon_tickets.png', badgeCount: openTicketsCount),
+                buildMenuItem('User Accounts', '/users', '/images/icon_users.png'),
+
+                // SECTION: Growth & Governance
+                if (!_isCollapsed)
+                  li(classes: 'px-3 pt-3 pb-1 text-[9px] font-black tracking-wider text-zinc-400 uppercase', [
+                    Component.text('Growth & System'),
+                  ]),
+                buildMenuItem('Promotions', '/promos', '/images/icon_promos.png'),
+                buildMenuItem('News & Banners', '/news', '📰'),
+                buildMenuItem('Abuse Reports', '/reports', '🚩', badgeCount: pendingReportsCount),
+                buildMenuItem('System Console', '/settings', '/images/icon_settings.png'),
+              ]),
             ]),
           ]),
 
@@ -211,35 +250,43 @@ class _SidebarState extends State<Sidebar> {
               div(classes: 'px-2 flex items-center gap-3 w-full min-w-0', [
                 div(
                   classes:
-                      'w-8 h-8 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center font-bold text-xs text-zinc-700 flex-shrink-0',
+                      'w-8.5 h-8.5 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-xs text-indigo-700 flex-shrink-0 overflow-hidden',
                   [
-                    Component.text(
-                      user?.displayName != null && user!.displayName!.isNotEmpty
-                          ? (user.displayName!.length > 1
-                                ? user.displayName!.substring(0, 2).toUpperCase()
-                                : user.displayName!.substring(0, 1).toUpperCase())
-                          : ((user as dynamic)?.email != null
-                                ? (user as dynamic).email!.substring(0, 1).toUpperCase()
-                                : 'A'),
-                    ),
+                    if (profile.photoUrl != null && profile.photoUrl!.isNotEmpty)
+                      img(src: profile.photoUrl!, classes: 'w-full h-full object-cover', alt: 'Avatar')
+                    else
+                      Component.text(profile.initials),
                   ],
                 ),
                 div(classes: 'flex flex-col min-w-0 flex-1', [
-                  span(classes: 'text-[11px] font-black text-zinc-800 truncate', [
-                    Component.text(
-                      user?.displayName != null && user!.displayName!.isNotEmpty ? user.displayName! : 'Staff Agent',
+                  div(classes: 'flex items-center gap-1.5', [
+                    span(classes: 'text-[11px] font-black text-zinc-900 truncate', [
+                      Component.text(profile.name),
+                    ]),
+                    span(
+                      classes:
+                          'text-[8px] font-extrabold uppercase px-1 rounded '
+                          '${profile.role.toLowerCase().contains("admin") ? "bg-black text-white" : "bg-indigo-50 text-indigo-700 border border-indigo-200/50"}',
+                      [
+                        Component.text(profile.roleDisplay),
+                      ],
                     ),
                   ]),
                   span(classes: 'text-[9px] text-zinc-400 font-semibold truncate', [
-                    Component.text((user as dynamic)?.email ?? 'Staff Agent'),
+                    Component.text(profile.email),
                   ]),
                 ]),
               ]),
-
+            
             // Log out Button
             button(
               onClick: () async {
                 try {
+                  final currentUser = context.read(adminCurrentUserProvider).value;
+                  if (currentUser != null) {
+                    final firestore = context.read(firestoreProvider);
+                    await PresenceService.markOffline(firestore: firestore, agentUid: currentUser.uid);
+                  }
                   web.window.localStorage.removeItem('tranyx_staff_email');
                   web.window.localStorage.removeItem('tranyx_staff_password');
                 } catch (_) {}
@@ -323,12 +370,32 @@ class _SidebarState extends State<Sidebar> {
               buildMobileMenuItem('System Console', '/settings', '/images/icon_settings.png'),
             ]),
             div(classes: 'border-t border-zinc-200 pt-4 flex justify-between items-center', [
-              span(classes: 'text-[10px] text-zinc-500 font-semibold truncate', [
-                Component.text((user as dynamic)?.email ?? 'Staff Agent'),
+              div(classes: 'flex flex-col min-w-0 pr-2', [
+                div(classes: 'flex items-center gap-1.5', [
+                  span(classes: 'text-xs font-black text-zinc-900 truncate', [
+                    Component.text(profile.name),
+                  ]),
+                  span(
+                    classes:
+                        'text-[8px] font-extrabold uppercase px-1 rounded '
+                        '${profile.role.toLowerCase().contains("admin") ? "bg-black text-white" : "bg-indigo-50 text-indigo-700 border border-indigo-200/50"}',
+                    [
+                      Component.text(profile.roleDisplay),
+                    ],
+                  ),
+                ]),
+                span(classes: 'text-[9px] text-zinc-400 font-semibold truncate', [
+                  Component.text(profile.email),
+                ]),
               ]),
               button(
                 onClick: () async {
                   try {
+                    final currentUser = context.read(adminCurrentUserProvider).value;
+                    if (currentUser != null) {
+                      final firestore = context.read(firestoreProvider);
+                      await PresenceService.markOffline(firestore: firestore, agentUid: currentUser.uid);
+                    }
                     web.window.localStorage.removeItem('tranyx_staff_email');
                     web.window.localStorage.removeItem('tranyx_staff_password');
                   } catch (_) {}

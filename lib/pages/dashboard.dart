@@ -123,9 +123,21 @@ class RevenueStats {
 class StaffPerformance {
   final String name;
   final String role;
-  final int resolvedChats;
+  final int p2pHandled;
+  final int ticketsHandled;
+  final int liveSupportHandled;
+  final int totalHandled;
   final double csat;
-  StaffPerformance({required this.name, required this.role, required this.resolvedChats, required this.csat});
+
+  StaffPerformance({
+    required this.name,
+    required this.role,
+    required this.p2pHandled,
+    required this.ticketsHandled,
+    required this.liveSupportHandled,
+    required this.totalHandled,
+    required this.csat,
+  });
 }
 
 class P2PMethodMetric {
@@ -705,13 +717,22 @@ final reportedListingsCountProvider = StreamProvider<int>((ref) {
   return controller.stream;
 });
 
-/// Open support tickets count
+/// Open / pending / unassigned support tickets count
 final openTicketsCountProvider = StreamProvider<int>((ref) {
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('supportTickets')
       .snapshots()
-      .map((snap) => snap.docs.where((d) => (d.data()['status'] as String? ?? '').toLowerCase() == 'open').length)
+      .map((snap) => snap.docs.where((d) {
+        final data = d.data();
+        final status = (data['status'] as String? ?? 'open').toLowerCase().trim();
+        final isResolved = status == 'resolved' || status == 'closed';
+        if (isResolved) return false;
+        final assigned = (data['assignedAgentId'] ?? data['assignedTo'] ?? data['agentId']) as String?;
+        final isUnassigned = assigned == null || assigned.trim().isEmpty;
+        final isPendingOrOpen = status == 'open' || status == 'pending' || status == 'new' || status == 'waiting';
+        return isUnassigned || isPendingOrOpen;
+      }).length)
       .handleError((_) => 0);
 });
 
@@ -894,46 +915,124 @@ final monthlyNewUsersProvider = StreamProvider<List<int>>((ref) {
       .handleError((_) => List<int>.filled(12, 0));
 });
 
-/// Top performing agents from admin DB, ranked by resolved support chats
+/// Top performing agents ranked by:
+/// 1. P2P handling (deposits & withdrawals)
+/// 2. Ticket handling (support tickets)
+/// 3. Live support acceptance / handling (support chats)
 final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
   final adminDb = ref.watch(adminFirestoreProvider);
   final userDb = ref.watch(firestoreProvider);
   final controller = StreamController<List<StaffPerformance>>();
-  Map<String, int> resolvedMap = {};
 
-  userDb.collection('support_chats').where('status', isEqualTo: 'resolved').snapshots().listen((snap) {
-    resolvedMap = {};
-    for (final doc in snap.docs) {
-      final agentId = doc.data()['assignedAgentId'] as String?;
-      if (agentId != null) resolvedMap[agentId] = (resolvedMap[agentId] ?? 0) + 1;
-    }
-  });
+  Map<String, int> p2pDepositsMap = {};
+  Map<String, int> p2pWithdrawalsMap = {};
+  Map<String, int> ticketsMap = {};
+  Map<String, int> liveChatsMap = {};
+  List<DocumentSnapshot> userDocs = [];
 
-  adminDb.collection('users').snapshots().listen((snap) {
+  void recalculateAndEmit() {
+    if (controller.isClosed) return;
     final list = <StaffPerformance>[];
-    for (final doc in snap.docs) {
-      final data = doc.data();
+
+    for (final doc in userDocs) {
+      final data = doc.data() as Map<String, dynamic>? ?? {};
       final role = (data['role'] ?? '').toString().toLowerCase().trim();
       if (role == 'admin' || role == 'user' || role.isEmpty) continue;
+
       final rawName = data['name']?.toString().trim();
       final rawEmail = data['email']?.toString().trim();
       final name = (rawName != null && rawName.isNotEmpty)
           ? rawName
           : (rawEmail != null && rawEmail.contains('@') ? rawEmail.split('@').first : 'Agent');
-      final resolved = resolvedMap[doc.id] ?? 0;
-      final idHash = doc.id.hashCode.abs();
-      final csat = resolved > 0 ? (92.0 + ((idHash % 70) / 10.0)).clamp(90.0, 99.9) : 0.0;
+
+      final agentId = doc.id;
+      final p2p = (p2pDepositsMap[agentId] ?? 0) + (p2pWithdrawalsMap[agentId] ?? 0);
+      final tickets = ticketsMap[agentId] ?? 0;
+      final liveChats = liveChatsMap[agentId] ?? 0;
+      final total = p2p + tickets + liveChats;
+
+      final idHash = agentId.hashCode.abs();
+      final csat = total > 0 ? (92.0 + ((idHash % 70) / 10.0)).clamp(90.0, 99.9) : 0.0;
+
       list.add(
         StaffPerformance(
           name: name,
-          role: role == 'support' ? 'Support Agent' : role.toUpperCase(),
-          resolvedChats: resolved,
+          role: role == 'support' ? 'Support Agent' : (role == 'agent' ? 'P2P Agent' : role.toUpperCase()),
+          p2pHandled: p2p,
+          ticketsHandled: tickets,
+          liveSupportHandled: liveChats,
+          totalHandled: total,
           csat: double.parse(csat.toStringAsFixed(1)),
         ),
       );
     }
-    list.sort((agentA, agentB) => agentB.resolvedChats.compareTo(agentA.resolvedChats));
-    if (!controller.isClosed) controller.add(list);
+
+    // Rank by Total Score (P2P + Tickets + Live Support) descending, then CSAT
+    list.sort((agentA, agentB) {
+      final cmp = agentB.totalHandled.compareTo(agentA.totalHandled);
+      if (cmp != 0) return cmp;
+      return agentB.csat.compareTo(agentA.csat);
+    });
+
+    controller.add(list);
+  }
+
+  // 1A. P2P Deposits Handling
+  userDb.collection('deposits').snapshots().listen((snap) {
+    p2pDepositsMap = {};
+    for (final doc in snap.docs) {
+      final d = doc.data();
+      final agentId = (d['assignedAgentId'] ?? d['agentId'] ?? d['agentUid'] ?? d['assignedTo']) as String?;
+      if (agentId != null && agentId.isNotEmpty) {
+        p2pDepositsMap[agentId] = (p2pDepositsMap[agentId] ?? 0) + 1;
+      }
+    }
+    recalculateAndEmit();
+  });
+
+  // 1B. P2P Cashouts / Withdrawals Handling
+  userDb.collection('withdrawal_requests').snapshots().listen((snap) {
+    p2pWithdrawalsMap = {};
+    for (final doc in snap.docs) {
+      final d = doc.data();
+      final agentId = (d['agentId'] ?? d['assignedAgentId'] ?? d['adminUid']) as String?;
+      if (agentId != null && agentId.isNotEmpty) {
+        p2pWithdrawalsMap[agentId] = (p2pWithdrawalsMap[agentId] ?? 0) + 1;
+      }
+    }
+    recalculateAndEmit();
+  });
+
+  // 2. Support Ticket Handling
+  userDb.collection('supportTickets').snapshots().listen((snap) {
+    ticketsMap = {};
+    for (final doc in snap.docs) {
+      final d = doc.data();
+      final agentId = (d['assignedAgentId'] ?? d['assignedTo']) as String?;
+      if (agentId != null && agentId.isNotEmpty) {
+        ticketsMap[agentId] = (ticketsMap[agentId] ?? 0) + 1;
+      }
+    }
+    recalculateAndEmit();
+  });
+
+  // 3. Live Support Acceptance & Handling
+  userDb.collection('support_chats').snapshots().listen((snap) {
+    liveChatsMap = {};
+    for (final doc in snap.docs) {
+      final d = doc.data();
+      final agentId = (d['assignedAgentId'] ?? d['assignedTo']) as String?;
+      if (agentId != null && agentId.isNotEmpty) {
+        liveChatsMap[agentId] = (liveChatsMap[agentId] ?? 0) + 1;
+      }
+    }
+    recalculateAndEmit();
+  });
+
+  // 4. Staff Users
+  adminDb.collection('users').snapshots().listen((snap) {
+    userDocs = snap.docs;
+    recalculateAndEmit();
   });
 
   return controller.stream;
@@ -1768,13 +1867,13 @@ class _DashboardState extends State<Dashboard> {
               div([
                 h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Top Performing Agents')]),
                 p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
-                  Component.text('Ranked by resolved support chats & CSAT score'),
+                  Component.text('Ranked by P2P transactions, support tickets, and live support handling'),
                 ]),
               ]),
               a(
                 href: '/users',
                 classes: 'text-[10px] font-extrabold text-zinc-500 hover:text-black transition-colors no-underline',
-                [Component.text('Manage →')],
+                [Component.text('Manage Staff →')],
               ),
             ]),
             if (staffList.isEmpty)
@@ -1789,10 +1888,12 @@ class _DashboardState extends State<Dashboard> {
               div(
                 classes: 'grid grid-cols-12 text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider px-1 pb-1',
                 [
-                  div(classes: 'col-span-1', [Component.text('#')]),
-                  div(classes: 'col-span-5', [Component.text('Agent')]),
-                  div(classes: 'col-span-3 text-center', [Component.text('Resolved')]),
-                  div(classes: 'col-span-3 text-center', [Component.text('CSAT')]),
+                  div(classes: 'col-span-1 text-center', [Component.text('#')]),
+                  div(classes: 'col-span-3', [Component.text('Agent')]),
+                  div(classes: 'col-span-2 text-center', [Component.text('P2P Handling')]),
+                  div(classes: 'col-span-2 text-center', [Component.text('Tickets')]),
+                  div(classes: 'col-span-2 text-center', [Component.text('Live Support')]),
+                  div(classes: 'col-span-2 text-center', [Component.text('Total Score')]),
                 ],
               ),
               for (var i = 0; i < staffList.length && i < 8; i++)
@@ -1809,7 +1910,7 @@ class _DashboardState extends State<Dashboard> {
                       else
                         span(classes: 'text-[10px] font-extrabold text-zinc-400', [Component.text('${i + 1}')]),
                     ]),
-                    div(classes: 'col-span-5 flex items-center gap-2.5', [
+                    div(classes: 'col-span-3 flex items-center gap-2.5 min-w-0 pr-2', [
                       div(
                         classes: 'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-extrabold text-zinc-700 text-[10px] flex-shrink-0',
                         [
@@ -1822,32 +1923,42 @@ class _DashboardState extends State<Dashboard> {
                       ),
                       div(classes: 'flex flex-col min-w-0', [
                         span(classes: 'text-xs font-black text-zinc-800 truncate', [Component.text(staffList[i].name)]),
-                        span(classes: 'text-[9px] text-indigo-500 font-extrabold uppercase', [
+                        span(classes: 'text-[9px] text-indigo-500 font-extrabold uppercase truncate', [
                           Component.text(staffList[i].role),
                         ]),
                       ]),
                     ]),
-                    div(classes: 'col-span-3 text-center', [
-                      span(classes: 'text-sm font-black text-zinc-900', [
-                        Component.text(staffList[i].resolvedChats.toString()),
+                    div(classes: 'col-span-2 text-center', [
+                      span(classes: 'text-xs font-black text-zinc-900', [
+                        Component.text('${staffList[i].p2pHandled}'),
                       ]),
-                      span(classes: 'text-[9px] text-zinc-400 ml-0.5', [Component.text(' chats')]),
+                      span(classes: 'text-[9px] text-zinc-400 block font-semibold', [Component.text('P2P handled')]),
                     ]),
-                    div(classes: 'col-span-3 text-center', [
+                    div(classes: 'col-span-2 text-center', [
+                      span(classes: 'text-xs font-black text-zinc-900', [
+                        Component.text('${staffList[i].ticketsHandled}'),
+                      ]),
+                      span(classes: 'text-[9px] text-zinc-400 block font-semibold', [Component.text('tickets')]),
+                    ]),
+                    div(classes: 'col-span-2 text-center', [
+                      span(classes: 'text-xs font-black text-zinc-900', [
+                        Component.text('${staffList[i].liveSupportHandled}'),
+                      ]),
+                      span(classes: 'text-[9px] text-zinc-400 block font-semibold', [Component.text('live chats')]),
+                    ]),
+                    div(classes: 'col-span-2 text-center flex flex-col items-center justify-center gap-0.5', [
+                      span(
+                        classes:
+                            'px-2.5 py-0.5 rounded-full text-xs font-black '
+                            '${staffList[i].totalHandled > 0 ? "bg-emerald-50 text-[#0fa958] border border-emerald-200/60" : "bg-zinc-100 text-zinc-400"}',
+                        [
+                          Component.text('${staffList[i].totalHandled} pts'),
+                        ],
+                      ),
                       if (staffList[i].csat > 0)
-                        span(
-                          classes:
-                              'text-xs font-black ${staffList[i].csat >= 95
-                                  ? "text-[#0fa958]"
-                                  : staffList[i].csat >= 90
-                                  ? "text-amber-500"
-                                  : "text-red-500"}',
-                          [
-                            Component.text('${staffList[i].csat}%'),
-                          ],
-                        )
-                      else
-                        span(classes: 'text-[9px] text-zinc-400 font-bold', [Component.text('N/A')]),
+                        span(classes: 'text-[9px] font-bold text-zinc-400', [
+                          Component.text('${staffList[i].csat}% CSAT'),
+                        ]),
                     ]),
                   ],
                 ),

@@ -46,13 +46,21 @@ jobs:
           if [ -n "${{ secrets.IMGBB_API_KEY }}" ]; then
             echo "IMGBB_API_KEY=${{ secrets.IMGBB_API_KEY }}" >> .env
           fi
+          if [ -n "${{ secrets.RESEND_API_KEY }}" ]; then
+            echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >> .env
+          fi
 
       - name: Build Web App
         env:
           IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
         run: |
           jaspr clean
-          jaspr build --dart-define=IMGBB_API_KEY="${{ secrets.IMGBB_API_KEY || 'abfd185244dc224ff987946bc9775bfc' }}"
+          jaspr build \
+            --dart-define=IMGBB_API_KEY="${{ secrets.IMGBB_API_KEY || 'abfd185244dc224ff987946bc9775bfc' }}" \
+            --dart-define=RESEND_API_KEY="${{ secrets.RESEND_API_KEY }}" \
+            --dart-define=RESEND_FROM_EMAIL="${{ secrets.RESEND_FROM_EMAIL || 'Tranyx Support <onboarding@resend.dev>' }}"
 
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
