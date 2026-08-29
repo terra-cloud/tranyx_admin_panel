@@ -616,8 +616,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
     });
 
     final firestore = context.read(firestoreProvider);
-    final activeAuth = context.read(firebaseAuthProvider);
-    final effectiveUser = activeAuth.currentUser ?? adminUser;
+    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
     final agentUid = effectiveUser?.uid ?? 'admin_agent';
     final agentName = effectiveUser?.displayName?.isNotEmpty == true
         ? effectiveUser!.displayName!
@@ -837,8 +836,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
     setState(() => _isProcessing = true);
 
     final firestore = context.read(firestoreProvider);
-    final activeAuth = context.read(firebaseAuthProvider);
-    final effectiveUser = activeAuth.currentUser ?? adminUser;
+    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
     final agentUid = effectiveUser?.uid ?? 'admin_agent';
     final agentName = effectiveUser?.displayName?.isNotEmpty == true
         ? effectiveUser!.displayName!
@@ -959,8 +957,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
     setState(() => _isProcessing = true);
 
     final firestore = context.read(firestoreProvider);
-    final activeAuth = context.read(firebaseAuthProvider);
-    final effectiveUser = activeAuth.currentUser ?? adminUser;
+    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
     final adminUid = effectiveUser?.uid ?? 'admin_portal';
     final adminName = effectiveUser?.displayName?.isNotEmpty == true
         ? effectiveUser!.displayName!
@@ -1123,8 +1120,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
     setState(() => _isProcessing = true);
 
     final firestore = context.read(firestoreProvider);
-    final activeAuth = context.read(firebaseAuthProvider);
-    final effectiveUser = activeAuth.currentUser ?? adminUser;
+    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
     final adminUid = effectiveUser?.uid ?? 'admin_portal';
     final adminName = effectiveUser?.displayName?.isNotEmpty == true
         ? effectiveUser!.displayName!
@@ -1382,8 +1378,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
 
     setState(() => _isProcessing = true);
     final firestore = context.read(firestoreProvider);
-    final activeAuth = context.read(firebaseAuthProvider);
-    final effectiveUser = activeAuth.currentUser ?? adminUser;
+    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
     final adminUid = effectiveUser?.uid ?? 'admin';
     final adminEmail = effectiveUser?.email ?? 'admin@tranyx.com';
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -2228,8 +2223,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
   }
 
   Component _buildWithdrawalTableRow(WithdrawalRequest item, fb.User? adminUser) {
-    final activeAuth = context.read(firebaseAuthProvider);
-    final myUid = activeAuth.currentUser?.uid ?? adminUser?.uid;
+    final myUid = adminUser?.uid ?? context.read(adminAuthProvider).currentUser?.uid;
     final isClaimedByMe = item.agentId != null && item.agentId == myUid;
     final isSelected = _selectedWithdrawalIds.contains(item.id);
 
@@ -2512,8 +2506,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
 
   /// MODAL: INSPECTOR FOR WITHDRAWAL REQUEST
   Component _buildInspectorModal(WithdrawalRequest req, List<UserProfileModel> usersList, fb.User? adminUser) {
-    final activeAuth = context.read(firebaseAuthProvider);
-    final myUid = activeAuth.currentUser?.uid ?? adminUser?.uid;
+    final myUid = adminUser?.uid ?? context.read(adminAuthProvider).currentUser?.uid;
     final isClaimedByMe = req.agentId != null && req.agentId == myUid;
 
     UserProfileModel? matchedUser;

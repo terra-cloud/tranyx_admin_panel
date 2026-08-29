@@ -957,22 +957,7 @@ class _DepositsPageState extends State<DepositsPage> {
     });
 
     final firestore = context.read(firestoreProvider);
-    final activeAuth = context.read(firebaseAuthProvider);
-
-    // Ensure active environment auth is ready
-    if (activeAuth.currentUser == null) {
-      try {
-        final email = web.window.localStorage.getItem('tranyx_staff_email');
-        final password = web.window.localStorage.getItem('tranyx_staff_password');
-        if (email != null && password != null) {
-          await activeAuth.signInWithEmailAndPassword(email: email, password: password);
-        }
-      } catch (authErr) {
-        print('[Deposits] Active auth auto-sign-in notice: $authErr');
-      }
-    }
-
-    final effectiveUser = activeAuth.currentUser ?? adminUser;
+    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
     final adminUid = effectiveUser?.uid ?? 'admin_portal';
     final adminName = effectiveUser?.displayName?.isNotEmpty == true
         ? effectiveUser!.displayName!
@@ -1078,24 +1063,7 @@ class _DepositsPageState extends State<DepositsPage> {
     });
 
     final firestore = context.read(firestoreProvider);
-    final activeAuth = context.read(firebaseAuthProvider);
-
-    // Ensure active environment auth is ready with fallback
-    if (activeAuth.currentUser == null) {
-      try {
-        var email = web.window.localStorage.getItem('tranyx_staff_email');
-        var password = web.window.localStorage.getItem('tranyx_staff_password');
-        if (email == null || password == null) {
-          email = adminUser?.email ?? 'sarah.johnson@tranyx.com';
-          password = 'admin123456';
-        }
-        await activeAuth.signInWithEmailAndPassword(email: email, password: password);
-      } catch (authErr) {
-        print('[Deposits] Active auth auto-sign-in notice: $authErr');
-      }
-    }
-
-    final effectiveUser = activeAuth.currentUser ?? adminUser;
+    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
     final adminUid = effectiveUser?.uid ?? 'admin_portal';
     final adminName = effectiveUser?.displayName?.isNotEmpty == true
         ? effectiveUser!.displayName!
@@ -1103,10 +1071,10 @@ class _DepositsPageState extends State<DepositsPage> {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final normalizedRef = deposit.referenceNumber.trim().toUpperCase();
 
-    // Ensure active auth session has admin/agent credentials in users/{uid} and p2p_agents/{uid}
-    if (activeAuth.currentUser != null) {
-      final myUid = activeAuth.currentUser!.uid;
-      final myEmail = activeAuth.currentUser!.email ?? 'sarah.johnson@tranyx.com';
+    // Ensure effective user has admin/agent credentials in users/{uid} and p2p_agents/{uid}
+    if (effectiveUser != null) {
+      final myUid = effectiveUser.uid;
+      final myEmail = effectiveUser.email ?? 'admin@tranyx.app';
       try {
         await firestore.collection('users').doc(myUid).set({
           'uid': myUid,
@@ -1382,22 +1350,7 @@ class _DepositsPageState extends State<DepositsPage> {
     });
 
     final firestore = context.read(firestoreProvider);
-    final activeAuth = context.read(firebaseAuthProvider);
-
-    // Ensure active environment auth is ready
-    if (activeAuth.currentUser == null) {
-      try {
-        final email = web.window.localStorage.getItem('tranyx_staff_email');
-        final password = web.window.localStorage.getItem('tranyx_staff_password');
-        if (email != null && password != null) {
-          await activeAuth.signInWithEmailAndPassword(email: email, password: password);
-        }
-      } catch (authErr) {
-        print('[Deposits] Active auth auto-sign-in notice: $authErr');
-      }
-    }
-
-    final effectiveUser = activeAuth.currentUser ?? adminUser;
+    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
     final adminUid = effectiveUser?.uid ?? 'admin_portal';
     final adminName = effectiveUser?.displayName?.isNotEmpty == true
         ? effectiveUser!.displayName!

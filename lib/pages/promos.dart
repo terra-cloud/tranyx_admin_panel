@@ -232,7 +232,7 @@ final promosStreamProvider = StreamProvider<List<PromoItem>>((ref) {
 });
 
 final feeConfigStreamProvider = StreamProvider<FeeConfiguration>((ref) {
-  final firestore = ref.watch(firestoreProvider);
+  final firestore = ref.watch(adminFirestoreProvider);
   final userAsync = ref.watch(activeEnvAuthUserProvider);
 
   if (userAsync.value == null) {
@@ -577,7 +577,7 @@ class _PromosPageState extends State<PromosPage> {
     });
 
     try {
-      final firestore = context.read(firestoreProvider);
+      final adminFirestore = context.read(adminFirestoreProvider);
       final user = context.read(adminCurrentUserProvider).value;
 
       double parseNum(String val, double fallback) => double.tryParse(val.trim()) ?? fallback;
@@ -610,7 +610,7 @@ class _PromosPageState extends State<PromosPage> {
         updatedBy: user?.email ?? 'admin@tranyx.com',
       );
 
-      await firestore.collection('system_config').doc('fee_configurations').set(config.toMap(), SetOptions(merge: true));
+      await adminFirestore.collection('system_config').doc('fee_configurations').set(config.toMap(), SetOptions(merge: true));
 
       await _logAuditTrail(
         context: context,

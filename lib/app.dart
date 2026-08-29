@@ -71,49 +71,11 @@ class AppShell extends StatelessComponent {
             routes: [
               ShellRoute(
                 builder: (context, state, child) {
-                  final envUserAsync = context.watch(activeEnvAuthUserProvider);
                   return div(classes: 'relative flex flex-col md:flex-row min-h-screen w-full bg-[#eff2f0]', [
                     const Sidebar(),
                     div(classes: 'flex-1 flex flex-col min-h-screen overflow-y-auto max-h-screen', [
                       const HeaderPanel(),
-                      envUserAsync.when(
-                        data: (envUser) {
-                          if (envUser == null) {
-                            return div(
-                              classes: 'flex-1 flex flex-col items-center justify-center p-12 text-center',
-                              [
-                                div(
-                                  classes:
-                                      'animate-spin h-8 w-8 border-2 border-zinc-200 border-t-indigo-500 rounded-full mb-4',
-                                  [],
-                                ),
-                                h3(classes: 'text-sm font-bold text-zinc-800', [
-                                  Component.text('Synchronizing Authentication'),
-                                ]),
-                                p(classes: 'text-xs text-zinc-400 mt-1 max-w-xs leading-relaxed', [
-                                  Component.text(
-                                    'Establishing secure connection with the active database environment...',
-                                  ),
-                                ]),
-                              ],
-                            );
-                          }
-                          return div(classes: 'flex-1 page-transition', key: ValueKey(state.location), [child]);
-                        },
-                        loading: () => div(
-                          classes: 'flex-1 flex flex-col items-center justify-center p-12',
-                          [
-                            div(
-                              classes: 'animate-spin h-6 w-6 border-2 border-zinc-200 border-t-indigo-500 rounded-full',
-                              [],
-                            ),
-                          ],
-                        ),
-                        error: (error, stack) => div(
-                          classes: 'flex-1 flex flex-col items-center justify-center p-12 text-red-500 font-bold',
-                          [Component.text('Error authenticating active environment: $error')],
-                        ),
-                      ),
+                      div(classes: 'flex-1 page-transition', key: ValueKey(state.location), [child]),
                     ]),
 
                     // Global Real-Time P2P Alert & Sound Interrupt Manager (Topmost DOM layer)

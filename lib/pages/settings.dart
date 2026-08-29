@@ -77,7 +77,7 @@ class _SettingsPageState extends State<SettingsPage> {
     });
 
     try {
-      final firestore = context.read(firestoreProvider);
+      final firestore = context.read(adminFirestoreProvider);
       await firestore.collection('system_config').doc('settings').set({
         'claimTimeoutSeconds': claimSec,
         'heartbeatTimeoutSeconds': heartbeatSec,

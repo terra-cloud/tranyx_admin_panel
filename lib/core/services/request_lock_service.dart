@@ -44,7 +44,7 @@ final systemConfigStreamProvider = StreamProvider<SystemConfigModel>((ref) {
   if (userAsync.value == null) {
     return Stream.value(const SystemConfigModel());
   }
-  final firestore = ref.watch(firestoreProvider);
+  final firestore = ref.watch(adminFirestoreProvider);
   return firestore
       .collection('system_config')
       .doc('settings')

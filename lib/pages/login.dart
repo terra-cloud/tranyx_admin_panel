@@ -1,13 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:web/web.dart' as web;
 
 import '../core/providers/environment_provider.dart';
-import '../core/config/firebase_environments.dart';
 
 class LoginPage extends StatefulComponent {
   const LoginPage({super.key});
@@ -58,56 +55,12 @@ class _LoginPageState extends State<LoginPage> {
         }
       }
 
-      // Save credentials for cross-environment authentication synchronization
+      // Save credentials for quick session persistence
       try {
         web.window.localStorage.setItem('tranyx_staff_email', _email);
         web.window.localStorage.setItem('tranyx_staff_password', _password);
       } catch (e) {
         print('[Login] Failed to store credentials locally: $e');
-      }
-
-      // Simultaneously sign in to all three environment Firebase apps
-      for (final env in Environment.values) {
-        try {
-          FirebaseApp app;
-          try {
-            app = Firebase.app(env.name);
-          } catch (_) {
-            app = await Firebase.initializeApp(
-              name: env.name,
-              options: FirebaseEnv.optionsFor(env),
-            );
-          }
-          final envAuth = FirebaseAuth.instanceFor(app: app);
-          try {
-            await envAuth.signInWithEmailAndPassword(
-              email: _email,
-              password: _password,
-            );
-          } on FirebaseAuthException catch (e) {
-            if (e.code == 'user-not-found' || e.code == 'invalid-credential' || e.code == 'wrong-password') {
-              // Self-healing: register the staff account in this environment auth
-              final userCred = await envAuth.createUserWithEmailAndPassword(
-                email: _email,
-                password: _password,
-              );
-
-              // Seed their admin user document in the environment's Firestore
-              final envFirestore = FirebaseFirestore.instanceFor(app: app);
-              await envFirestore.collection('users').doc(userCred.user!.uid).set({
-                'name': 'Sarah Johnson',
-                'email': _email,
-                'role': 'admin',
-                'createdAt': DateTime.now().millisecondsSinceEpoch,
-              }, SetOptions(merge: true));
-              print('[Login] Auto-seeded staff account in environment ${env.name}');
-            } else {
-              rethrow;
-            }
-          }
-        } catch (e) {
-          print('[Login] Sync login/seeding to environment ${env.name} failed: $e');
-        }
       }
     } on FirebaseAuthException catch (e) {
       setState(() {

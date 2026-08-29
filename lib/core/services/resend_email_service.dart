@@ -17,34 +17,40 @@ class ResendEmailService {
     defaultValue: 'Tranyx Support <onboarding@resend.dev>',
   );
 
-  /// Dynamically resolves the active Resend API key (Environment define -> Firestore settings -> empty).
-  static Future<String> resolveApiKey(FirebaseFirestore firestore) async {
+  /// Dynamically resolves the active Resend API key (Environment define -> tranyx-admin-portal settings -> fallback).
+  static Future<String> resolveApiKey([FirebaseFirestore? firestore]) async {
     if (envApiKey.isNotEmpty) {
       return envApiKey;
     }
-    try {
-      final snap = await firestore.collection('system_config').doc('settings').get();
-      if (snap.exists && snap.data() != null) {
-        final key = snap.data()!['resendApiKey'] ?? snap.data()!['resend_api_key'];
-        if (key != null && key.toString().trim().isNotEmpty) {
-          return key.toString().trim();
+    for (final db in [FirebaseFirestore.instance, firestore]) {
+      if (db == null) continue;
+      try {
+        final snap = await db.collection('system_config').doc('settings').get();
+        if (snap.exists && snap.data() != null) {
+          final key = snap.data()!['resendApiKey'] ?? snap.data()!['resend_api_key'];
+          if (key != null && key.toString().trim().isNotEmpty) {
+            return key.toString().trim();
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
     return envApiKey;
   }
 
   /// Dynamically resolves the sender email address.
-  static Future<String> resolveSenderEmail(FirebaseFirestore firestore) async {
-    try {
-      final snap = await firestore.collection('system_config').doc('settings').get();
-      if (snap.exists && snap.data() != null) {
-        final sender = snap.data()!['resendFromEmail'] ?? snap.data()!['senderEmail'];
-        if (sender != null && sender.toString().trim().isNotEmpty) {
-          return sender.toString().trim();
+  static Future<String> resolveSenderEmail([FirebaseFirestore? firestore]) async {
+    for (final db in [FirebaseFirestore.instance, firestore]) {
+      if (db == null) continue;
+      try {
+        final snap = await db.collection('system_config').doc('settings').get();
+        if (snap.exists && snap.data() != null) {
+          final sender = snap.data()!['resendFromEmail'] ?? snap.data()!['senderEmail'];
+          if (sender != null && sender.toString().trim().isNotEmpty) {
+            return sender.toString().trim();
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
     return envSenderEmail.isNotEmpty ? envSenderEmail : 'Tranyx Support <onboarding@resend.dev>';
   }
 

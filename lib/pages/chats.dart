@@ -299,8 +299,9 @@ class _ChatsPageState extends State<ChatsPage> {
   Future<void> _checkReassignments() async {
     try {
       final firestore = context.read(firestoreProvider);
+      final adminFirestore = context.read(adminFirestoreProvider);
       final now = DateTime.now().millisecondsSinceEpoch;
-      final configDoc = await firestore.collection('system_config').doc('settings').get();
+      final configDoc = await adminFirestore.collection('system_config').doc('settings').get();
       final timeoutSec = (configDoc.data()?['claimTimeoutSeconds'] as num?)?.toInt() ?? _kReassignTimeoutSec;
       final cutoff = now - (timeoutSec * 1000);
 
