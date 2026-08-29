@@ -1626,19 +1626,37 @@ class _UsersPageState extends State<UsersPage> {
                           td(classes: 'p-5 font-bold text-zinc-900', [
                             div(classes: 'flex items-center gap-3', [
                               div(
-                                classes: 'relative group cursor-pointer w-8 h-8 rounded-full ${activeTab == "admin" ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-indigo-50 border-indigo-100 text-zinc-700"} border flex items-center justify-center text-[10px] font-extrabold flex-shrink-0 overflow-hidden shadow-sm',
-                                events: isAdmin ? {'click': (e) { e.stopPropagation(); _openPhotoModal(u); }} : null,
-                                attributes: isAdmin ? {'title': 'Click to update profile photo'} : {},
+                                classes:
+                                    'relative group cursor-pointer w-8 h-8 rounded-full ${activeTab == "admin" ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-indigo-50 border-indigo-100 text-zinc-700"} border flex items-center justify-center text-[10px] font-extrabold flex-shrink-0 overflow-hidden shadow-sm',
+                                events: isAdmin
+                                    ? {
+                                        'click': (e) {
+                                          e.stopPropagation();
+                                          _openPhotoModal(u);
+                                        }
+                                      }
+                                    : null,
+                                attributes: {
+                                  if (isAdmin) 'title': 'Click to update profile photo',
+                                  'style':
+                                      'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px;',
+                                },
                                 [
                                   if (u.photoUrl != null && u.photoUrl!.isNotEmpty)
-                                    img(src: u.photoUrl!, classes: 'w-full h-full object-cover', alt: u.name)
+                                    img(
+                                      src: u.photoUrl!,
+                                      classes: 'w-full h-full object-cover block',
+                                      attributes: {'style': 'width: 32px; height: 32px; object-fit: cover;'},
+                                      alt: u.name,
+                                    )
                                   else
                                     Component.text(
                                       u.name.length >= 2 ? u.name.substring(0, 2).toUpperCase() : u.name.toUpperCase(),
                                     ),
                                   if (isAdmin)
                                     div(
-                                      classes: 'absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-[10px]',
+                                      classes:
+                                          'absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-[10px]',
                                       [Component.text('📷')],
                                     ),
                                 ],

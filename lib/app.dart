@@ -247,10 +247,16 @@ class HeaderPanel extends StatelessComponent {
             div(classes: 'relative', [
               div(
                 classes:
-                    'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-xs font-black text-indigo-700 overflow-hidden shrink-0',
+                    'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-700 overflow-hidden shrink-0 relative',
+                attributes: {'style': 'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px;'},
                 [
                   if (profile.photoUrl != null && profile.photoUrl!.isNotEmpty)
-                    img(src: profile.photoUrl!, classes: 'w-full h-full object-cover', alt: 'Avatar')
+                    img(
+                      src: profile.photoUrl!,
+                      classes: 'w-full h-full object-cover block',
+                      attributes: {'style': 'width: 32px; height: 32px; object-fit: cover;'},
+                      alt: 'Avatar',
+                    )
                   else
                     Component.text(profile.initials),
                 ],

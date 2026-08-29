@@ -2302,10 +2302,19 @@ class _DashboardState extends State<Dashboard> {
                       ]),
                       div(classes: 'col-span-3 flex items-center gap-2.5 min-w-0 pr-2', [
                         div(
-                          classes: 'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-extrabold text-zinc-700 text-[10px] flex-shrink-0 overflow-hidden',
+                          classes:
+                              'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-extrabold text-zinc-700 text-[10px] flex-shrink-0 overflow-hidden',
+                          attributes: {
+                            'style': 'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px;'
+                          },
                           [
                             if (staffList[i].photoUrl != null && staffList[i].photoUrl!.isNotEmpty)
-                              img(src: staffList[i].photoUrl!, classes: 'w-full h-full object-cover', alt: staffList[i].name)
+                              img(
+                                src: staffList[i].photoUrl!,
+                                classes: 'w-full h-full object-cover block',
+                                attributes: {'style': 'width: 32px; height: 32px; object-fit: cover;'},
+                                alt: staffList[i].name,
+                              )
                             else
                               Component.text(
                                 staffList[i].name.length >= 2
@@ -2541,10 +2550,19 @@ class _DashboardState extends State<Dashboard> {
                     // 1. Agent Avatar & Name (Display full name, no truncation)
                     div(classes: 'col-span-3 flex items-center gap-3 min-w-0 pr-2', [
                       div(
-                        classes: 'relative w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-zinc-700 text-xs flex-shrink-0 overflow-hidden shadow-sm',
+                        classes:
+                            'relative w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-zinc-700 text-xs flex-shrink-0 overflow-hidden shadow-sm',
+                        attributes: {
+                          'style': 'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px;'
+                        },
                         [
                           if (agent.photoUrl != null && agent.photoUrl!.isNotEmpty)
-                            img(src: agent.photoUrl!, classes: 'w-full h-full object-cover', alt: agent.name)
+                            img(
+                              src: agent.photoUrl!,
+                              classes: 'w-full h-full object-cover block',
+                              attributes: {'style': 'width: 32px; height: 32px; object-fit: cover;'},
+                              alt: agent.name,
+                            )
                           else
                             Component.text(
                               agent.name.length >= 2 ? agent.name.substring(0, 2).toUpperCase() : agent.name.toUpperCase(),

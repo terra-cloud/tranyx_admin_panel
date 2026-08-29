@@ -251,14 +251,37 @@ class _SidebarState extends State<Sidebar> {
           // Bottom Area: Staff user info + Log out + Toggle Collapse
           div(classes: 'w-full flex flex-col gap-3 pt-4 border-t border-zinc-150/60', [
             // User Avatar and info
-            if (!_isCollapsed)
+            if (_isCollapsed)
+              div(
+                classes:
+                    'w-8 h-8 mx-auto rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-xs text-indigo-700 flex-shrink-0 overflow-hidden relative',
+                attributes: {'style': 'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px;'},
+                [
+                  if (profile.photoUrl != null && profile.photoUrl!.isNotEmpty)
+                    img(
+                      src: profile.photoUrl!,
+                      classes: 'w-full h-full object-cover block',
+                      attributes: {'style': 'width: 32px; height: 32px; object-fit: cover;'},
+                      alt: 'Avatar',
+                    )
+                  else
+                    Component.text(profile.initials),
+                ],
+              )
+            else
               div(classes: 'px-2 flex items-center gap-3 w-full min-w-0', [
                 div(
                   classes:
-                      'w-8.5 h-8.5 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-xs text-indigo-700 flex-shrink-0 overflow-hidden',
+                      'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-xs text-indigo-700 flex-shrink-0 overflow-hidden relative',
+                  attributes: {'style': 'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px;'},
                   [
                     if (profile.photoUrl != null && profile.photoUrl!.isNotEmpty)
-                      img(src: profile.photoUrl!, classes: 'w-full h-full object-cover', alt: 'Avatar')
+                      img(
+                        src: profile.photoUrl!,
+                        classes: 'w-full h-full object-cover block',
+                        attributes: {'style': 'width: 32px; height: 32px; object-fit: cover;'},
+                        alt: 'Avatar',
+                      )
                     else
                       Component.text(profile.initials),
                   ],
@@ -377,22 +400,40 @@ class _SidebarState extends State<Sidebar> {
               ],
             ]),
             div(classes: 'border-t border-zinc-200 pt-4 flex justify-between items-center', [
-              div(classes: 'flex flex-col min-w-0 pr-2', [
-                div(classes: 'flex items-center gap-1.5', [
-                  span(classes: 'text-xs font-black text-zinc-900 truncate', [
-                    Component.text(profile.name),
+              div(classes: 'flex items-center gap-2.5 min-w-0 pr-2', [
+                div(
+                  classes:
+                      'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-xs text-indigo-700 flex-shrink-0 overflow-hidden relative',
+                  attributes: {'style': 'width: 32px; height: 32px; min-width: 32px; min-height: 32px; max-width: 32px; max-height: 32px;'},
+                  [
+                    if (profile.photoUrl != null && profile.photoUrl!.isNotEmpty)
+                      img(
+                        src: profile.photoUrl!,
+                        classes: 'w-full h-full object-cover block',
+                        attributes: {'style': 'width: 32px; height: 32px; object-fit: cover;'},
+                        alt: 'Avatar',
+                      )
+                    else
+                      Component.text(profile.initials),
+                  ],
+                ),
+                div(classes: 'flex flex-col min-w-0', [
+                  div(classes: 'flex items-center gap-1.5', [
+                    span(classes: 'text-xs font-black text-zinc-900 truncate', [
+                      Component.text(profile.name),
+                    ]),
+                    span(
+                      classes:
+                          'text-[8px] font-extrabold uppercase px-1 rounded '
+                          '${profile.role.toLowerCase().contains("admin") ? "bg-black text-white" : "bg-indigo-50 text-indigo-700 border border-indigo-200/50"}',
+                      [
+                        Component.text(profile.roleDisplay),
+                      ],
+                    ),
                   ]),
-                  span(
-                    classes:
-                        'text-[8px] font-extrabold uppercase px-1 rounded '
-                        '${profile.role.toLowerCase().contains("admin") ? "bg-black text-white" : "bg-indigo-50 text-indigo-700 border border-indigo-200/50"}',
-                    [
-                      Component.text(profile.roleDisplay),
-                    ],
-                  ),
-                ]),
-                span(classes: 'text-[9px] text-zinc-400 font-semibold truncate', [
-                  Component.text(profile.email),
+                  span(classes: 'text-[9px] text-zinc-400 font-semibold truncate', [
+                    Component.text(profile.email),
+                  ]),
                 ]),
               ]),
               button(
