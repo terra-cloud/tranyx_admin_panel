@@ -2402,8 +2402,8 @@ class _DashboardState extends State<Dashboard> {
               Component.text('Real-time tracking of staff agents: busy in operations, waiting for queue items, AFK, or offline'),
             ]),
           ]),
-          div(classes: 'flex items-center gap-2 flex-wrap', [
-            div(classes: 'flex items-center gap-1 bg-zinc-100/80 p-1 rounded-xl w-max flex-wrap', [
+          div(classes: 'flex items-center gap-1.5 flex-wrap', [
+            div(classes: 'flex items-center gap-0.5 bg-zinc-100/90 p-0.5 rounded-xl flex-wrap', [
               _rosterFilterButton('all', 'All (${roster.length})'),
               _rosterFilterButton('waiting', '🟢 Waiting ($waitingCount)'),
               _rosterFilterButton('busy', '🟡 Busy ($busyCount)'),
@@ -2412,7 +2412,7 @@ class _DashboardState extends State<Dashboard> {
             ]),
             a(
               href: '/users',
-              classes: 'text-[10px] font-extrabold text-zinc-500 hover:text-black transition-colors no-underline px-2.5 py-1.5 rounded-xl hover:bg-zinc-100',
+              classes: 'text-[9.5px] font-extrabold text-zinc-500 hover:text-black transition-colors no-underline px-2 py-1 rounded-lg hover:bg-zinc-100',
               [Component.text('Manage Staff →')],
             ),
           ]),
@@ -2426,15 +2426,15 @@ class _DashboardState extends State<Dashboard> {
           ])
         else
           div(classes: 'overflow-x-auto', [
-            div(classes: 'min-w-[680px] flex flex-col', [
+            div(classes: 'min-w-[700px] flex flex-col', [
               // Table Header
               div(
                 classes: 'grid grid-cols-12 text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider px-3 pb-2 border-b border-zinc-100',
                 [
-                  div(classes: 'col-span-4', [Component.text('Agent / Staff Member')]),
+                  div(classes: 'col-span-5', [Component.text('Agent / Staff Member')]),
                   div(classes: 'col-span-2 text-center', [Component.text('Role')]),
                   div(classes: 'col-span-2 text-center', [Component.text('Presence Status')]),
-                  div(classes: 'col-span-3', [Component.text('Current Activity / Task')]),
+                  div(classes: 'col-span-2', [Component.text('Current Activity')]),
                   div(classes: 'col-span-1 text-right', [Component.text('Ping')]),
                 ],
               ),
@@ -2444,8 +2444,8 @@ class _DashboardState extends State<Dashboard> {
                   classes:
                       'grid grid-cols-12 items-center py-3 px-3 border-b border-zinc-50 last:border-0 hover:bg-zinc-50/70 rounded-xl transition-colors',
                   [
-                    // Agent Avatar & Name
-                    div(classes: 'col-span-4 flex items-center gap-3 min-w-0 pr-2', [
+                    // Agent Avatar & Name (Expanded for full display)
+                    div(classes: 'col-span-5 flex items-center gap-3 min-w-0 pr-3', [
                       div(
                         classes: 'relative w-9 h-9 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-zinc-700 text-xs flex-shrink-0 overflow-hidden shadow-sm',
                         [
@@ -2463,8 +2463,8 @@ class _DashboardState extends State<Dashboard> {
                           ),
                         ],
                       ),
-                      div(classes: 'flex flex-col min-w-0', [
-                        span(classes: 'text-xs font-black text-zinc-900 truncate', [Component.text(agent.name)]),
+                      div(classes: 'flex flex-col min-w-0 leading-tight', [
+                        span(classes: 'text-xs font-black text-zinc-900', [Component.text(agent.name)]),
                         span(classes: 'text-[9.5px] text-zinc-400 font-medium truncate mt-0.5', [Component.text(agent.email)]),
                       ]),
                     ]),
@@ -2497,10 +2497,10 @@ class _DashboardState extends State<Dashboard> {
                     ]),
 
                     // Current Task / Activity
-                    div(classes: 'col-span-3 flex flex-col justify-center min-w-0 pr-2', [
+                    div(classes: 'col-span-2 flex flex-col justify-center min-w-0 pr-2', [
                       span(
                         classes:
-                            'text-xs font-black truncate '
+                            'text-[11px] font-bold truncate '
                             '${agent.isBusy ? "text-amber-800 font-black" : agent.isWaiting ? "text-emerald-700 font-black" : agent.isAway ? "text-orange-700" : "text-zinc-500 font-medium"}',
                         [Component.text(agent.currentTaskDetail)],
                       ),
@@ -2529,7 +2529,7 @@ class _DashboardState extends State<Dashboard> {
     return button(
       onClick: () => setState(() => _rosterFilter = key),
       classes:
-          'px-2.5 py-1 rounded-lg text-[9px] font-extrabold transition-all border-0 cursor-pointer '
+          'px-2 py-0.5 rounded-md text-[8.5px] font-extrabold transition-all border-0 cursor-pointer '
           '${isSelected ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800 bg-transparent"}',
       [Component.text(labelText)],
     );
