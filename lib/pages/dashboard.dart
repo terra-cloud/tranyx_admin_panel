@@ -1192,6 +1192,20 @@ class _DashboardState extends State<Dashboard> {
     final monthlyRevenue = context.watch(monthlyRevenueProvider).value ?? List<double>.filled(12, 0.0);
     final monthlyUsers = context.watch(monthlyNewUsersProvider).value ?? List<int>.filled(12, 0);
     final staffList = context.watch(platformStaffProvider).value ?? [];
+    final myStaffProfile = staffList.firstWhere(
+      (staff) =>
+          profile?.name.isNotEmpty == true &&
+          staff.name.toLowerCase() == profile!.name.toLowerCase(),
+      orElse: () => StaffPerformance(
+        name: profile?.name.isNotEmpty == true ? profile!.name : (user?.displayName ?? 'Agent'),
+        role: profile?.role ?? 'staff',
+        p2pHandled: 0,
+        ticketsHandled: 0,
+        liveSupportHandled: 0,
+        totalHandled: 0,
+        csat: 98.0,
+      ),
+    );
 
     final detailedRevenue = context.watch(detailedRevenueProvider).value ?? DetailedRevenue.empty();
     final userBreakdown =
@@ -1916,142 +1930,259 @@ class _DashboardState extends State<Dashboard> {
           ),
         ]),
 
-      // ── Bottom Row: Top Agents + Platform Config ────────────────
-      div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5', [
-        // Top Performing Agents (2/3)
-        div(
-          classes: 'lg:col-span-2 bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
-          [
-            div(classes: 'flex justify-between items-center border-b border-zinc-50 pb-4', [
-              div([
-                h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Top Performing Agents')]),
-                p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
-                  Component.text('Ranked by P2P transactions, support tickets, and live support handling'),
+      // ── Bottom Row: Top Agents + Platform Config (Admin) / Personal Performance + CSAT (Staff) ──
+      if (isAdmin)
+        div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5', [
+          // Top Performing Agents (2/3)
+          div(
+            classes: 'lg:col-span-2 bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+            [
+              div(classes: 'flex justify-between items-center border-b border-zinc-50 pb-4', [
+                div([
+                  h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Top Performing Agents')]),
+                  p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
+                    Component.text('Ranked by P2P transactions, support tickets, and live support handling'),
+                  ]),
                 ]),
+                a(
+                  href: '/users',
+                  classes: 'text-[10px] font-extrabold text-zinc-500 hover:text-black transition-colors no-underline',
+                  [Component.text('Manage Staff →')],
+                ),
               ]),
-              a(
-                href: '/users',
-                classes: 'text-[10px] font-extrabold text-zinc-500 hover:text-black transition-colors no-underline',
-                [Component.text('Manage Staff →')],
-              ),
-            ]),
-            if (staffList.isEmpty)
-              div(classes: 'py-8 text-center flex flex-col items-center gap-2', [
-                span(classes: 'text-3xl', [Component.text('🧑‍💼')]),
-                span(classes: 'text-xs font-bold text-zinc-600', [Component.text('No support agents yet')]),
-                span(classes: 'text-[10px] text-zinc-400', [
-                  Component.text('Add agents in Users → Agents / Staff tab.'),
-                ]),
-              ])
-            else ...[
-              div(
-                classes: 'grid grid-cols-12 text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider px-1 pb-1',
-                [
-                  div(classes: 'col-span-1 text-center', [Component.text('#')]),
-                  div(classes: 'col-span-3', [Component.text('Agent')]),
-                  div(classes: 'col-span-2 text-center', [Component.text('P2P Handling')]),
-                  div(classes: 'col-span-2 text-center', [Component.text('Tickets')]),
-                  div(classes: 'col-span-2 text-center', [Component.text('Live Support')]),
-                  div(classes: 'col-span-2 text-center', [Component.text('Total Score')]),
-                ],
-              ),
-              for (var i = 0; i < staffList.length && i < 8; i++)
+              if (staffList.isEmpty)
+                div(classes: 'py-8 text-center flex flex-col items-center gap-2', [
+                  span(classes: 'text-3xl', [Component.text('🧑‍💼')]),
+                  span(classes: 'text-xs font-bold text-zinc-600', [Component.text('No support agents yet')]),
+                  span(classes: 'text-[10px] text-zinc-400', [
+                    Component.text('Add agents in Users → Agents / Staff tab.'),
+                  ]),
+                ])
+              else ...[
                 div(
-                  classes: 'grid grid-cols-12 items-center py-3 border-b border-zinc-50 last:border-0 hover:bg-zinc-50/50 rounded-xl px-1 transition-colors',
+                  classes: 'grid grid-cols-12 text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider px-1 pb-1',
                   [
-                    div(classes: 'col-span-1 flex justify-center', [
-                      if (i == 0)
-                        span(classes: 'text-sm', [Component.text('🥇')])
-                      else if (i == 1)
-                        span(classes: 'text-sm', [Component.text('🥈')])
-                      else if (i == 2)
-                        span(classes: 'text-sm', [Component.text('🥉')])
-                      else
-                        span(classes: 'text-[10px] font-extrabold text-zinc-400', [Component.text('${i + 1}')]),
-                    ]),
-                    div(classes: 'col-span-3 flex items-center gap-2.5 min-w-0 pr-2', [
-                      div(
-                        classes: 'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-extrabold text-zinc-700 text-[10px] flex-shrink-0',
-                        [
-                          Component.text(
-                            staffList[i].name.length >= 2
-                                ? staffList[i].name.substring(0, 2).toUpperCase()
-                                : staffList[i].name.toUpperCase(),
-                          ),
-                        ],
-                      ),
-                      div(classes: 'flex flex-col min-w-0', [
-                        span(classes: 'text-xs font-black text-zinc-800 truncate', [Component.text(staffList[i].name)]),
-                        span(classes: 'text-[9px] text-indigo-500 font-extrabold uppercase truncate', [
-                          Component.text(staffList[i].role),
-                        ]),
-                      ]),
-                    ]),
-                    div(classes: 'col-span-2 text-center', [
-                      span(classes: 'text-xs font-black text-zinc-900', [
-                        Component.text('${staffList[i].p2pHandled}'),
-                      ]),
-                      span(classes: 'text-[9px] text-zinc-400 block font-semibold', [Component.text('P2P handled')]),
-                    ]),
-                    div(classes: 'col-span-2 text-center', [
-                      span(classes: 'text-xs font-black text-zinc-900', [
-                        Component.text('${staffList[i].ticketsHandled}'),
-                      ]),
-                      span(classes: 'text-[9px] text-zinc-400 block font-semibold', [Component.text('tickets')]),
-                    ]),
-                    div(classes: 'col-span-2 text-center', [
-                      span(classes: 'text-xs font-black text-zinc-900', [
-                        Component.text('${staffList[i].liveSupportHandled}'),
-                      ]),
-                      span(classes: 'text-[9px] text-zinc-400 block font-semibold', [Component.text('live chats')]),
-                    ]),
-                    div(classes: 'col-span-2 text-center flex flex-col items-center justify-center gap-0.5', [
-                      span(
-                        classes:
-                            'px-2.5 py-0.5 rounded-full text-xs font-black '
-                            '${staffList[i].totalHandled > 0 ? "bg-emerald-50 text-[#0fa958] border border-emerald-200/60" : "bg-zinc-100 text-zinc-400"}',
-                        [
-                          Component.text('${staffList[i].totalHandled} pts'),
-                        ],
-                      ),
-                      if (staffList[i].csat > 0)
-                        span(classes: 'text-[9px] font-bold text-zinc-400', [
-                          Component.text('${staffList[i].csat}% CSAT'),
-                        ]),
-                    ]),
+                    div(classes: 'col-span-1 text-center', [Component.text('#')]),
+                    div(classes: 'col-span-3', [Component.text('Agent')]),
+                    div(classes: 'col-span-2 text-center', [Component.text('P2P Handling')]),
+                    div(classes: 'col-span-2 text-center', [Component.text('Tickets')]),
+                    div(classes: 'col-span-2 text-center', [Component.text('Live Support')]),
+                    div(classes: 'col-span-2 text-center', [Component.text('Total Score')]),
                   ],
                 ),
+                for (var i = 0; i < staffList.length && i < 8; i++)
+                  div(
+                    classes: 'grid grid-cols-12 items-center py-3 border-b border-zinc-50 last:border-0 hover:bg-zinc-50/50 rounded-xl px-1 transition-colors',
+                    [
+                      div(classes: 'col-span-1 flex justify-center', [
+                        if (i == 0)
+                          span(classes: 'text-sm', [Component.text('🥇')])
+                        else if (i == 1)
+                          span(classes: 'text-sm', [Component.text('🥈')])
+                        else if (i == 2)
+                          span(classes: 'text-sm', [Component.text('🥉')])
+                        else
+                          span(classes: 'text-[10px] font-extrabold text-zinc-400', [Component.text('${i + 1}')]),
+                      ]),
+                      div(classes: 'col-span-3 flex items-center gap-2.5 min-w-0 pr-2', [
+                        div(
+                          classes: 'w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-extrabold text-zinc-700 text-[10px] flex-shrink-0',
+                          [
+                            Component.text(
+                              staffList[i].name.length >= 2
+                                  ? staffList[i].name.substring(0, 2).toUpperCase()
+                                  : staffList[i].name.toUpperCase(),
+                            ),
+                          ],
+                        ),
+                        div(classes: 'flex flex-col min-w-0', [
+                          span(classes: 'text-xs font-black text-zinc-800 truncate', [Component.text(staffList[i].name)]),
+                          span(classes: 'text-[9px] text-indigo-500 font-extrabold uppercase truncate', [
+                            Component.text(staffList[i].role),
+                          ]),
+                        ]),
+                      ]),
+                      div(classes: 'col-span-2 text-center', [
+                        span(classes: 'text-xs font-black text-zinc-900', [
+                          Component.text('${staffList[i].p2pHandled}'),
+                        ]),
+                        span(classes: 'text-[9px] text-zinc-400 block font-semibold', [Component.text('P2P handled')]),
+                      ]),
+                      div(classes: 'col-span-2 text-center', [
+                        span(classes: 'text-xs font-black text-zinc-900', [
+                          Component.text('${staffList[i].ticketsHandled}'),
+                        ]),
+                        span(classes: 'text-[9px] text-zinc-400 block font-semibold', [Component.text('tickets')]),
+                      ]),
+                      div(classes: 'col-span-2 text-center', [
+                        span(classes: 'text-xs font-black text-zinc-900', [
+                          Component.text('${staffList[i].liveSupportHandled}'),
+                        ]),
+                        span(classes: 'text-[9px] text-zinc-400 block font-semibold', [Component.text('live chats')]),
+                      ]),
+                      div(classes: 'col-span-2 text-center flex flex-col items-center justify-center gap-0.5', [
+                        span(
+                          classes:
+                              'px-2.5 py-0.5 rounded-full text-xs font-black '
+                              '${staffList[i].totalHandled > 0 ? "bg-emerald-50 text-[#0fa958] border border-emerald-200/60" : "bg-zinc-100 text-zinc-400"}',
+                          [
+                            Component.text('${staffList[i].totalHandled} pts'),
+                          ],
+                        ),
+                        if (staffList[i].csat > 0)
+                          span(classes: 'text-[9px] font-bold text-zinc-400', [
+                            Component.text('${staffList[i].csat}% CSAT'),
+                          ]),
+                      ]),
+                    ],
+                  ),
+              ],
             ],
-          ],
-        ),
+          ),
 
-        // Platform Config
-        div(
-          classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
-          [
-            div(classes: 'border-b border-zinc-50 pb-4', [
-              h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Platform Config')]),
-              p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
-                Component.text('Node status and environment health'),
+          // Platform Config (Admin Only)
+          div(
+            classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+            [
+              div(classes: 'border-b border-zinc-50 pb-4', [
+                h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Platform Config')]),
+                p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
+                  Component.text('Node status and environment health'),
+                ]),
               ]),
-            ]),
-            div(classes: 'flex flex-col gap-4', [
-              _configRow('Environment', currentEnv.name.toUpperCase(), 'Healthy', '#0fa958', '#e6f7ef'),
-              _configRow('Firebase Rules', 'Firestore + Storage', 'Secure', '#0fa958', '#e6f7ef'),
-              _configRow('Blockchain Fee', '3% per deposit/withdraw', 'Active', '#6366f1', '#ede9fe'),
-              _configRow('KYC Pipeline', 'Identity Verification', 'Online', '#0fa958', '#e6f7ef'),
-              _configRow('Escrow Engine', 'On-chain wallet escrow', 'Online', '#0fa958', '#e6f7ef'),
-              _configRow(
-                'Support Queue',
-                '${(context.watch(dbStaffCountProvider).value ?? 0)} agents active',
-                'Live',
-                '#f59e0b',
-                '#fef3c7',
-              ),
-            ]),
-          ],
-        ),
-      ]),
+              div(classes: 'flex flex-col gap-4', [
+                _configRow('Environment', currentEnv.name.toUpperCase(), 'Healthy', '#0fa958', '#e6f7ef'),
+                _configRow('Firebase Rules', 'Firestore + Storage', 'Secure', '#0fa958', '#e6f7ef'),
+                _configRow('Blockchain Fee', '3% per deposit/withdraw', 'Active', '#6366f1', '#ede9fe'),
+                _configRow('KYC Pipeline', 'Identity Verification', 'Online', '#0fa958', '#e6f7ef'),
+                _configRow('Escrow Engine', 'On-chain wallet escrow', 'Online', '#0fa958', '#e6f7ef'),
+                _configRow(
+                  'Support Queue',
+                  '${(context.watch(dbStaffCountProvider).value ?? 0)} agents active',
+                  'Live',
+                  '#f59e0b',
+                  '#fef3c7',
+                ),
+              ]),
+            ],
+          ),
+        ])
+      else
+        div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5', [
+          // My Agent Performance (2/3)
+          div(
+            classes: 'lg:col-span-2 bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+            [
+              div(classes: 'flex justify-between items-center border-b border-zinc-50 pb-4', [
+                div([
+                  h3(classes: 'text-sm font-black text-zinc-900', [Component.text('My Performance & Score')]),
+                  p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
+                    Component.text('Your active operational throughput and resolution metrics'),
+                  ]),
+                ]),
+                span(
+                  classes: 'px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-full text-indigo-700 text-[10px] font-black uppercase tracking-wider',
+                  [Component.text('Score: ${myStaffProfile.totalHandled} pts')],
+                ),
+              ]),
+              div(classes: 'grid grid-cols-1 sm:grid-cols-3 gap-4 py-2', [
+                div(classes: 'bg-[#fafcfa] border border-zinc-200/60 rounded-2xl p-4 flex flex-col gap-2', [
+                  div(classes: 'flex items-center justify-between', [
+                    span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                      Component.text('P2P Handled'),
+                    ]),
+                    span(classes: 'text-base', [Component.text('💳')]),
+                  ]),
+                  h4(classes: 'text-2xl font-black text-zinc-900', [
+                    Component.text('${myStaffProfile.p2pHandled}'),
+                  ]),
+                  span(classes: 'text-[9px] font-bold text-zinc-400', [
+                    Component.text('Deposits & cashouts verified'),
+                  ]),
+                ]),
+                div(classes: 'bg-[#fafcfa] border border-zinc-200/60 rounded-2xl p-4 flex flex-col gap-2', [
+                  div(classes: 'flex items-center justify-between', [
+                    span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                      Component.text('Tickets Resolved'),
+                    ]),
+                    span(classes: 'text-base', [Component.text('🎟️')]),
+                  ]),
+                  h4(classes: 'text-2xl font-black text-zinc-900', [
+                    Component.text('${myStaffProfile.ticketsHandled}'),
+                  ]),
+                  span(classes: 'text-[9px] font-bold text-zinc-400', [
+                    Component.text('Customer tickets closed'),
+                  ]),
+                ]),
+                div(classes: 'bg-[#fafcfa] border border-zinc-200/60 rounded-2xl p-4 flex flex-col gap-2', [
+                  div(classes: 'flex items-center justify-between', [
+                    span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                      Component.text('Live Chats'),
+                    ]),
+                    span(classes: 'text-base', [Component.text('💬')]),
+                  ]),
+                  h4(classes: 'text-2xl font-black text-zinc-900', [
+                    Component.text('${myStaffProfile.liveSupportHandled}'),
+                  ]),
+                  span(classes: 'text-[9px] font-bold text-zinc-400', [
+                    Component.text('Direct support sessions'),
+                  ]),
+                ]),
+              ]),
+            ],
+          ),
+
+          // CSAT Average Circular Graph Card (1/3)
+          div(
+            classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)] items-center justify-between text-center',
+            [
+              div(classes: 'w-full text-left border-b border-zinc-50 pb-3', [
+                h3(classes: 'text-sm font-black text-zinc-900', [Component.text('CSAT Satisfaction')]),
+                p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
+                  Component.text('Customer satisfaction average score'),
+                ]),
+              ]),
+              () {
+                final csatScore = myStaffProfile.csat > 0 ? myStaffProfile.csat : 98;
+                return div(
+                  classes: 'relative flex items-center justify-center my-2',
+                  [
+                    div(
+                      attributes: {
+                        'style':
+                            'width:130px;height:130px;border-radius:50%;'
+                            'background:conic-gradient(#0fa958 0% $csatScore%, #e2e8f0 $csatScore% 100%);'
+                            'display:flex;align-items:center;justify-content:center;',
+                      },
+                      [
+                        div(
+                          classes: 'bg-white rounded-full flex flex-col items-center justify-center shadow-inner',
+                          attributes: {'style': 'width:96px;height:96px;'},
+                          [
+                            span(classes: 'text-2xl font-black text-zinc-900 tracking-tight', [
+                              Component.text('$csatScore%'),
+                            ]),
+                            span(classes: 'text-[8px] font-extrabold uppercase tracking-wider text-emerald-600', [
+                              Component.text('CSAT'),
+                            ]),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              }(),
+              div(classes: 'w-full flex flex-col gap-1 border-t border-zinc-50 pt-3', [
+                span(classes: 'text-xs font-black text-zinc-800', [
+                  Component.text('🌟 Excellent Quality Rating'),
+                ]),
+                span(classes: 'text-[10px] text-zinc-400 font-semibold', [
+                  Component.text('Target CSAT benchmark is ≥95% across all support interactions.'),
+                ]),
+              ]),
+            ],
+          ),
+        ]),
     ]);
   }
 
