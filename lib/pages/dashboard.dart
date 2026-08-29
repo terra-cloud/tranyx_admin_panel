@@ -1537,7 +1537,7 @@ class _DashboardState extends State<Dashboard> {
     final maxUsers = monthlyUsers.fold(0, (acc, val) => val > acc ? val : acc);
     final kycTotal = kycStats.total == 0 ? 1 : kycStats.total;
 
-    return div(classes: 'flex-1 p-6 md:p-8 flex flex-col gap-7 max-w-7xl mx-auto w-full bg-[#f2f5f3]', [
+    return div(classes: 'flex-1 p-4 sm:p-6 md:p-8 flex flex-col gap-7 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden bg-[#f2f5f3]', [
       // Header
       div(classes: 'flex flex-col md:flex-row md:items-center justify-between gap-4 pb-1', [
         div(classes: 'flex flex-col gap-1', [
@@ -2404,17 +2404,19 @@ class _DashboardState extends State<Dashboard> {
     }).toList();
 
     return div(
-      classes: 'bg-white rounded-[24px] border border-zinc-200/60 p-6 flex flex-col gap-5 shadow-[0_4px_24px_rgba(0,0,0,0.02)]',
+      classes:
+          'bg-white rounded-[24px] border border-zinc-200/60 p-4 sm:p-6 flex flex-col gap-5 shadow-[0_4px_24px_rgba(0,0,0,0.02)] w-full max-w-full min-w-0 overflow-hidden',
       [
         // Top Header Row
         div(classes: 'flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-100 pb-4', [
-          div(classes: 'flex flex-col gap-0.5', [
-            div(classes: 'flex items-center gap-2.5', [
+          div(classes: 'flex flex-col gap-0.5 min-w-0', [
+            div(classes: 'flex items-center gap-2.5 flex-wrap', [
               h3(classes: 'text-sm md:text-base font-bold text-zinc-900 tracking-tight', [
                 Component.text('Active Agents & Live Operational Presence'),
               ]),
               span(
-                classes: 'px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-50 text-[#0fa958] border border-emerald-200/60 flex items-center gap-1.5',
+                classes:
+                    'px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-50 text-[#0fa958] border border-emerald-200/60 flex items-center gap-1.5 flex-shrink-0',
                 [
                   span(classes: 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse', []),
                   Component.text('LIVE ROSTER'),
@@ -2425,8 +2427,8 @@ class _DashboardState extends State<Dashboard> {
               Component.text('Real-time operational presence across customer support queues and P2P trade operations'),
             ]),
           ]),
-          div(classes: 'flex items-center gap-2 flex-wrap', [
-            div(classes: 'flex items-center gap-1 bg-zinc-100/80 p-1 rounded-xl flex-wrap', [
+          div(classes: 'flex items-center gap-2 flex-wrap w-full md:w-auto justify-between md:justify-end', [
+            div(classes: 'flex items-center gap-1 bg-zinc-100/80 p-1 rounded-xl overflow-x-auto max-w-full', [
               _rosterFilterButton('all', 'All (${roster.length})'),
               _rosterFilterButton('waiting', '🟢 Waiting ($waitingCount)'),
               _rosterFilterButton('busy', '🟡 Busy ($busyCount)'),
@@ -2435,14 +2437,15 @@ class _DashboardState extends State<Dashboard> {
             ]),
             a(
               href: '/users',
-              classes: 'text-xs font-bold text-zinc-500 hover:text-black transition-colors no-underline px-2.5 py-1.5 rounded-lg hover:bg-zinc-100',
+              classes:
+                  'text-xs font-bold text-zinc-500 hover:text-black transition-colors no-underline px-2.5 py-1.5 rounded-lg hover:bg-zinc-100 flex-shrink-0',
               [Component.text('Manage Staff →')],
             ),
           ]),
         ]),
 
         // 5-Card KPI Metrics Strip
-        div(classes: 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3', [
+        div(classes: 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 w-full', [
           div(
             classes: 'bg-[#fafafa] border border-zinc-200/60 rounded-2xl p-3.5 flex flex-col gap-1',
             [
@@ -2505,14 +2508,14 @@ class _DashboardState extends State<Dashboard> {
           ),
         ]),
 
-        // Elegant Table
+        // Elegant Scrollable Table
         if (filteredList.isEmpty)
           div(classes: 'py-10 text-center flex flex-col items-center gap-2', [
             span(classes: 'text-xl', [Component.text('🔍')]),
             span(classes: 'text-xs font-bold text-zinc-500', [Component.text('No agents match this filter status')]),
           ])
         else
-          div(classes: 'overflow-x-auto w-full', [
+          div(classes: 'overflow-x-auto w-full max-w-full pb-2', [
             div(classes: 'min-w-[1050px] flex flex-col', [
               // Table Header (9-column arrangement)
               div(
