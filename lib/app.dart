@@ -91,11 +91,11 @@ class AppShell extends StatelessComponent {
                   Route(path: '/tickets', builder: (context, state) => const TicketsPage()),
                   Route(path: '/deposits', builder: (context, state) => const DepositsPage()),
                   Route(path: '/withdrawals', builder: (context, state) => const WithdrawalsPage()),
-                  Route(path: '/promos', builder: (context, state) => const PromosPage()),
-                  Route(path: '/news', builder: (context, state) => const NewsPage()),
+                  Route(path: '/promos', builder: (context, state) => const AdminGuard(child: PromosPage())),
+                  Route(path: '/news', builder: (context, state) => const AdminGuard(child: NewsPage())),
                   Route(path: '/reports', builder: (context, state) => const ReportsPage()),
                   Route(path: '/users', builder: (context, state) => const UsersPage()),
-                  Route(path: '/settings', builder: (context, state) => const SettingsPage()),
+                  Route(path: '/settings', builder: (context, state) => const AdminGuard(child: SettingsPage())),
                 ],
               ),
             ],
@@ -110,6 +110,38 @@ class AppShell extends StatelessComponent {
         ]),
       ),
     ]);
+  }
+}
+
+class AdminGuard extends StatelessComponent {
+  final Component child;
+  const AdminGuard({required this.child, super.key});
+
+  @override
+  Component build(BuildContext context) {
+    final profile = context.watch(currentAdminProfileProvider).value;
+    final user = context.watch(adminCurrentUserProvider).value;
+    final email = (profile?.email.isNotEmpty == true ? profile!.email : user?.email) ?? '';
+    final role = profile?.role.toLowerCase() ?? '';
+    final isAdmin = email.toLowerCase().contains('admin') || email == 'admin@tranyx.app' || role.contains('admin');
+
+    if (!isAdmin) {
+      return div(classes: 'flex-1 p-8 flex flex-col items-center justify-center text-center gap-4 min-h-[60vh]', [
+        div(classes: 'w-16 h-16 rounded-3xl bg-amber-50 border border-amber-200 flex items-center justify-center text-2xl shadow-sm', [
+          Component.text('🔒'),
+        ]),
+        h2(classes: 'text-lg font-black text-zinc-900', [Component.text('Administrator Access Required')]),
+        p(classes: 'text-xs text-zinc-500 max-w-sm font-medium leading-relaxed', [
+          Component.text('This console section contains platform configuration, fee settings, and sensitive controls restricted to administrators.'),
+        ]),
+        a(
+          href: '/',
+          classes: 'px-5 py-2.5 bg-black text-white text-xs font-extrabold rounded-full shadow-md shadow-black/10 hover:bg-zinc-800 transition-all no-underline',
+          [Component.text('Return to Dashboard')],
+        ),
+      ]);
+    }
+    return child;
   }
 }
 

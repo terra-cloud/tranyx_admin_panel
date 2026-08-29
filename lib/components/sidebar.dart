@@ -46,6 +46,9 @@ class _SidebarState extends State<Sidebar> {
           email: 'agent@tranyx.com',
           role: 'staff',
         );
+    final isAdmin = profile.role.toLowerCase().contains('admin') ||
+        profile.email.toLowerCase().contains('admin') ||
+        profile.email == 'admin@tranyx.app';
     final currentPath = Router.of(context).matchList.uri.path;
 
     final pendingKycCount = context
@@ -231,14 +234,22 @@ class _SidebarState extends State<Sidebar> {
                 buildMenuItem('User Accounts', '/users', '/images/icon_users.png'),
 
                 // SECTION: Growth & Governance
-                if (!_isCollapsed)
-                  li(classes: 'px-3 pt-3 pb-1 text-[9px] font-black tracking-wider text-zinc-400 uppercase', [
-                    Component.text('Growth & System'),
-                  ]),
-                buildMenuItem('Promotions', '/promos', '/images/icon_promos.png'),
-                buildMenuItem('News & Banners', '/news', '📰'),
-                buildMenuItem('Abuse Reports', '/reports', '🚩', badgeCount: pendingReportsCount),
-                buildMenuItem('System Console', '/settings', '/images/icon_settings.png'),
+                if (isAdmin) ...[
+                  if (!_isCollapsed)
+                    li(classes: 'px-3 pt-3 pb-1 text-[9px] font-black tracking-wider text-zinc-400 uppercase', [
+                      Component.text('Growth & System'),
+                    ]),
+                  buildMenuItem('Promotions', '/promos', '/images/icon_promos.png'),
+                  buildMenuItem('News & Banners', '/news', '📰'),
+                  buildMenuItem('Abuse Reports', '/reports', '🚩', badgeCount: pendingReportsCount),
+                  buildMenuItem('System Console', '/settings', '/images/icon_settings.png'),
+                ] else ...[
+                  if (!_isCollapsed)
+                    li(classes: 'px-3 pt-3 pb-1 text-[9px] font-black tracking-wider text-zinc-400 uppercase', [
+                      Component.text('Compliance'),
+                    ]),
+                  buildMenuItem('Abuse Reports', '/reports', '🚩', badgeCount: pendingReportsCount),
+                ],
               ]),
             ]),
           ]),
@@ -364,10 +375,12 @@ class _SidebarState extends State<Sidebar> {
                 badgeCount: openTicketsCount,
               ),
               buildMobileMenuItem('User Accounts', '/users', '/images/icon_users.png'),
-              buildMobileMenuItem('Promotions', '/promos', '/images/icon_promos.png'),
-              buildMobileMenuItem('News & Banners', '/news', '📰'),
               buildMobileMenuItem('Abuse Reports', '/reports', '🚩', badgeCount: pendingReportsCount),
-              buildMobileMenuItem('System Console', '/settings', '/images/icon_settings.png'),
+              if (isAdmin) ...[
+                buildMobileMenuItem('Promotions', '/promos', '/images/icon_promos.png'),
+                buildMobileMenuItem('News & Banners', '/news', '📰'),
+                buildMobileMenuItem('System Console', '/settings', '/images/icon_settings.png'),
+              ],
             ]),
             div(classes: 'border-t border-zinc-200 pt-4 flex justify-between items-center', [
               div(classes: 'flex flex-col min-w-0 pr-2', [

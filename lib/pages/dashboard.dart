@@ -1176,9 +1176,11 @@ class _DashboardState extends State<Dashboard> {
 
   @override
   Component build(BuildContext context) {
+    final profile = context.watch(currentAdminProfileProvider).value;
     final user = context.watch(adminCurrentUserProvider).value;
-    final userEmail = user?.email ?? '';
-    final isAdmin = userEmail.toLowerCase().contains('admin') || userEmail == 'sarah.johnson@tranyx.com';
+    final userEmail = (profile?.email.isNotEmpty == true ? profile!.email : user?.email) ?? '';
+    final userRole = profile?.role.toLowerCase() ?? '';
+    final isAdmin = userEmail.toLowerCase().contains('admin') || userEmail == 'admin@tranyx.app' || userRole.contains('admin');
     if (!isAdmin) {
       _revenueTimeframe = '24h';
     }
@@ -1301,13 +1303,19 @@ class _DashboardState extends State<Dashboard> {
                 classes: 'w-7 h-7 rounded-full bg-zinc-200 flex items-center justify-center font-black text-xs text-zinc-700',
                 [
                   Component.text(
-                    user?.displayName?.isNotEmpty == true ? user!.displayName!.substring(0, 1).toUpperCase() : 'A',
+                    profile?.name.isNotEmpty == true
+                        ? profile!.name.substring(0, 1).toUpperCase()
+                        : (user?.displayName?.isNotEmpty == true ? user!.displayName!.substring(0, 1).toUpperCase() : 'A'),
                   ),
                 ],
               ),
               div(classes: 'flex flex-col text-left leading-tight hidden sm:flex', [
-                span(classes: 'text-[10px] font-black text-zinc-850', [Component.text(user?.displayName ?? 'Admin')]),
-                span(classes: 'text-[8px] text-zinc-400 font-extrabold uppercase', [Component.text('Admin')]),
+                span(classes: 'text-[10px] font-black text-zinc-850', [
+                  Component.text(profile?.name.isNotEmpty == true ? profile!.name : (user?.displayName ?? 'Staff')),
+                ]),
+                span(classes: 'text-[8px] text-zinc-400 font-extrabold uppercase', [
+                  Component.text(isAdmin ? 'Admin' : 'Staff'),
+                ]),
               ]),
             ],
           ),
@@ -1368,125 +1376,176 @@ class _DashboardState extends State<Dashboard> {
           'bg-rose-50 border border-rose-100',
           '/chats',
         ),
-        _promoBanner(
-          'P2P Listings',
-          '${liveListings.total} active platform posts',
-          'bg-zinc-50 border border-zinc-200',
-          '/listings',
-        ),
-        _promoBanner(
-          'System Config',
-          'Environment & node settings',
-          'bg-purple-50 border border-purple-100',
-          '/settings',
-        ),
+        if (isAdmin)
+          _promoBanner(
+            'P2P Listings',
+            '${liveListings.total} active platform posts',
+            'bg-zinc-50 border border-zinc-200',
+            '/listings',
+          )
+        else
+          _promoBanner(
+            'Support Tickets',
+            openTicketsCount > 0 ? '$openTicketsCount open tickets' : 'Queue clear',
+            'bg-indigo-50 border border-indigo-100',
+            '/tickets',
+          ),
+        if (isAdmin)
+          _promoBanner(
+            'System Config',
+            'Environment & node settings',
+            'bg-purple-50 border border-purple-100',
+            '/settings',
+          )
+        else
+          _promoBanner(
+            'P2P Listings',
+            '${liveListings.total} active platform posts',
+            'bg-zinc-50 border border-zinc-200',
+            '/listings',
+          ),
       ]),
 
       // ── 5 Top KPI Cards (Must be at the very face of the Admin Portal) ──
       div(classes: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4', [
-        // 1. Total Revenue Card (with timeframe dropdown and fee details)
-        div(
-          classes: 'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)] lg:col-span-1',
-          [
-            div(classes: 'flex items-start justify-between', [
-              div(classes: 'flex flex-col gap-0.5 min-w-0', [
-                span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
-                  Component.text('Total Revenue'),
+        // 1. Total Revenue Card (Admin) or Action Required Card (Staff)
+        if (isAdmin)
+          div(
+            classes: 'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)] lg:col-span-1',
+            [
+              div(classes: 'flex items-start justify-between', [
+                div(classes: 'flex flex-col gap-0.5 min-w-0', [
+                  span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                    Component.text('Total Revenue'),
+                  ]),
+                  h4(classes: 'text-xl font-black text-zinc-950 tracking-tight mt-1 truncate', [
+                    Component.text(() {
+                      switch (_revenueTimeframe) {
+                        case '7d':
+                          return '₱${detailedRevenue.rev7d.toStringAsFixed(2)}';
+                        case '30d':
+                          return '₱${detailedRevenue.rev30d.toStringAsFixed(2)}';
+                        case 'allTime':
+                          return '₱${detailedRevenue.revAllTime.toStringAsFixed(2)}';
+                        default:
+                          return '₱${detailedRevenue.rev24h.toStringAsFixed(2)}';
+                      }
+                    }()),
+                  ]),
                 ]),
-                h4(classes: 'text-xl font-black text-zinc-950 tracking-tight mt-1 truncate', [
-                  Component.text(() {
-                    switch (_revenueTimeframe) {
-                      case '7d':
-                        return '₱${detailedRevenue.rev7d.toStringAsFixed(2)}';
-                      case '30d':
-                        return '₱${detailedRevenue.rev30d.toStringAsFixed(2)}';
-                      case 'allTime':
-                        return '₱${detailedRevenue.revAllTime.toStringAsFixed(2)}';
-                      default:
-                        return '₱${detailedRevenue.rev24h.toStringAsFixed(2)}';
-                    }
-                  }()),
-                ]),
-              ]),
-              select(
-                classes: 'bg-zinc-100 hover:bg-zinc-200 border-0 rounded-lg px-2 py-1 text-[9px] font-black text-zinc-700 focus:outline-none transition-all cursor-pointer',
-                onChange: (v) => setState(() => _revenueTimeframe = v.isNotEmpty ? v.first : '24h'),
-                [
-                  option(value: '24h', selected: _revenueTimeframe == '24h', [Component.text('24h')]),
-                  if (isAdmin) ...[
+                select(
+                  classes: 'bg-zinc-100 hover:bg-zinc-200 border-0 rounded-lg px-2 py-1 text-[9px] font-black text-zinc-700 focus:outline-none transition-all cursor-pointer',
+                  onChange: (v) => setState(() => _revenueTimeframe = v.isNotEmpty ? v.first : '24h'),
+                  [
+                    option(value: '24h', selected: _revenueTimeframe == '24h', [Component.text('24h')]),
                     option(value: '7d', selected: _revenueTimeframe == '7d', [Component.text('7 Days')]),
                     option(value: '30d', selected: _revenueTimeframe == '30d', [Component.text('1 Month')]),
                     option(value: 'allTime', selected: _revenueTimeframe == 'allTime', [Component.text('Accumulated')]),
                   ],
-                ],
-              ),
-            ]),
-            div(classes: 'flex flex-col gap-1.5 pt-2 border-t border-zinc-100 text-[9px] font-semibold text-zinc-500', [
-              div(classes: 'flex items-center justify-between', [
-                span([Component.text('Services (Employer 10%, Worker 3%)')]),
-                span(classes: 'font-bold text-zinc-800', [
-                  Component.text(
-                    '₱${(() {
-                      final bd = _revenueTimeframe == '7d'
-                          ? detailedRevenue.breakdown7d
-                          : _revenueTimeframe == '30d'
-                          ? detailedRevenue.breakdown30d
-                          : _revenueTimeframe == 'allTime'
-                          ? detailedRevenue.breakdownAllTime
-                          : detailedRevenue.breakdown24h;
-                      return bd.services.toStringAsFixed(2);
-                    })()}',
-                  ),
-                ]),
+                ),
               ]),
-              div(classes: 'flex items-center justify-between', [
-                span([Component.text('Rentals (Lessor 3%, Lessee 3%, Listing 1.5%)')]),
-                span(classes: 'font-bold text-zinc-800', [
-                  Component.text(
-                    '₱${(() {
-                      final bd = _revenueTimeframe == '7d'
-                          ? detailedRevenue.breakdown7d
-                          : _revenueTimeframe == '30d'
-                          ? detailedRevenue.breakdown30d
-                          : _revenueTimeframe == 'allTime'
-                          ? detailedRevenue.breakdownAllTime
-                          : detailedRevenue.breakdown24h;
-                      return bd.rentals.toStringAsFixed(2);
-                    })()}',
-                  ),
+              div(classes: 'flex flex-col gap-1.5 pt-2 border-t border-zinc-100 text-[9px] font-semibold text-zinc-500', [
+                div(classes: 'flex items-center justify-between', [
+                  span([Component.text('Services (Employer 10%, Worker 3%)')]),
+                  span(classes: 'font-bold text-zinc-800', [
+                    Component.text(
+                      '₱${(() {
+                        final bd = _revenueTimeframe == '7d'
+                            ? detailedRevenue.breakdown7d
+                            : _revenueTimeframe == '30d'
+                            ? detailedRevenue.breakdown30d
+                            : _revenueTimeframe == 'allTime'
+                            ? detailedRevenue.breakdownAllTime
+                            : detailedRevenue.breakdown24h;
+                        return bd.services.toStringAsFixed(2);
+                      })()}',
+                    ),
+                  ]),
                 ]),
-              ]),
-              div(classes: 'flex items-center justify-between', [
-                span([Component.text('Withdrawals (Workers 2% Platform Fee)')]),
-                span(classes: 'font-bold text-zinc-800', [
-                  Component.text(
-                    '₱${(() {
-                      final bd = _revenueTimeframe == '7d'
-                          ? detailedRevenue.breakdown7d
-                          : _revenueTimeframe == '30d'
-                          ? detailedRevenue.breakdown30d
-                          : _revenueTimeframe == 'allTime'
-                          ? detailedRevenue.breakdownAllTime
-                          : detailedRevenue.breakdown24h;
-                      return bd.withdrawals.toStringAsFixed(2);
-                    })()}',
-                  ),
+                div(classes: 'flex items-center justify-between', [
+                  span([Component.text('Rentals (Lessor 3%, Lessee 3%, Listing 1.5%)')]),
+                  span(classes: 'font-bold text-zinc-800', [
+                    Component.text(
+                      '₱${(() {
+                        final bd = _revenueTimeframe == '7d'
+                            ? detailedRevenue.breakdown7d
+                            : _revenueTimeframe == '30d'
+                            ? detailedRevenue.breakdown30d
+                            : _revenueTimeframe == 'allTime'
+                            ? detailedRevenue.breakdownAllTime
+                            : detailedRevenue.breakdown24h;
+                        return bd.rentals.toStringAsFixed(2);
+                      })()}',
+                    ),
+                  ]),
                 ]),
-              ]),
-              div(
-                classes: 'grid grid-cols-2 gap-1 mt-1 text-[8px] font-bold text-zinc-400 border-t border-zinc-50 pt-1',
-                [
-                  span([Component.text('24H: ₱${detailedRevenue.rev24h.toStringAsFixed(0)}')]),
-                  if (isAdmin) ...[
+                div(classes: 'flex items-center justify-between', [
+                  span([Component.text('Withdrawals (Workers 2% Platform Fee)')]),
+                  span(classes: 'font-bold text-zinc-800', [
+                    Component.text(
+                      '₱${(() {
+                        final bd = _revenueTimeframe == '7d'
+                            ? detailedRevenue.breakdown7d
+                            : _revenueTimeframe == '30d'
+                            ? detailedRevenue.breakdown30d
+                            : _revenueTimeframe == 'allTime'
+                            ? detailedRevenue.breakdownAllTime
+                            : detailedRevenue.breakdown24h;
+                        return bd.withdrawals.toStringAsFixed(2);
+                      })()}',
+                    ),
+                  ]),
+                ]),
+                div(
+                  classes: 'grid grid-cols-2 gap-1 mt-1 text-[8px] font-bold text-zinc-400 border-t border-zinc-50 pt-1',
+                  [
+                    span([Component.text('24H: ₱${detailedRevenue.rev24h.toStringAsFixed(0)}')]),
                     span([Component.text('7D: ₱${detailedRevenue.rev7d.toStringAsFixed(0)}')]),
                     span([Component.text('30D: ₱${detailedRevenue.rev30d.toStringAsFixed(0)}')]),
                     span([Component.text('ACC: ₱${detailedRevenue.revAllTime.toStringAsFixed(0)}')]),
                   ],
-                ],
-              ),
-            ]),
-          ],
-        ),
+                ),
+              ]),
+            ],
+          )
+        else
+          div(
+            classes: 'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)] lg:col-span-1',
+            [
+              div(classes: 'flex items-start justify-between', [
+                div(classes: 'flex flex-col gap-0.5 min-w-0', [
+                  span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                    Component.text('Action Required'),
+                  ]),
+                  h4(classes: 'text-2xl font-black text-rose-600 tracking-tight mt-1 truncate', [
+                    Component.text('${p2pMetrics.pendingDeposits + p2pMetrics.pendingWithdrawals + kycStats.pending + pendingChatsCount} Tasks'),
+                  ]),
+                ]),
+                div(
+                  classes: 'w-8 h-8 rounded-2xl flex items-center justify-center text-lg bg-rose-50 text-rose-500 flex-shrink-0',
+                  [Component.text('⚡')],
+                ),
+              ]),
+              div(classes: 'flex flex-col gap-1.5 pt-2 border-t border-zinc-100 text-[9px] font-semibold text-zinc-500', [
+                div(classes: 'flex items-center justify-between', [
+                  span([Component.text('Pending Deposits')]),
+                  span(classes: 'font-bold text-zinc-800', [Component.text('${p2pMetrics.pendingDeposits}')]),
+                ]),
+                div(classes: 'flex items-center justify-between', [
+                  span([Component.text('Pending Cashouts')]),
+                  span(classes: 'font-bold text-zinc-800', [Component.text('${p2pMetrics.pendingWithdrawals}')]),
+                ]),
+                div(classes: 'flex items-center justify-between', [
+                  span([Component.text('Pending KYC')]),
+                  span(classes: 'font-bold text-zinc-800', [Component.text('${kycStats.pending}')]),
+                ]),
+                div(classes: 'flex items-center justify-between border-t border-zinc-50 pt-1', [
+                  span([Component.text('Live Unassigned Chats')]),
+                  span(classes: 'font-bold text-rose-600', [Component.text('$pendingChatsCount')]),
+                ]),
+              ]),
+            ],
+          ),
 
         // 2. Active Users Card (breakdown by type)
         div(
@@ -1649,7 +1708,7 @@ class _DashboardState extends State<Dashboard> {
       ]),
 
       // ── P2P Liquidity & Agent Settlement Hub ──────────────────
-      _buildP2PMetricsSection(context, p2pMetrics),
+      _buildP2PMetricsSection(context, p2pMetrics, isAdmin),
 
       // ── Charts Row ─────────────────────────────────────────────
       if (isAdmin)
@@ -2005,7 +2064,7 @@ class _DashboardState extends State<Dashboard> {
     return '${diff.inDays}d ago';
   }
 
-  Component _buildP2PMetricsSection(BuildContext context, P2PDashboardMetrics p2p) {
+  Component _buildP2PMetricsSection(BuildContext context, P2PDashboardMetrics p2p, bool isAdmin) {
     return div(
       classes: 'bg-white rounded-[28px] border border-zinc-200/60 p-6 flex flex-col gap-6 shadow-[0_8px_30px_rgba(0,0,0,0.02)]',
       [
@@ -2065,24 +2124,32 @@ class _DashboardState extends State<Dashboard> {
 
         // 4 KPI Summary Cards
         div(classes: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4', [
-          // 1. Gross P2P Settled Volume
+          // 1. Gross P2P Settled Volume (Admin) or Active Settlement Load (Staff)
           div(
             classes: 'p-4 rounded-2xl bg-zinc-50/80 border border-zinc-200/70 flex flex-col justify-between gap-3',
             [
               div(classes: 'flex items-center justify-between', [
                 span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
-                  Component.text('Total Settled Volume'),
+                  Component.text(isAdmin ? 'Total Settled Volume' : 'Total Queue Items'),
                 ]),
-                span(classes: 'text-sm', [Component.text('💰')]),
+                span(classes: 'text-sm', [Component.text(isAdmin ? '💰' : '📋')]),
               ]),
               div(classes: 'flex flex-col gap-0.5', [
                 h4(classes: 'text-xl font-black text-zinc-900 tracking-tight', [
-                  Component.text('₱${p2p.totalP2PVolume.toStringAsFixed(2)}'),
+                  Component.text(isAdmin
+                      ? '₱${p2p.totalP2PVolume.toStringAsFixed(2)}'
+                      : '${p2p.pendingDeposits + p2p.pendingWithdrawals} Active'),
                 ]),
                 div(classes: 'flex items-center gap-3 text-[10px] font-bold text-zinc-500 mt-1', [
-                  span([Component.text('In: ₱${p2p.approvedDepositVolume.toStringAsFixed(0)}')]),
-                  span(classes: 'text-zinc-300', [Component.text('•')]),
-                  span([Component.text('Out: ₱${p2p.approvedWithdrawalVolume.toStringAsFixed(0)}')]),
+                  if (isAdmin) ...[
+                    span([Component.text('In: ₱${p2p.approvedDepositVolume.toStringAsFixed(0)}')]),
+                    span(classes: 'text-zinc-300', [Component.text('•')]),
+                    span([Component.text('Out: ₱${p2p.approvedWithdrawalVolume.toStringAsFixed(0)}')]),
+                  ] else ...[
+                    span([Component.text('Deposits: ${p2p.pendingDeposits}')]),
+                    span(classes: 'text-zinc-300', [Component.text('•')]),
+                    span([Component.text('Cashouts: ${p2p.pendingWithdrawals}')]),
+                  ],
                 ]),
               ]),
             ],

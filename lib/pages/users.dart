@@ -599,11 +599,17 @@ class _UsersPageState extends State<UsersPage> {
     final usersAsync = context.watch(usersStreamProvider);
     final adminUsersAsync = context.watch(adminUsersStreamProvider);
     final txsAsync = context.watch(blockchainTxStreamProvider);
+    final profile = context.watch(currentAdminProfileProvider).value;
     final user = context.watch(adminCurrentUserProvider).value;
     final toast = context.watch(toastMessageProvider);
 
-    final userEmail = (user as dynamic)?.email ?? '';
-    final isAdmin = userEmail.toLowerCase().contains('admin') || userEmail == 'sarah.johnson@tranyx.com';
+    final userEmail = (profile?.email.isNotEmpty == true ? profile!.email : user?.email) ?? '';
+    final userRole = profile?.role.toLowerCase() ?? '';
+    final isAdmin = userEmail.toLowerCase().contains('admin') || userEmail == 'admin@tranyx.app' || userRole.contains('admin');
+
+    if (!isAdmin && (activeTab == 'support' || activeTab == 'admin')) {
+      Future.microtask(() => context.read(usersTabProvider.notifier).state = 'platform');
+    }
 
     Component buildTabButton(String label, String value) {
       final isActive = activeTab == value;
@@ -959,20 +965,21 @@ class _UsersPageState extends State<UsersPage> {
                           ),
                         ]),
 
-                        button(
-                          onClick: () async {
-                            if (web.window.confirm(
-                              'PERMANENTLY DELETE account for ${_selectedUser!.name}? This cannot be undone.',
-                            )) {
-                              final firestore = context.read(firestoreProvider);
-                              await firestore.collection('users').doc(_selectedUser!.uid).delete();
-                              _showToast('🗑️ User account deleted.');
-                              setState(() => _selectedUser = null);
-                            }
-                          },
-                          classes: 'px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-wide rounded-xl shadow-md shadow-red-500/10 transition-all',
-                          [Component.text('Delete Account')],
-                        ),
+                        if (isAdmin)
+                          button(
+                            onClick: () async {
+                              if (web.window.confirm(
+                                'PERMANENTLY DELETE account for ${_selectedUser!.name}? This cannot be undone.',
+                              )) {
+                                final firestore = context.read(firestoreProvider);
+                                await firestore.collection('users').doc(_selectedUser!.uid).delete();
+                                _showToast('🗑️ User account deleted.');
+                                setState(() => _selectedUser = null);
+                              }
+                            },
+                            classes: 'px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-wide rounded-xl shadow-md shadow-red-500/10 transition-all',
+                            [Component.text('Delete Account')],
+                          ),
                       ],
                     ),
                   ]),
@@ -1226,7 +1233,7 @@ class _UsersPageState extends State<UsersPage> {
                                       Component.text('COMPLETED'),
                                     ],
                                   )
-                                else
+                                else if (isAdmin)
                                   button(
                                     onClick: () => _awardQuest(
                                       _selectedUser!,
@@ -1237,65 +1244,68 @@ class _UsersPageState extends State<UsersPage> {
                                     ),
                                     classes: 'px-2.5 py-1 bg-black hover:bg-zinc-800 text-white text-[8px] font-black uppercase tracking-wider rounded-lg transition-all flex-shrink-0',
                                     [Component.text('Award')],
-                                  ),
+                                  )
+                                else
+                                  span(classes: 'text-[8px] font-bold text-zinc-400', [Component.text('Pending')]),
                               ],
                             );
                           }(),
                       ]),
                     ]),
 
-                    // Award Custom Points Section
-                    div(classes: 'flex flex-col gap-3 border-t border-zinc-100 pt-4', [
-                      h4(classes: 'text-xs font-black text-zinc-900', [
-                        Component.text('Award Custom Rewards & Bonuses'),
-                      ]),
-                      div(classes: 'grid grid-cols-1 sm:grid-cols-3 gap-2.5', [
-                        div(classes: 'flex flex-col gap-1', [
-                          label(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
-                            Component.text('Reward Title'),
+                    // Award Custom Points Section (Admin Only)
+                    if (isAdmin)
+                      div(classes: 'flex flex-col gap-3 border-t border-zinc-100 pt-4', [
+                        h4(classes: 'text-xs font-black text-zinc-900', [
+                          Component.text('Award Custom Rewards & Bonuses'),
+                        ]),
+                        div(classes: 'grid grid-cols-1 sm:grid-cols-3 gap-2.5', [
+                          div(classes: 'flex flex-col gap-1', [
+                            label(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                              Component.text('Reward Title'),
+                            ]),
+                            input(
+                              value: _customRewardTitle,
+                              onInput: (v) => setState(() => _customRewardTitle = v as String),
+                              classes: 'px-3 py-2 bg-[#f3f6f4] border border-zinc-200 rounded-lg text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/20',
+                              attributes: {'placeholder': 'e.g. Community Bonus'},
+                            ),
                           ]),
-                          input(
-                            value: _customRewardTitle,
-                            onInput: (v) => setState(() => _customRewardTitle = v as String),
-                            classes: 'px-3 py-2 bg-[#f3f6f4] border border-zinc-200 rounded-lg text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/20',
-                            attributes: {'placeholder': 'e.g. Community Bonus'},
-                          ),
-                        ]),
-                        div(classes: 'flex flex-col gap-1', [
-                          label(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
-                            Component.text('Points'),
+                          div(classes: 'flex flex-col gap-1', [
+                            label(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                              Component.text('Points'),
+                            ]),
+                            input(
+                              value: _customRewardPoints.toString(),
+                              onInput: (v) {
+                                final val = int.tryParse(v as String) ?? 0;
+                                setState(() => _customRewardPoints = val);
+                              },
+                              classes: 'px-3 py-2 bg-[#f3f6f4] border border-zinc-200 rounded-lg text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/20',
+                              attributes: {'type': 'number'},
+                            ),
                           ]),
-                          input(
-                            value: _customRewardPoints.toString(),
-                            onInput: (v) {
-                              final val = int.tryParse(v as String) ?? 0;
-                              setState(() => _customRewardPoints = val);
-                            },
-                            classes: 'px-3 py-2 bg-[#f3f6f4] border border-zinc-200 rounded-lg text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/20',
-                            attributes: {'type': 'number'},
-                          ),
-                        ]),
-                        div(classes: 'flex flex-col gap-1 justify-end', [
-                          button(
-                            onClick: () {
-                              final title = _customRewardTitle.trim();
-                              if (title.isEmpty || _customRewardPoints <= 0) {
-                                _showToast('⚠️ Please enter a title and points value > 0.');
-                                return;
-                              }
-                              final questId = 'custom_${DateTime.now().millisecondsSinceEpoch}';
-                              _awardQuest(_selectedUser!, questId, title, 'Custom', _customRewardPoints);
-                              setState(() {
-                                _customRewardTitle = '';
-                                _customRewardPoints = 100;
-                              });
-                            },
-                            classes: 'w-full py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md shadow-indigo-500/10 transition-all text-center',
-                            [Component.text('Award Custom')],
-                          ),
+                          div(classes: 'flex flex-col gap-1 justify-end', [
+                            button(
+                              onClick: () {
+                                final title = _customRewardTitle.trim();
+                                if (title.isEmpty || _customRewardPoints <= 0) {
+                                  _showToast('⚠️ Please enter a title and points value > 0.');
+                                  return;
+                                }
+                                final questId = 'custom_${DateTime.now().millisecondsSinceEpoch}';
+                                _awardQuest(_selectedUser!, questId, title, 'Custom', _customRewardPoints);
+                                setState(() {
+                                  _customRewardTitle = '';
+                                  _customRewardPoints = 100;
+                                });
+                              },
+                              classes: 'w-full py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md shadow-indigo-500/10 transition-all text-center',
+                              [Component.text('Award Custom')],
+                            ),
+                          ]),
                         ]),
                       ]),
-                    ]),
                   ]),
                 ],
               ],
@@ -1334,8 +1344,10 @@ class _UsersPageState extends State<UsersPage> {
               // Tabs styled in capsules
               div(classes: 'flex items-center gap-1 bg-white p-1 border border-zinc-200/50 rounded-full shadow-sm', [
                 buildTabButton('👥 Users', 'platform'),
-                buildTabButton('🛡️ Agents / Staff', 'support'),
-                buildTabButton('🔑 Admins', 'admin'),
+                if (isAdmin) ...[
+                  buildTabButton('🛡️ Agents / Staff', 'support'),
+                  buildTabButton('🔑 Admins', 'admin'),
+                ],
               ]),
               // Add Agent / Admin button (on support and admin tabs)
               if ((activeTab == 'support' || activeTab == 'admin') && isAdmin)
