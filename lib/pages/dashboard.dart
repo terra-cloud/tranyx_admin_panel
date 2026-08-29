@@ -130,6 +130,8 @@ class RevenueStats {
 }
 
 class StaffPerformance {
+  final String uid;
+  final String email;
   final String name;
   final String role;
   final int p2pHandled;
@@ -141,6 +143,8 @@ class StaffPerformance {
   final String? photoUrl;
 
   StaffPerformance({
+    this.uid = '',
+    this.email = '',
     required this.name,
     required this.role,
     required this.p2pHandled,
@@ -1031,6 +1035,8 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
 
       rawList.add(
         StaffPerformance(
+          uid: uid,
+          email: rawEmail,
           name: name,
           role: role == 'support' ? 'Support Agent' : (role == 'agent' ? 'P2P Agent' : role.toUpperCase()),
           p2pHandled: p2p,
@@ -1055,6 +1061,8 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
         csat = 100.0;
       }
       list.add(StaffPerformance(
+        uid: item.uid,
+        email: item.email,
         name: item.name,
         role: item.role,
         p2pHandled: item.p2pHandled,
@@ -1639,18 +1647,30 @@ class _DashboardState extends State<Dashboard> {
     final monthlyUsers = context.watch(monthlyNewUsersProvider).value ?? List<int>.filled(12, 0);
     final staffList = context.watch(platformStaffProvider).value ?? [];
     final staffRoster = context.watch(allStaffRosterProvider).value ?? [];
+    final totalAgentsResolvedPlatform = staffList.fold<int>(0, (acc, item) => acc + item.totalResolved);
+
+    final currentUid = user?.uid ?? profile?.uid ?? '';
+    final currentEmail = (user?.email ?? profile?.email ?? '').trim().toLowerCase();
+    final currentName = (profile?.name ?? user?.displayName ?? '').trim().toLowerCase();
+
     final myStaffProfile = staffList.firstWhere(
-      (staff) =>
-          profile?.name.isNotEmpty == true &&
-          staff.name.toLowerCase() == profile!.name.toLowerCase(),
+      (staff) {
+        if (currentUid.isNotEmpty && staff.uid == currentUid) return true;
+        if (currentEmail.isNotEmpty && staff.email.toLowerCase() == currentEmail) return true;
+        if (currentName.isNotEmpty && staff.name.toLowerCase() == currentName) return true;
+        return false;
+      },
       orElse: () => StaffPerformance(
-        name: profile?.name.isNotEmpty == true ? profile!.name : (user?.displayName ?? 'Agent'),
+        uid: currentUid,
+        email: currentEmail,
+        name: (profile?.name.isNotEmpty == true) ? profile!.name : (user?.displayName ?? 'Agent'),
         role: profile?.role ?? 'staff',
         p2pHandled: 0,
         ticketsHandled: 0,
         liveSupportHandled: 0,
         totalHandled: 0,
-        csat: 98.0,
+        totalResolved: 0,
+        csat: 0.0,
       ),
     );
 
@@ -1813,7 +1833,7 @@ class _DashboardState extends State<Dashboard> {
 
       // ── Agent Personal Performance (Staff) / Live Active Agents Tracker (Admin) (Top Placement) ──
       if (!isAdmin)
-        _buildAgentTopPerformanceSection(myStaffProfile)
+        _buildAgentTopPerformanceSection(myStaffProfile, totalAgentsResolvedPlatform)
       else
         _buildAdminActiveAgentsTrackerSection(staffRoster),
 
@@ -2731,24 +2751,36 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Component _buildAgentTopPerformanceSection(StaffPerformance myStaffProfile) {
-    final csatScore = myStaffProfile.csat > 0 ? myStaffProfile.csat : 98.0;
+  Component _buildAgentTopPerformanceSection(StaffPerformance myStaffProfile, int totalAgentsResolvedPlatform) {
+    final csatScore = myStaffProfile.csat;
+    final totalResolved = myStaffProfile.totalResolved;
+    final shareText = totalAgentsResolvedPlatform > 0
+        ? '(${myStaffProfile.totalResolved} ÷ $totalAgentsResolvedPlatform) × 100'
+        : (totalResolved > 0 ? '$totalResolved resolved' : '0 resolved');
+    final csatPercent = csatScore.clamp(0.0, 100.0);
+
     return div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5', [
       // My Agent Performance (2/3)
       div(
         classes: 'lg:col-span-2 bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
         [
-          div(classes: 'flex justify-between items-center border-b border-zinc-50 pb-4', [
+          div(classes: 'flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-zinc-50 pb-4', [
             div([
               h3(classes: 'text-sm font-black text-zinc-900', [Component.text('My Performance & Score')]),
               p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
                 Component.text('Your active operational throughput and resolution metrics'),
               ]),
             ]),
-            span(
-              classes: 'px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-full text-indigo-700 text-[10px] font-black uppercase tracking-wider',
-              [Component.text('Score: ${myStaffProfile.totalHandled} pts')],
-            ),
+            div(classes: 'flex items-center gap-2 flex-wrap', [
+              span(
+                classes: 'px-3 py-1 bg-emerald-50 border border-emerald-200/70 rounded-full text-emerald-700 text-[10px] font-black uppercase tracking-wider',
+                [Component.text('$totalResolved Resolved Tasks')],
+              ),
+              span(
+                classes: 'px-3 py-1 bg-indigo-50 border border-indigo-100 rounded-full text-indigo-700 text-[10px] font-black uppercase tracking-wider',
+                [Component.text('Total Handled: ${myStaffProfile.totalHandled}')],
+              ),
+            ]),
           ]),
           div(classes: 'grid grid-cols-1 sm:grid-cols-3 gap-4 py-1', [
             div(classes: 'bg-[#fafcfa] border border-zinc-200/60 rounded-2xl p-4 flex flex-col gap-2', [
@@ -2799,13 +2831,25 @@ class _DashboardState extends State<Dashboard> {
 
       // CSAT Average Circular Graph Card (1/3)
       div(
-        classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)] items-center justify-between text-center',
+        classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.01)] items-center justify-between text-center',
         [
-          div(classes: 'w-full text-left border-b border-zinc-50 pb-3', [
-            h3(classes: 'text-sm font-black text-zinc-900', [Component.text('CSAT Satisfaction')]),
-            p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
-              Component.text('Customer satisfaction average score'),
+          div(classes: 'w-full flex items-center justify-between border-b border-zinc-50 pb-3', [
+            div(classes: 'text-left', [
+              h3(classes: 'text-sm font-black text-zinc-900', [Component.text('CSAT Satisfaction')]),
+              p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
+                Component.text('Your platform resolution share'),
+              ]),
             ]),
+            button(
+              onClick: () => setState(() => _showTopCsatModal = true),
+              classes:
+                  'flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 hover:bg-amber-100/80 border border-amber-200/80 rounded-xl text-[10px] font-black text-amber-900 transition-all shadow-xs cursor-pointer border-0 outline-none',
+              attributes: {'title': 'View Top 3 CSAT Leaderboard'},
+              [
+                span(classes: 'text-xs', [Component.text('🏆')]),
+                Component.text('Top 3 CSAT'),
+              ],
+            ),
           ]),
           div(
             classes: 'relative flex items-center justify-center my-1',
@@ -2814,7 +2858,7 @@ class _DashboardState extends State<Dashboard> {
                 attributes: {
                   'style':
                       'width:130px;height:130px;border-radius:50%;'
-                      'background:conic-gradient(#0fa958 0% $csatScore%, #e2e8f0 $csatScore% 100%);'
+                      'background:conic-gradient(#0fa958 0% $csatPercent%, #e2e8f0 $csatPercent% 100%);'
                       'display:flex;align-items:center;justify-content:center;',
                 },
                 [
@@ -2823,7 +2867,7 @@ class _DashboardState extends State<Dashboard> {
                     attributes: {'style': 'width:96px;height:96px;'},
                     [
                       span(classes: 'text-2xl font-black text-zinc-900 tracking-tight', [
-                        Component.text('${csatScore.toStringAsFixed(0)}%'),
+                        Component.text(csatScore > 0 ? '${csatScore.toStringAsFixed(1)}%' : '0.0%'),
                       ]),
                       span(classes: 'text-[8px] font-extrabold uppercase tracking-wider text-emerald-600', [
                         Component.text('CSAT'),
@@ -2834,12 +2878,14 @@ class _DashboardState extends State<Dashboard> {
               ),
             ],
           ),
-          div(classes: 'w-full flex flex-col gap-1 border-t border-zinc-50 pt-3', [
-            span(classes: 'text-xs font-black text-zinc-800', [
-              Component.text('🌟 Excellent Quality Rating'),
-            ]),
-            span(classes: 'text-[10px] text-zinc-400 font-semibold', [
-              Component.text('Target CSAT benchmark is ≥95% across all support interactions.'),
+          div(classes: 'w-full flex flex-col items-center gap-1.5 border-t border-zinc-50 pt-3', [
+            div(
+              classes:
+                  'text-[10px] font-mono font-bold text-zinc-600 bg-zinc-50 px-2 py-0.5 rounded-md border border-zinc-200/70 shadow-2xs',
+              [Component.text(shareText)],
+            ),
+            span(classes: 'text-[10px] text-zinc-400 font-semibold text-center', [
+              Component.text('Calculated as (Your Resolved Tasks ÷ Total Tasks Resolved by Agents) × 100'),
             ]),
           ]),
         ],
