@@ -1481,6 +1481,7 @@ class _DashboardState extends State<Dashboard> {
   String _searchQuery = '';
   String _revenueTimeframe = '24h';
   String _rosterFilter = 'all';
+  bool _showTopCsatModal = false;
 
   @override
   Component build(BuildContext context) {
@@ -2283,6 +2284,10 @@ class _DashboardState extends State<Dashboard> {
             ]),
           ],
         ),
+
+      // Top 3 CSAT Champions Modal
+      if (_showTopCsatModal)
+        _buildTopCsatModal(staffRoster),
     ]);
   }
 
@@ -2332,6 +2337,16 @@ class _DashboardState extends State<Dashboard> {
               _rosterFilterButton('away', '🟠 AFK ($awayCount)'),
               _rosterFilterButton('offline', '⚪ Offline ($offlineCount)'),
             ]),
+            button(
+              onClick: () => setState(() => _showTopCsatModal = true),
+              classes:
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-950 bg-gradient-to-r from-amber-200 via-amber-300 to-amber-200 hover:from-amber-300 hover:to-amber-300 border border-amber-300/80 shadow-sm hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex-shrink-0',
+              attributes: {'title': 'View Top 3 CSAT Performers'},
+              [
+                span(classes: 'text-sm', [Component.text('🏆')]),
+                Component.text('Top 3 CSAT'),
+              ],
+            ),
             a(
               href: '/users',
               classes:
@@ -3130,6 +3145,171 @@ class _DashboardState extends State<Dashboard> {
                     ],
                   ),
               ]),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Component _buildTopCsatModal(List<StaffRosterMember> roster) {
+    final sorted = List<StaffRosterMember>.from(roster)..sort((memberA, memberB) {
+      if (memberB.csat != memberA.csat) return memberB.csat.compareTo(memberA.csat);
+      final totalA = memberA.p2pHandled + memberA.ticketsHandled + memberA.liveSupportHandled;
+      final totalB = memberB.p2pHandled + memberB.ticketsHandled + memberB.liveSupportHandled;
+      return totalB.compareTo(totalA);
+    });
+
+    final top3 = sorted.take(3).toList();
+
+    return div(
+      classes:
+          'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-fade-in',
+      events: {
+        'click': (e) {
+          setState(() => _showTopCsatModal = false);
+        }
+      },
+      [
+        div(
+          classes:
+              'bg-white rounded-[28px] border border-zinc-200 shadow-2xl max-w-2xl w-full p-6 sm:p-8 flex flex-col gap-6 relative overflow-hidden my-8',
+          events: {'click': (e) => e.stopPropagation()},
+          [
+            // Top Accent Glow
+            div(
+              classes:
+                  'absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500',
+              [],
+            ),
+
+            // Modal Header
+            div(classes: 'flex items-start justify-between gap-4 border-b border-zinc-100 pb-4', [
+              div(classes: 'flex items-center gap-3.5', [
+                div(
+                  classes:
+                      'w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-2xl shadow-sm flex-shrink-0',
+                  [Component.text('🏆')],
+                ),
+                div(classes: 'flex flex-col', [
+                  h3(classes: 'text-base sm:text-lg font-black text-zinc-900', [
+                    Component.text('Top 3 CSAT Performing Agents'),
+                  ]),
+                  p(classes: 'text-xs text-zinc-400 font-medium', [
+                    Component.text('Highest customer satisfaction ratings across all resolved chats and tickets'),
+                  ]),
+                ]),
+              ]),
+              button(
+                onClick: () => setState(() => _showTopCsatModal = false),
+                classes:
+                    'w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-500 hover:text-black flex items-center justify-center text-sm font-bold transition-colors cursor-pointer border-0 outline-none flex-shrink-0',
+                [Component.text('✕')],
+              ),
+            ]),
+
+            // Podium / Top 3 Ranking Cards
+            if (top3.isEmpty)
+              div(classes: 'py-12 text-center flex flex-col items-center gap-2', [
+                span(classes: 'text-3xl', [Component.text('📊')]),
+                span(classes: 'text-xs font-bold text-zinc-500', [Component.text('No agent data available')]),
+              ])
+            else
+              div(classes: 'grid grid-cols-1 sm:grid-cols-3 gap-3.5', [
+                for (var i = 0; i < top3.length; i++)
+                  () {
+                    final agent = top3[i];
+                    final isFirst = i == 0;
+                    final isSecond = i == 1;
+                    final medal = isFirst ? '🥇 1st Place' : isSecond ? '🥈 2nd Place' : '🥉 3rd Place';
+                    final cardBg = isFirst
+                        ? 'bg-gradient-to-b from-amber-50/80 to-amber-100/30 border-amber-300 ring-2 ring-amber-400/20'
+                        : isSecond
+                            ? 'bg-gradient-to-b from-zinc-50 to-zinc-100/50 border-zinc-250'
+                            : 'bg-gradient-to-b from-orange-50/50 to-orange-100/20 border-orange-200';
+                    final badgeColor = isFirst
+                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                        : isSecond
+                            ? 'bg-zinc-200/80 text-zinc-800 border-zinc-300'
+                            : 'bg-orange-100 text-orange-900 border-orange-300';
+
+                    return div(
+                      classes:
+                          'rounded-2xl border p-4 flex flex-col items-center text-center justify-between gap-4 relative $cardBg shadow-sm transition-transform hover:scale-[1.02]',
+                      [
+                        div(classes: 'flex flex-col items-center gap-2.5 w-full', [
+                          // Place badge
+                          span(
+                            classes:
+                                'px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border $badgeColor',
+                            [Component.text(medal)],
+                          ),
+                          // Avatar
+                          div(
+                            classes:
+                                'relative w-12 h-12 rounded-full bg-indigo-50 border-2 border-white shadow-md flex items-center justify-center font-black text-sm text-zinc-700 overflow-hidden',
+                            attributes: {
+                              'style':
+                                  'width: 48px; height: 48px; min-width: 48px; min-height: 48px; max-width: 48px; max-height: 48px;'
+                            },
+                            [
+                              if (agent.photoUrl != null && agent.photoUrl!.isNotEmpty)
+                                img(
+                                  src: agent.photoUrl!,
+                                  classes: 'w-full h-full object-cover block',
+                                  attributes: {'style': 'width: 48px; height: 48px; object-fit: cover;'},
+                                  alt: agent.name,
+                                )
+                              else
+                                Component.text(
+                                  agent.name.length >= 2 ? agent.name.substring(0, 2).toUpperCase() : agent.name.toUpperCase(),
+                                ),
+                            ],
+                          ),
+                          // Name & Role
+                          div(classes: 'flex flex-col items-center min-w-0 w-full', [
+                            h4(classes: 'text-xs font-black text-zinc-900 truncate w-full', [Component.text(agent.name)]),
+                            span(classes: 'text-[10px] text-zinc-400 font-medium truncate w-full', [Component.text(agent.role)]),
+                          ]),
+                        ]),
+
+                        // CSAT Score & Operations Breakdown
+                        div(classes: 'flex flex-col items-center gap-1.5 w-full pt-3 border-t border-zinc-200/50', [
+                          div(
+                            classes:
+                                'px-3 py-1 rounded-xl text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200/70 shadow-sm',
+                            [
+                              Component.text(agent.csat > 0 ? '${agent.csat.toStringAsFixed(1)}% CSAT' : '100% CSAT'),
+                            ],
+                          ),
+                          div(classes: 'flex items-center justify-around w-full text-[10px] text-zinc-500 font-bold mt-1', [
+                            div(classes: 'flex flex-col items-center', [
+                              span(classes: 'font-black text-zinc-800 text-xs', [Component.text(agent.ticketsHandled.toString())]),
+                              span(classes: 'text-[9px] text-zinc-400', [Component.text('Tickets')]),
+                            ]),
+                            div(classes: 'flex flex-col items-center', [
+                              span(classes: 'font-black text-zinc-800 text-xs', [Component.text(agent.liveSupportHandled.toString())]),
+                              span(classes: 'text-[9px] text-zinc-400', [Component.text('Chats')]),
+                            ]),
+                            div(classes: 'flex flex-col items-center', [
+                              span(classes: 'font-black text-zinc-800 text-xs', [Component.text(agent.p2pHandled.toString())]),
+                              span(classes: 'text-[9px] text-zinc-400', [Component.text('P2P')]),
+                            ]),
+                          ]),
+                        ]),
+                      ],
+                    );
+                  }(),
+              ]),
+
+            // Footer
+            div(classes: 'flex items-center justify-end gap-3 pt-2 border-t border-zinc-100', [
+              button(
+                onClick: () => setState(() => _showTopCsatModal = false),
+                classes:
+                    'px-5 py-2.5 bg-black hover:bg-zinc-800 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-black/10 cursor-pointer border-0 outline-none',
+                [Component.text('Close')],
+              ),
+            ]),
           ],
         ),
       ],
