@@ -999,13 +999,7 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
   void recalculateAndEmit() {
     if (controller.isClosed) return;
     final list = <StaffPerformance>[];
-
-    final totalPlatformResolvedDeposits = depositDocs.where(_isResolvedDoc).length;
-    final totalPlatformResolvedWithdrawals = withdrawalDocs.where(_isResolvedDoc).length;
-    final totalPlatformResolvedP2p = totalPlatformResolvedDeposits + totalPlatformResolvedWithdrawals;
-    final totalPlatformResolvedTickets = ticketDocs.where(_isResolvedDoc).length;
-    final totalPlatformResolvedChats = chatDocs.where(_isResolvedDoc).length;
-    final totalPlatformResolvedAll = totalPlatformResolvedP2p + totalPlatformResolvedTickets + totalPlatformResolvedChats;
+    final rawList = <StaffPerformance>[];
 
     for (final doc in userDocs) {
       final data = doc.data() as Map<String, dynamic>? ?? {};
@@ -1033,19 +1027,9 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
       final tickets = matchingTickets.length;
       final liveChats = matchingChats.length;
       final total = p2p + tickets + liveChats;
-
-      // CSAT / Resolution Share Formula:
-      // (User resolved tasks / Overall platform count of resolved tasks) * 100
-      double csat = 0.0;
-      if (totalPlatformResolvedAll > 0 && totalResolved > 0) {
-        csat = double.parse(((totalResolved / totalPlatformResolvedAll) * 100.0).toStringAsFixed(1));
-      } else if (totalPlatformResolvedAll == 0 && totalResolved > 0) {
-        csat = 100.0;
-      }
-
       final photo = data['photoURL'] ?? data['photoUrl'] ?? data['avatarUrl'] ?? data['avatar'];
 
-      list.add(
+      rawList.add(
         StaffPerformance(
           name: name,
           role: role == 'support' ? 'Support Agent' : (role == 'agent' ? 'P2P Agent' : role.toUpperCase()),
@@ -1054,10 +1038,33 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
           liveSupportHandled: liveChats,
           totalHandled: total,
           totalResolved: totalResolved,
-          csat: csat,
+          csat: 0.0,
           photoUrl: photo?.toString(),
         ),
       );
+    }
+
+    // Denominator counts ONLY tasks resolved by staff/agents (strictly excludes admins)
+    final totalAgentsResolvedAll = rawList.fold<int>(0, (acc, item) => acc + item.totalResolved);
+
+    for (final item in rawList) {
+      double csat = 0.0;
+      if (totalAgentsResolvedAll > 0 && item.totalResolved > 0) {
+        csat = double.parse(((item.totalResolved / totalAgentsResolvedAll) * 100.0).toStringAsFixed(1));
+      } else if (totalAgentsResolvedAll == 0 && item.totalResolved > 0) {
+        csat = 100.0;
+      }
+      list.add(StaffPerformance(
+        name: item.name,
+        role: item.role,
+        p2pHandled: item.p2pHandled,
+        ticketsHandled: item.ticketsHandled,
+        liveSupportHandled: item.liveSupportHandled,
+        totalHandled: item.totalHandled,
+        totalResolved: item.totalResolved,
+        csat: csat,
+        photoUrl: item.photoUrl,
+      ));
     }
 
     // Rank by CSAT descending, then Total Resolved descending, then Total Handled descending
@@ -1200,13 +1207,7 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
     if (controller.isClosed) return;
     final now = DateTime.now().millisecondsSinceEpoch;
     final result = <StaffRosterMember>[];
-
-    final totalPlatformResolvedDeposits = depositDocs.where(_isResolvedDoc).length;
-    final totalPlatformResolvedWithdrawals = withdrawalDocs.where(_isResolvedDoc).length;
-    final totalPlatformResolvedP2p = totalPlatformResolvedDeposits + totalPlatformResolvedWithdrawals;
-    final totalPlatformResolvedTickets = ticketDocs.where(_isResolvedDoc).length;
-    final totalPlatformResolvedChats = chatDocs.where(_isResolvedDoc).length;
-    final totalPlatformResolvedAll = totalPlatformResolvedP2p + totalPlatformResolvedTickets + totalPlatformResolvedChats;
+    final rawRoster = <StaffRosterMember>[];
 
     for (final doc in adminDocs) {
       final d = doc.data() as Map<String, dynamic>? ?? {};
@@ -1324,16 +1325,7 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
       final ticketCount = matchingTickets.length;
       final liveSupportCount = matchingChats.length;
 
-      // CSAT / Resolution Share Formula:
-      // (User resolved tasks / Overall platform count of resolved tasks) * 100
-      double csat = 0.0;
-      if (totalPlatformResolvedAll > 0 && totalResolved > 0) {
-        csat = double.parse(((totalResolved / totalPlatformResolvedAll) * 100.0).toStringAsFixed(1));
-      } else if (totalPlatformResolvedAll == 0 && totalResolved > 0) {
-        csat = 100.0;
-      }
-
-      result.add(StaffRosterMember(
+      rawRoster.add(StaffRosterMember(
         uid: uid,
         name: name,
         email: email,
@@ -1346,6 +1338,33 @@ final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
         ticketsHandled: ticketCount,
         liveSupportHandled: liveSupportCount,
         totalResolved: totalResolved,
+        csat: 0.0,
+      ));
+    }
+
+    // Denominator counts ONLY tasks resolved by staff/agents (strictly excludes admins)
+    final totalAgentsResolvedAll = rawRoster.fold<int>(0, (acc, m) => acc + m.totalResolved);
+
+    for (final member in rawRoster) {
+      double csat = 0.0;
+      if (totalAgentsResolvedAll > 0 && member.totalResolved > 0) {
+        csat = double.parse(((member.totalResolved / totalAgentsResolvedAll) * 100.0).toStringAsFixed(1));
+      } else if (totalAgentsResolvedAll == 0 && member.totalResolved > 0) {
+        csat = 100.0;
+      }
+      result.add(StaffRosterMember(
+        uid: member.uid,
+        name: member.name,
+        email: member.email,
+        role: member.role,
+        photoUrl: member.photoUrl,
+        presenceStatus: member.presenceStatus,
+        lastSeenAt: member.lastSeenAt,
+        currentTaskDetail: member.currentTaskDetail,
+        p2pHandled: member.p2pHandled,
+        ticketsHandled: member.ticketsHandled,
+        liveSupportHandled: member.liveSupportHandled,
+        totalResolved: member.totalResolved,
         csat: csat,
       ));
     }
@@ -3463,7 +3482,7 @@ class _DashboardState extends State<Dashboard> {
                   ]),
                   span(
                     classes: 'text-[10px] font-bold text-zinc-600 bg-white border border-zinc-200 px-2 py-0.5 rounded-md shadow-2xs',
-                    [Component.text('Total Platform Output: $totalPlatformResolved Resolved Tasks')],
+                    [Component.text('Total Agent Output: $totalPlatformResolved Resolved Tasks')],
                   ),
                 ]),
                 div(
@@ -3473,7 +3492,7 @@ class _DashboardState extends State<Dashboard> {
                       span(classes: 'text-[10px] font-bold uppercase tracking-wider text-zinc-400', [Component.text('Formula')]),
                       span(
                         classes: 'text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200/70',
-                        [Component.text('(Agent Resolved Tasks ÷ Total Platform Resolved Tasks) × 100')],
+                        [Component.text('(Agent Resolved Tasks ÷ Total Tasks Resolved by Agents) × 100')],
                       ),
                     ]),
                     div(classes: 'flex items-center gap-2.5 text-[10px] text-zinc-500 font-bold', [
