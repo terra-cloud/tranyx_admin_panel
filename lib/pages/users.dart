@@ -557,6 +557,8 @@ class _UsersPageState extends State<UsersPage> {
         await credential.user!.updateDisplayName(name);
         final uid = credential.user!.uid;
         final now = DateTime.now().millisecondsSinceEpoch;
+        final currentTab = context.read(usersTabProvider);
+        final targetRole = currentTab == 'admin' ? 'admin' : 'staff';
 
         // Write to Admin Firestore (always)
         final adminFirestore = context.read(adminFirestoreProvider);
@@ -564,16 +566,14 @@ class _UsersPageState extends State<UsersPage> {
           'uid': uid,
           'name': name,
           'email': email,
-          'role': 'staff',
-          'idVerified': true,
-          'bgChecked': true,
-          'verificationLevel': 2,
+          'role': targetRole,
           'createdAt': now,
         });
       }
 
       await tempApp.delete();
 
+      final createdRoleTitle = context.read(usersTabProvider) == 'admin' ? 'Administrator' : 'Agent';
       setState(() {
         _showAddAgentForm = false;
         _isCreatingAgent = false;
@@ -581,7 +581,7 @@ class _UsersPageState extends State<UsersPage> {
         _agentEmail = '';
         _agentPassword = '';
       });
-      _showToast('✅ Agent "$name" created successfully!');
+      _showToast('✅ $createdRoleTitle "$name" created successfully!');
     } on fb.FirebaseAuthException catch (e) {
       setState(() => _isCreatingAgent = false);
       _showToast('❌ ${e.message ?? 'Auth registration failed.'}');
@@ -1337,8 +1337,8 @@ class _UsersPageState extends State<UsersPage> {
                 buildTabButton('🛡️ Agents / Staff', 'support'),
                 buildTabButton('🔑 Admins', 'admin'),
               ]),
-              // Add Agent button (only on support tab)
-              if (activeTab == 'support' && isAdmin)
+              // Add Agent / Admin button (on support and admin tabs)
+              if ((activeTab == 'support' || activeTab == 'admin') && isAdmin)
                 button(
                   onClick: () => setState(() => _showAddAgentForm = !_showAddAgentForm),
                   classes:
@@ -1346,20 +1346,26 @@ class _UsersPageState extends State<UsersPage> {
                       'shadow-md shadow-black/10 transition-all flex items-center gap-2',
                   [
                     span(classes: 'text-sm', [Component.text(_showAddAgentForm ? '✕' : '+')]),
-                    Component.text(_showAddAgentForm ? 'Cancel' : 'Add Agent'),
+                    Component.text(_showAddAgentForm ? 'Cancel' : (activeTab == 'admin' ? 'Add Admin' : 'Add Agent')),
                   ],
                 ),
             ]),
           ],
         ),
 
-        // Add Agent Form Card
-        if (_showAddAgentForm && activeTab == 'support')
+        // Add Agent / Admin Form Card
+        if (_showAddAgentForm && (activeTab == 'support' || activeTab == 'admin'))
           div(classes: 'w-full bg-white border border-zinc-200/50 rounded-[24px] p-6 shadow-sm flex flex-col gap-4', [
             div(classes: 'flex flex-col gap-0.5', [
-              h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Create Support Agent')]),
+              h3(classes: 'text-sm font-black text-zinc-900', [
+                Component.text(activeTab == 'admin' ? 'Create Administrator' : 'Create Support Agent'),
+              ]),
               p(classes: 'text-xs text-zinc-400 font-medium', [
-                Component.text('New agents will be added to the support queue and visible in Live Customer Service.'),
+                Component.text(
+                  activeTab == 'admin'
+                      ? 'New administrators will receive full privileges across the admin console.'
+                      : 'New agents will be added to the support queue and visible in Live Customer Service.',
+                ),
               ]),
             ]),
             div(classes: 'grid grid-cols-1 md:grid-cols-3 gap-3', [
@@ -1386,7 +1392,7 @@ class _UsersPageState extends State<UsersPage> {
                   classes:
                       'px-4 py-2.5 bg-[#f3f6f4] border border-zinc-200 rounded-xl text-xs text-zinc-900 '
                       'focus:outline-none focus:ring-2 focus:ring-black/10',
-                  attributes: {'placeholder': 'agent@tranyx.com', 'type': 'email'},
+                  attributes: {'placeholder': activeTab == 'admin' ? 'admin@tranyx.com' : 'agent@tranyx.com', 'type': 'email'},
                 ),
               ]),
               div(classes: 'flex flex-col gap-1.5', [
@@ -1419,7 +1425,7 @@ class _UsersPageState extends State<UsersPage> {
                       Component.text('Creating...'),
                     ])
                   else
-                    Component.text('Create Agent'),
+                    Component.text(activeTab == 'admin' ? 'Create Admin' : 'Create Agent'),
                 ],
               ),
             ]),
@@ -1445,23 +1451,25 @@ class _UsersPageState extends State<UsersPage> {
               return div(
                 classes: 'flex-grow flex flex-col items-center justify-center text-center p-16 bg-white border border-zinc-200/50 rounded-[28px] shadow-sm',
                 [
-                  span(classes: 'text-3xl mb-3', [Component.text(activeTab == 'support' ? '🛡️' : '👥')]),
+                  span(classes: 'text-3xl mb-3', [Component.text(activeTab == 'support' ? '🛡️' : (activeTab == 'admin' ? '🔑' : '👥'))]),
                   h3(classes: 'text-sm font-bold text-zinc-900', [
-                    Component.text(activeTab == 'support' ? 'No support agents found' : 'No accounts found'),
+                    Component.text(activeTab == 'support' ? 'No support agents found' : (activeTab == 'admin' ? 'No administrators found' : 'No accounts found')),
                   ]),
                   p(classes: 'text-xs text-zinc-500 mt-1', [
                     Component.text(
                       activeTab == 'support'
                           ? 'Click "Add Agent" above to create your first support agent.'
-                          : 'No accounts matching this category exist in this environment.',
+                          : (activeTab == 'admin'
+                              ? 'Click "Add Admin" above to register an administrator.'
+                              : 'No accounts matching this category exist in this environment.'),
                     ),
                   ]),
                 ],
               );
             }
 
-            // Support tab has a different (simpler) table view
-            if (activeTab == 'support') {
+            // Support and Admin tabs have the same staff table view (Name, Email, Role, Status, Actions)
+            if (activeTab == 'support' || activeTab == 'admin') {
               return div(
                 classes: 'overflow-x-auto w-full rounded-[28px] border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
                 [
@@ -1470,7 +1478,7 @@ class _UsersPageState extends State<UsersPage> {
                       classes: 'bg-[#f8faf9] text-zinc-500 font-bold border-b border-zinc-100 text-[10px] uppercase tracking-wider',
                       [
                         tr([
-                          th(classes: 'p-5', [Component.text('Agent Name')]),
+                          th(classes: 'p-5', [Component.text(activeTab == 'admin' ? 'Admin Name' : 'Agent Name')]),
                           th(classes: 'p-5', [Component.text('Email')]),
                           th(classes: 'p-5 text-center', [Component.text('Role')]),
                           th(classes: 'p-5 text-center', [Component.text('Status')]),
@@ -1484,7 +1492,7 @@ class _UsersPageState extends State<UsersPage> {
                           td(classes: 'p-5 font-bold text-zinc-900', [
                             div(classes: 'flex items-center gap-2.5', [
                               div(
-                                classes: 'w-7 h-7 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-[10px] font-extrabold text-zinc-700 flex-shrink-0',
+                                classes: 'w-7 h-7 rounded-full ${activeTab == "admin" ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-indigo-50 border-indigo-100 text-zinc-700"} border flex items-center justify-center text-[10px] font-extrabold flex-shrink-0',
                                 [
                                   Component.text(
                                     u.name.length >= 2 ? u.name.substring(0, 2).toUpperCase() : u.name.toUpperCase(),
@@ -1502,9 +1510,9 @@ class _UsersPageState extends State<UsersPage> {
                           td(classes: 'p-5 text-zinc-650 font-medium', [Component.text(u.email)]),
                           td(classes: 'p-5 text-center', [
                             span(
-                              classes: 'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border bg-indigo-50 text-indigo-600 border-indigo-100',
+                              classes: 'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${activeTab == "admin" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-indigo-50 text-indigo-600 border-indigo-100"}',
                               [
-                                Component.text((u.role ?? 'support').toUpperCase()),
+                                Component.text((u.role ?? (activeTab == 'admin' ? 'admin' : 'support')).toUpperCase()),
                               ],
                             ),
                           ]),
@@ -1517,15 +1525,18 @@ class _UsersPageState extends State<UsersPage> {
                             ),
                           ]),
                           td(classes: 'p-5 text-right', [
-                            button(
-                              onClick: () async {
-                                final adminFirestore = context.read(adminFirestoreProvider);
-                                await adminFirestore.collection('users').doc(u.uid).delete();
-                                _showToast('🗑️ Agent "${u.name}" removed.');
-                              },
-                              classes: 'px-3 py-1.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-500 text-[10px] font-extrabold rounded-full transition-all',
-                              [Component.text('Remove Agent')],
-                            ),
+                            if (u.email.toLowerCase() == 'admin@tranyx.app')
+                              span(classes: 'text-[10px] font-bold text-zinc-400 px-3 py-1.5', [Component.text('Protected Root')])
+                            else
+                              button(
+                                onClick: () async {
+                                  final adminFirestore = context.read(adminFirestoreProvider);
+                                  await adminFirestore.collection('users').doc(u.uid).delete();
+                                  _showToast('🗑️ ${activeTab == 'admin' ? 'Admin' : 'Agent'} "${u.name}" removed.');
+                                },
+                                classes: 'px-3 py-1.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-500 text-[10px] font-extrabold rounded-full transition-all',
+                                [Component.text(activeTab == 'admin' ? 'Remove Admin' : 'Remove Agent')],
+                              ),
                           ]),
                         ]),
                     ]),
