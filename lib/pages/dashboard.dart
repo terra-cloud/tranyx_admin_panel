@@ -1041,6 +1041,156 @@ final platformStaffProvider = StreamProvider<List<StaffPerformance>>((ref) {
 
   return controller.stream;
 });
+
+// ── Agent Presence & Live Activity Roster ────────────────────────────────────
+
+class StaffRosterMember {
+  final String uid;
+  final String name;
+  final String email;
+  final String role;
+  final String? photoUrl;
+  final String presenceStatus; // 'online' | 'busy' | 'away' | 'offline'
+  final int lastSeenAt;
+  final String currentTaskDetail;
+
+  StaffRosterMember({
+    required this.uid,
+    required this.name,
+    required this.email,
+    required this.role,
+    this.photoUrl,
+    required this.presenceStatus,
+    required this.lastSeenAt,
+    required this.currentTaskDetail,
+  });
+
+  bool get isWaiting => presenceStatus == 'online';
+  bool get isBusy => presenceStatus == 'busy';
+  bool get isAway => presenceStatus == 'away';
+  bool get isOffline => presenceStatus == 'offline';
+}
+
+final allStaffRosterProvider = StreamProvider<List<StaffRosterMember>>((ref) {
+  final adminDb = ref.watch(adminFirestoreProvider);
+  final userDb = ref.watch(firestoreProvider);
+  final controller = StreamController<List<StaffRosterMember>>();
+
+  List<DocumentSnapshot> adminDocs = [];
+  Map<String, Map<String, dynamic>> userPresenceMap = {};
+  Map<String, String> activeTasksMap = {};
+
+  void emitMerged() {
+    if (controller.isClosed) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final result = <StaffRosterMember>[];
+
+    for (final doc in adminDocs) {
+      final d = doc.data() as Map<String, dynamic>? ?? {};
+      final role = (d['role'] ?? '').toString().toLowerCase().trim();
+      if (role == 'user') continue;
+
+      final uid = doc.id;
+      final rawName = d['name'] ?? d['displayName'];
+      final email = d['email']?.toString() ?? '';
+      final name = (rawName != null && rawName.toString().trim().isNotEmpty)
+          ? rawName.toString().trim()
+          : (email.contains('@') ? email.split('@').first : 'Agent');
+      final photo = d['photoURL'] ?? d['photoUrl'] ?? d['avatarUrl'] ?? d['avatar'];
+
+      final uPres = userPresenceMap[uid] ?? d;
+      final rawStatus = (uPres['presenceStatus'] as String? ?? (uPres['isOnline'] == true ? 'online' : 'offline')).toLowerCase();
+      final lastSeen = getTimestamp(uPres['lastSeenAt'] ?? uPres['lastActiveAt'] ?? uPres['updatedAt']);
+
+      String status = rawStatus;
+      final isRecentlyActive = lastSeen > 0 && (now - lastSeen).abs() < 180000;
+      if (status != 'offline' && !isRecentlyActive && uPres['isOnline'] != true) {
+        status = 'offline';
+      }
+
+      String taskDetail;
+      if (status == 'busy') {
+        taskDetail = activeTasksMap[uid] ?? (uPres['activeTask'] as String? ?? 'Processing active request');
+      } else if (status == 'away') {
+        taskDetail = 'AFK • Window inactive';
+      } else if (status == 'online') {
+        taskDetail = 'Online • Waiting for tasks';
+      } else {
+        taskDetail = 'Offline';
+      }
+
+      result.add(StaffRosterMember(
+        uid: uid,
+        name: name,
+        email: email,
+        role: role.isEmpty ? 'Staff' : (role == 'admin' ? 'Administrator' : (role == 'support' ? 'Support Agent' : role.toUpperCase())),
+        photoUrl: photo?.toString(),
+        presenceStatus: status,
+        lastSeenAt: lastSeen,
+        currentTaskDetail: taskDetail,
+      ));
+    }
+
+    result.sort((agentA, agentB) {
+      int rank(String s) {
+        switch (s) {
+          case 'busy': return 0;
+          case 'online': return 1;
+          case 'away': return 2;
+          default: return 3;
+        }
+      }
+      final cmp = rank(agentA.presenceStatus).compareTo(rank(agentB.presenceStatus));
+      if (cmp != 0) return cmp;
+      return agentA.name.compareTo(agentB.name);
+    });
+
+    controller.add(result);
+  }
+
+  final sub1 = adminDb.collection('users').snapshots().listen((snap) {
+    adminDocs = snap.docs;
+    emitMerged();
+  });
+
+  final sub2 = userDb.collection('users').snapshots().listen((snap) {
+    userPresenceMap = {for (final doc in snap.docs) doc.id: doc.data()};
+    emitMerged();
+  });
+
+  final sub3 = userDb.collection('deposits').where('status', isEqualTo: 'processing').snapshots().listen((snap) {
+    for (final doc in snap.docs) {
+      final claimedBy = doc.data()['claimedBy'] as String?;
+      if (claimedBy != null && claimedBy.isNotEmpty) {
+        final idShort = doc.id.length > 6 ? doc.id.substring(0, 6) : doc.id;
+        activeTasksMap[claimedBy] = 'Handling Deposit #$idShort';
+      }
+    }
+    emitMerged();
+  });
+
+  final sub4 = userDb.collection('withdrawal_requests').where('status', isEqualTo: 'processing').snapshots().listen((snap) {
+    for (final doc in snap.docs) {
+      final claimedBy = doc.data()['claimedBy'] as String?;
+      if (claimedBy != null && claimedBy.isNotEmpty) {
+        final idShort = doc.id.length > 6 ? doc.id.substring(0, 6) : doc.id;
+        activeTasksMap[claimedBy] = 'Handling Cashout #$idShort';
+      }
+    }
+    emitMerged();
+  });
+
+  ref.onDispose(() {
+    sub1.cancel();
+    sub2.cancel();
+    sub3.cancel();
+    sub4.cancel();
+    controller.close();
+  });
+
+  return controller.stream;
+});
+
 // ── Global Search ──────────────────────────────────────────────────────────
 
 class SearchResult {
@@ -1177,6 +1327,7 @@ class Dashboard extends StatefulComponent {
 class _DashboardState extends State<Dashboard> {
   String _searchQuery = '';
   String _revenueTimeframe = '24h';
+  String _rosterFilter = 'all';
 
   @override
   Component build(BuildContext context) {
@@ -1196,6 +1347,7 @@ class _DashboardState extends State<Dashboard> {
     final monthlyRevenue = context.watch(monthlyRevenueProvider).value ?? List<double>.filled(12, 0.0);
     final monthlyUsers = context.watch(monthlyNewUsersProvider).value ?? List<int>.filled(12, 0);
     final staffList = context.watch(platformStaffProvider).value ?? [];
+    final staffRoster = context.watch(allStaffRosterProvider).value ?? [];
     final myStaffProfile = staffList.firstWhere(
       (staff) =>
           profile?.name.isNotEmpty == true &&
@@ -1691,42 +1843,89 @@ class _DashboardState extends State<Dashboard> {
           ],
         ),
 
-        // 5. Open Tickets / Reported Postings Card
-        div(
-          classes: 'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)]',
-          [
-            div(classes: 'flex items-start justify-between', [
-              div(classes: 'flex flex-col gap-0.5', [
-                span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
-                  Component.text('Open Tickets / Reports'),
+        // 5. Active Agents Card (Admin) or Open Tickets / Reports Card (Staff)
+        if (isAdmin)
+          () {
+            final activeTotal = staffRoster.where((member) => !member.isOffline).length;
+            final waitingCount = staffRoster.where((member) => member.isWaiting).length;
+            final busyCount = staffRoster.where((member) => member.isBusy).length;
+            final awayCount = staffRoster.where((member) => member.isAway).length;
+            final offlineCount = staffRoster.where((member) => member.isOffline).length;
+            return div(
+              classes: 'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)]',
+              [
+                div(classes: 'flex items-start justify-between', [
+                  div(classes: 'flex flex-col gap-0.5 min-w-0', [
+                    span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                      Component.text('Active Agents'),
+                    ]),
+                    h4(classes: 'text-2xl font-black text-emerald-600 tracking-tight mt-1 flex items-center gap-1.5 truncate', [
+                      span(classes: 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0', []),
+                      Component.text('$activeTotal / ${staffRoster.length} Active'),
+                    ]),
+                  ]),
+                  div(
+                    classes: 'w-8 h-8 rounded-2xl flex items-center justify-center text-lg bg-emerald-50 text-emerald-600 flex-shrink-0',
+                    [Component.text('🧑‍💼')],
+                  ),
                 ]),
-                h4(classes: 'text-2xl font-black text-red-500 tracking-tight mt-1', [
-                  Component.text((openTicketsCount + reportedListingsCount).toString()),
+                div(classes: 'grid grid-cols-2 gap-1 pt-2 border-t border-zinc-100 text-[8px] font-bold text-zinc-600', [
+                  div(classes: 'flex items-center gap-1.5 bg-emerald-50/80 px-2 py-1 rounded-lg text-emerald-800 truncate', [
+                    span(classes: 'w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0', []),
+                    span(classes: 'font-extrabold truncate', [Component.text('$waitingCount Waiting')]),
+                  ]),
+                  div(classes: 'flex items-center gap-1.5 bg-amber-50/80 px-2 py-1 rounded-lg text-amber-800 truncate', [
+                    span(classes: 'w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0', []),
+                    span(classes: 'font-extrabold truncate', [Component.text('$busyCount Busy')]),
+                  ]),
+                  div(classes: 'flex items-center gap-1.5 bg-orange-50/80 px-2 py-1 rounded-lg text-orange-800 truncate', [
+                    span(classes: 'w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0', []),
+                    span(classes: 'font-extrabold truncate', [Component.text('$awayCount AFK')]),
+                  ]),
+                  div(classes: 'flex items-center gap-1.5 bg-zinc-100 px-2 py-1 rounded-lg text-zinc-500 truncate', [
+                    span(classes: 'w-1.5 h-1.5 rounded-full bg-zinc-400 flex-shrink-0', []),
+                    span(classes: 'font-extrabold truncate', [Component.text('$offlineCount Offline')]),
+                  ]),
                 ]),
+              ],
+            );
+          }()
+        else
+          div(
+            classes: 'bg-white rounded-[22px] border border-zinc-200/50 p-5 flex flex-col gap-3 shadow-[0_4px_20px_rgba(0,0,0,0.02)]',
+            [
+              div(classes: 'flex items-start justify-between', [
+                div(classes: 'flex flex-col gap-0.5', [
+                  span(classes: 'text-[9px] font-extrabold text-zinc-400 uppercase tracking-wider', [
+                    Component.text('Open Tickets / Reports'),
+                  ]),
+                  h4(classes: 'text-2xl font-black text-red-500 tracking-tight mt-1', [
+                    Component.text((openTicketsCount + reportedListingsCount).toString()),
+                  ]),
+                ]),
+                div(
+                  classes:
+                      'w-8 h-8 rounded-2xl flex items-center justify-center text-lg bg-red-50 text-red-500 flex-shrink-0',
+                  [Component.text('🎟️')],
+                ),
               ]),
-              div(
-                classes:
-                    'w-8 h-8 rounded-2xl flex items-center justify-center text-lg bg-red-50 text-red-500 flex-shrink-0',
-                [Component.text('🎟️')],
-              ),
-            ]),
-            div(classes: 'flex flex-col gap-1 pt-2 border-t border-zinc-100 text-[9px] font-semibold text-zinc-500', [
-              div(classes: 'flex items-center justify-between', [
-                span([Component.text('Open Support Tickets')]),
-                span(classes: 'font-bold text-zinc-800', [Component.text(openTicketsCount.toString())]),
+              div(classes: 'flex flex-col gap-1 pt-2 border-t border-zinc-100 text-[9px] font-semibold text-zinc-500', [
+                div(classes: 'flex items-center justify-between', [
+                  span([Component.text('Open Support Tickets')]),
+                  span(classes: 'font-bold text-zinc-800', [Component.text(openTicketsCount.toString())]),
+                ]),
+                div(classes: 'flex items-center justify-between', [
+                  span([Component.text('Reported Postings')]),
+                  span(classes: 'font-bold text-zinc-800', [Component.text(reportedListingsCount.toString())]),
+                ]),
+                a(
+                  href: '/tickets',
+                  classes: 'mt-1.5 text-center text-[8px] font-black uppercase text-indigo-500 hover:text-indigo-600 transition-colors',
+                  [Component.text('RESOLVE PENDING ISSUES →')],
+                ),
               ]),
-              div(classes: 'flex items-center justify-between', [
-                span([Component.text('Reported Postings')]),
-                span(classes: 'font-bold text-zinc-800', [Component.text(reportedListingsCount.toString())]),
-              ]),
-              a(
-                href: '/tickets',
-                classes: 'mt-1.5 text-center text-[8px] font-black uppercase text-indigo-500 hover:text-indigo-600 transition-colors',
-                [Component.text('RESOLVE PENDING ISSUES →')],
-              ),
-            ]),
-          ],
-        ),
+            ],
+          ),
       ]),
 
       // ── P2P Liquidity & Agent Settlement Hub ──────────────────
@@ -1938,7 +2137,11 @@ class _DashboardState extends State<Dashboard> {
           ),
         ]),
 
-      // ── Bottom Row: Top Agents + Platform Config (Admin) / Personal Performance + CSAT (Staff) ──
+      // ── Agent Presence & Live Activity Tracker (Admin Only) ──
+      if (isAdmin)
+        _buildAgentActivityRoster(staffRoster),
+
+      // ── Bottom Row: Top Agents + Platform Config (Admin) ──
       if (isAdmin)
         div(classes: 'grid grid-cols-1 lg:grid-cols-3 gap-5', [
           // Top Performing Agents (2/3)
@@ -2079,6 +2282,138 @@ class _DashboardState extends State<Dashboard> {
           ),
         ]),
     ]);
+  }
+
+  Component _buildAgentActivityRoster(List<StaffRosterMember> roster) {
+    final waitingCount = roster.where((member) => member.isWaiting).length;
+    final busyCount = roster.where((member) => member.isBusy).length;
+    final awayCount = roster.where((member) => member.isAway).length;
+    final offlineCount = roster.where((member) => member.isOffline).length;
+
+    final filteredList = roster.where((agent) {
+      if (_rosterFilter == 'waiting') return agent.isWaiting;
+      if (_rosterFilter == 'busy') return agent.isBusy;
+      if (_rosterFilter == 'away') return agent.isAway;
+      if (_rosterFilter == 'offline') return agent.isOffline;
+      return true;
+    }).toList();
+
+    return div(
+      classes: 'bg-white rounded-[28px] border border-zinc-200/50 p-6 flex flex-col gap-5 shadow-[0_8px_30px_rgba(0,0,0,0.01)]',
+      [
+        div(classes: 'flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-50 pb-4', [
+          div([
+            div(classes: 'flex items-center gap-2', [
+              h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Agent Presence & Live Activity Tracker')]),
+              span(
+                classes: 'px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-[#0fa958] border border-emerald-200/60 flex items-center gap-1',
+                [
+                  span(classes: 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse', []),
+                  Component.text('LIVE ROSTER'),
+                ],
+              ),
+            ]),
+            p(classes: 'text-[10px] text-zinc-400 font-bold mt-0.5', [
+              Component.text('Real-time operational tracking of staff agents: busy in tasks, waiting for requests, AFK, or offline'),
+            ]),
+          ]),
+          // Filter Tabs
+          div(classes: 'flex items-center gap-1 bg-zinc-100/80 p-1 rounded-xl w-max flex-wrap', [
+            _rosterFilterButton('all', 'All (${roster.length})'),
+            _rosterFilterButton('waiting', '🟢 Waiting ($waitingCount)'),
+            _rosterFilterButton('busy', '🟡 Busy ($busyCount)'),
+            _rosterFilterButton('away', '🟠 AFK ($awayCount)'),
+            _rosterFilterButton('offline', '⚪ Offline ($offlineCount)'),
+          ]),
+        ]),
+
+        if (filteredList.isEmpty)
+          div(classes: 'py-8 text-center flex flex-col items-center gap-2', [
+            span(classes: 'text-2xl', [Component.text('🔍')]),
+            span(classes: 'text-xs font-bold text-zinc-600', [Component.text('No agents in this filter status')]),
+          ])
+        else
+          div(classes: 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3', [
+            for (final agent in filteredList)
+              div(
+                classes:
+                    'p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 '
+                    '${agent.isBusy ? "bg-amber-50/40 border-amber-200/60" : agent.isWaiting ? "bg-emerald-50/30 border-emerald-200/50" : agent.isAway ? "bg-orange-50/30 border-orange-200/50" : "bg-[#fafcfa] border-zinc-200/60 opacity-80"}',
+                [
+                  div(classes: 'flex items-center gap-3 min-w-0', [
+                    div(
+                      classes: 'relative w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-black text-zinc-700 text-xs flex-shrink-0 overflow-hidden shadow-sm',
+                      [
+                        if (agent.photoUrl != null && agent.photoUrl!.isNotEmpty)
+                          img(src: agent.photoUrl!, classes: 'w-full h-full object-cover', alt: agent.name)
+                        else
+                          Component.text(
+                            agent.name.length >= 2 ? agent.name.substring(0, 2).toUpperCase() : agent.name.toUpperCase(),
+                          ),
+                        // Status indicator dot
+                        div(
+                          classes:
+                              'absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white '
+                              '${agent.isBusy ? "bg-amber-500 animate-pulse" : agent.isWaiting ? "bg-emerald-500" : agent.isAway ? "bg-orange-500" : "bg-zinc-400"}',
+                          [],
+                        ),
+                      ],
+                    ),
+                    div(classes: 'flex flex-col min-w-0', [
+                      div(classes: 'flex items-center gap-1.5', [
+                        span(classes: 'text-xs font-black text-zinc-900 truncate', [Component.text(agent.name)]),
+                        span(
+                          classes: 'text-[8px] font-extrabold uppercase px-1.5 py-0.2 rounded '
+                              '${agent.role.toLowerCase().contains("admin") ? "bg-amber-100 text-amber-800" : "bg-indigo-50 text-indigo-700 border border-indigo-200/50"}',
+                          [Component.text(agent.role)],
+                        ),
+                      ]),
+                      span(
+                        classes:
+                            'text-[10px] font-bold truncate mt-0.5 '
+                            '${agent.isBusy ? "text-amber-700 font-extrabold" : agent.isWaiting ? "text-emerald-700 font-extrabold" : agent.isAway ? "text-orange-600" : "text-zinc-400"}',
+                        [Component.text(agent.currentTaskDetail)],
+                      ),
+                    ]),
+                  ]),
+
+                  div(classes: 'flex flex-col items-end gap-1 flex-shrink-0', [
+                    span(
+                      classes:
+                          'px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border '
+                          '${agent.isBusy ? "bg-amber-100 text-amber-800 border-amber-300" : agent.isWaiting ? "bg-emerald-100 text-emerald-800 border-emerald-300" : agent.isAway ? "bg-orange-100 text-orange-800 border-orange-300" : "bg-zinc-100 text-zinc-500 border-zinc-200"}',
+                      [
+                        if (agent.isBusy)
+                          Component.text('🟡 Busy')
+                        else if (agent.isWaiting)
+                          Component.text('🟢 Waiting')
+                        else if (agent.isAway)
+                          Component.text('🟠 AFK')
+                        else
+                          Component.text('⚪ Offline'),
+                      ],
+                    ),
+                    if (agent.lastSeenAt > 0 && !agent.isOffline)
+                      span(classes: 'text-[8px] text-zinc-400 font-semibold', [
+                        Component.text('Ping: ${_formatRelativeTime(agent.lastSeenAt)}'),
+                      ]),
+                  ]),
+                ],
+              ),
+          ]),
+      ],
+    );
+  }
+
+  Component _rosterFilterButton(String key, String labelText) {
+    final isSelected = _rosterFilter == key;
+    return button(
+      onClick: () => setState(() => _rosterFilter = key),
+      classes:
+          'px-2.5 py-1 rounded-lg text-[9px] font-extrabold transition-all border-0 cursor-pointer '
+          '${isSelected ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-800 bg-transparent"}',
+      [Component.text(labelText)],
+    );
   }
 
   Component _buildAgentTopPerformanceSection(StaffPerformance myStaffProfile) {
