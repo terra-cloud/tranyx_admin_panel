@@ -34,10 +34,33 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       final auth = context.read(adminAuthProvider);
-      await auth.signInWithEmailAndPassword(
+      final userCred = await auth.signInWithEmailAndPassword(
         email: _email.trim(),
         password: _password,
       );
+
+      final user = userCred.user;
+      if (user == null) {
+        throw FirebaseAuthException(code: 'user-not-found', message: 'User not found.');
+      }
+
+      // Verify the user exists in tranyx-admin-portal staff directory or is an admin
+      final adminFirestore = context.read(adminFirestoreProvider);
+      final userDoc = await adminFirestore.collection('users').doc(user.uid).get();
+      final email = user.email?.toLowerCase().trim() ?? '';
+      final isKnownAdmin = email.contains('admin') || email == 'admin@tranyx.app';
+
+      if (!userDoc.exists && !isKnownAdmin) {
+        await auth.signOut();
+        try {
+          web.window.localStorage.removeItem('tranyx_staff_email');
+          web.window.localStorage.removeItem('tranyx_staff_password');
+        } catch (_) {}
+        setState(() {
+          _error = 'Unauthorized: This account is not registered as authorized staff in the Tranyx Admin Portal.';
+        });
+        return;
+      }
 
       // Save credentials for quick session persistence
       try {
