@@ -167,8 +167,8 @@ class TicketModel {
       id: id,
       ticketNumber: refNum,
       uid: map['uid'] ?? map['userId'] ?? 'unknown',
-      userEmail: map['userEmail'] ?? map['email'],
-      userName: map['userName'] ?? map['name'],
+      userEmail: map['userEmail'] ?? map['email'] ?? map['customerEmail'] ?? map['reporterEmail'] ?? map['contactEmail'] ?? map['senderEmail'],
+      userName: map['userName'] ?? map['name'] ?? map['customerName'] ?? map['fullName'] ?? map['reporterName'],
       subject: map['subject'] ?? map['title'] ?? 'No Subject',
       description: map['description'] ?? map['details'] ?? map['message'] ?? 'No Description provided.',
       category: map['category'] ?? map['type'] ?? 'General',
@@ -316,24 +316,23 @@ class _TicketsPageState extends State<TicketsPage> {
       );
 
       // Send automated email to user notifying them an agent is attending to the ticket
-      if (userEmail.isNotEmpty && userEmail.contains('@')) {
-        await TicketEmailService.sendTicketStatusUpdateEmail(
-          firestore: firestore,
-          ticketId: ticket.id,
-          referenceNumber: ticket.ticketNumber,
-          recipientEmail: userEmail,
-          recipientName: ticket.userName ?? 'Valued Customer',
-          uid: ticket.uid,
-          subject: ticket.subject,
-          description: ticket.description,
-          category: ticket.category,
-          oldStatus: ticket.status,
-          newStatus: 'In Progress',
-          agentName: agentName,
-          agentResponse: 'Support Agent $agentName has accepted your ticket and is actively working on your request.',
-          submittedAt: ticket.createdAt,
-        );
-      }
+      final targetClaimEmail = (userEmail.isNotEmpty && userEmail != 'N/A') ? userEmail : (ticket.userEmail ?? '');
+      await TicketEmailService.sendTicketStatusUpdateEmail(
+        firestore: firestore,
+        ticketId: ticket.id,
+        referenceNumber: ticket.ticketNumber,
+        recipientEmail: targetClaimEmail,
+        recipientName: (ticket.userName?.isNotEmpty == true) ? ticket.userName! : 'Valued Customer',
+        uid: ticket.uid,
+        subject: ticket.subject,
+        description: ticket.description,
+        category: ticket.category,
+        oldStatus: ticket.status,
+        newStatus: 'In Progress',
+        agentName: agentName,
+        agentResponse: 'Support Agent $agentName has accepted your ticket and is actively working on your request.',
+        submittedAt: ticket.createdAt,
+      );
 
       _showFeedback('✅ Ticket #${ticket.ticketNumber} locked & claimed. Status updated to In Progress.');
     } catch (e) {
@@ -361,21 +360,17 @@ class _TicketsPageState extends State<TicketsPage> {
     }
   }
 
-  /// Resend Initial Confirmation Email
+  /// Resend Confirmation Email to Customer
   Future<void> _resendConfirmationEmail(TicketModel ticket, String userEmail, String userName) async {
-    if (userEmail.isEmpty || !userEmail.contains('@')) {
-      _showFeedback('Cannot send confirmation: No valid email address found for this user.', isError: true);
-      return;
-    }
-
     try {
       final firestore = context.read(firestoreProvider);
+      final targetEmail = (userEmail.isNotEmpty && userEmail != 'N/A') ? userEmail : (ticket.userEmail ?? '');
       await TicketEmailService.sendTicketConfirmationEmail(
         firestore: firestore,
         ticketId: ticket.id,
         referenceNumber: ticket.ticketNumber,
-        recipientEmail: userEmail,
-        recipientName: userName,
+        recipientEmail: targetEmail,
+        recipientName: userName.isNotEmpty && userName != 'Customer' ? userName : (ticket.userName ?? 'Valued Customer'),
         uid: ticket.uid,
         subject: ticket.subject,
         description: ticket.description,
@@ -383,7 +378,7 @@ class _TicketsPageState extends State<TicketsPage> {
         status: ticket.status,
         createdAt: ticket.createdAt > 0 ? ticket.createdAt : DateTime.now().millisecondsSinceEpoch,
       );
-      _showFeedback('📧 Confirmation email resent to $userEmail with reference #${ticket.ticketNumber}.');
+      _showFeedback('📧 Confirmation email resent to ${targetEmail.isNotEmpty ? targetEmail : ticket.ticketNumber} with reference #${ticket.ticketNumber}.');
     } catch (e) {
       _showFeedback('Failed to resend confirmation email: $e', isError: true);
     }
@@ -434,13 +429,14 @@ class _TicketsPageState extends State<TicketsPage> {
       await firestore.collection('supportTickets').doc(ticket.id).collection('responses').add(newResponseMap);
 
       // Dispatch Email Notification
-      if (_sendEmailOnReply && userEmail.isNotEmpty && userEmail.contains('@')) {
+      final targetEmail = (userEmail.isNotEmpty && userEmail != 'N/A') ? userEmail : (ticket.userEmail ?? '');
+      if (_sendEmailOnReply && targetEmail.isNotEmpty && targetEmail.contains('@')) {
         await TicketEmailService.sendTicketStatusUpdateEmail(
           firestore: firestore,
           ticketId: ticket.id,
           referenceNumber: ticket.ticketNumber,
-          recipientEmail: userEmail,
-          recipientName: userName,
+          recipientEmail: targetEmail,
+          recipientName: userName.isNotEmpty && userName != 'Customer' ? userName : (ticket.userName ?? 'Valued Customer'),
           uid: ticket.uid,
           subject: ticket.subject,
           description: ticket.description,
@@ -459,7 +455,7 @@ class _TicketsPageState extends State<TicketsPage> {
         _isSubmitting = false;
       });
 
-      _showFeedback('✅ Ticket response recorded${_sendEmailOnReply ? " and email sent to $userEmail" : ""}.');
+      _showFeedback('✅ Ticket response recorded${_sendEmailOnReply ? " and email dispatched" : ""}.');
     } catch (e) {
       setState(() => _isSubmitting = false);
       _showFeedback('Failed to post update: $e', isError: true);
