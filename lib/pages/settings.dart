@@ -54,11 +54,11 @@ class _SettingsPageState extends State<SettingsPage> {
   );
   String _mailtrapFromEmail = const String.fromEnvironment(
     'MAIL_TRAP_FROM_EMAIL',
-    defaultValue: 'support@tranyx.com',
+    defaultValue: 'noreply@tranyx.com',
   );
   String _mailtrapFromName = const String.fromEnvironment(
     'MAIL_TRAP_FROM_NAME',
-    defaultValue: 'Tranyx Support',
+    defaultValue: 'Tranyx No-Reply',
   );
   String? _configMessage;
   String? _configError;
@@ -539,12 +539,12 @@ class _SettingsPageState extends State<SettingsPage> {
                     input(
                       value: _mailtrapFromEmail,
                       classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
-                      attributes: {'type': 'text', 'placeholder': 'support@tranyx.com'},
+                      attributes: {'type': 'text', 'placeholder': 'noreply@tranyx.com'},
                       onInput: (dynamic value) => setState(() => _mailtrapFromEmail = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
                       Component.text(
-                        'Verified sender address for automated ticket emails (e.g. support@tranyx.com).',
+                        'Verified sender address for automated ticket emails (e.g. noreply@tranyx.com).',
                       ),
                     ]),
                   ]),
@@ -556,12 +556,12 @@ class _SettingsPageState extends State<SettingsPage> {
                     input(
                       value: _mailtrapFromName,
                       classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
-                      attributes: {'type': 'text', 'placeholder': 'Tranyx Support'},
+                      attributes: {'type': 'text', 'placeholder': 'Tranyx No-Reply'},
                       onInput: (dynamic value) => setState(() => _mailtrapFromName = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
                       Component.text(
-                        'Display name on delivered outgoing emails (e.g. Tranyx Support).',
+                        'Display name on delivered outgoing emails (e.g. Tranyx No-Reply).',
                       ),
                     ]),
                   ]),

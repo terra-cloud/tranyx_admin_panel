@@ -79,8 +79,8 @@ jobs:
             --dart-define=MAIL_TRAP_TOKEN="${{ secrets.MAIL_TRAP_TOKEN || secrets.MAILTRAP_TOKEN }}" \
             --dart-define=MAIL_TRAP_PROXY_URL="${{ secrets.MAIL_TRAP_PROXY_URL }}" \
             --dart-define=MAIL_TRAP_INBOX_ID="${{ secrets.MAIL_TRAP_INBOX_ID || '4886849' }}" \
-            --dart-define=MAIL_TRAP_FROM_EMAIL="${{ secrets.MAIL_TRAP_FROM_EMAIL || secrets.MAILTRAP_FROM_EMAIL || 'support@tranyx.com' }}" \
-            --dart-define=MAIL_TRAP_FROM_NAME="${{ secrets.MAIL_TRAP_FROM_NAME || secrets.MAILTRAP_FROM_NAME || 'Tranyx Support' }}"
+            --dart-define=MAIL_TRAP_FROM_EMAIL="${{ secrets.MAIL_TRAP_FROM_EMAIL || secrets.MAILTRAP_FROM_EMAIL || 'noreply@tranyx.com' }}" \
+            --dart-define=MAIL_TRAP_FROM_NAME="${{ secrets.MAIL_TRAP_FROM_NAME || secrets.MAILTRAP_FROM_NAME || 'Tranyx No-Reply' }}"
 
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0

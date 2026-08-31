@@ -22,14 +22,14 @@ class MailtrapEmailService {
     'MAIL_TRAP_FROM_EMAIL',
     defaultValue: String.fromEnvironment(
       'MAILTRAP_FROM_EMAIL',
-      defaultValue: 'support@tranyx.com',
+      defaultValue: 'noreply@tranyx.com',
     ),
   );
 
   /// Default compile-time sender name (injected via `--dart-define=MAIL_TRAP_FROM_NAME=...`)
   static const String envSenderName = String.fromEnvironment(
     'MAIL_TRAP_FROM_NAME',
-    defaultValue: 'Tranyx Support',
+    defaultValue: 'Tranyx No-Reply',
   );
 
   /// Default compile-time proxy URL (injected via `--dart-define=MAIL_TRAP_PROXY_URL=...`)
@@ -201,7 +201,7 @@ class MailtrapEmailService {
         }
       } catch (_) {}
     }
-    return envSenderEmail.isNotEmpty ? envSenderEmail : 'support@tranyx.com';
+    return envSenderEmail.isNotEmpty ? envSenderEmail : 'noreply@tranyx.com';
   }
 
   /// Dynamically resolves the sender display name.
@@ -225,12 +225,12 @@ class MailtrapEmailService {
         }
       } catch (_) {}
     }
-    return envSenderName.isNotEmpty ? envSenderName : 'Tranyx Support';
+    return envSenderName.isNotEmpty ? envSenderName : 'Tranyx No-Reply';
   }
 
   /// Extracts structured name and email from a formatted address string.
-  /// Example: `"Tranyx Support <support@tranyx.com>"` -> name: "Tranyx Support", email: "support@tranyx.com"
-  static Map<String, String> parseAddress(String address, {String fallbackName = 'Tranyx Support'}) {
+  /// Example: `"Tranyx No-Reply <noreply@tranyx.com>"` -> name: "Tranyx No-Reply", email: "noreply@tranyx.com"
+  static Map<String, String> parseAddress(String address, {String fallbackName = 'Tranyx No-Reply'}) {
     final trimmed = address.trim();
     final match = RegExp(r'^(.*?)\s*<([^>]+)>$').firstMatch(trimmed);
     if (match != null) {
