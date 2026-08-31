@@ -9,14 +9,16 @@ import 'presence_service.dart';
 class SystemConfigModel {
   final int claimTimeoutSeconds; // Default 180s (3 minutes)
   final int heartbeatTimeoutSeconds; // Default 600s (10 minutes)
-  final String resendApiKey;
-  final String resendFromEmail;
+  final String mailtrapToken;
+  final String mailtrapFromEmail;
+  final String mailtrapFromName;
 
   const SystemConfigModel({
     this.claimTimeoutSeconds = 180,
     this.heartbeatTimeoutSeconds = 600,
-    this.resendApiKey = '',
-    this.resendFromEmail = '',
+    this.mailtrapToken = '',
+    this.mailtrapFromEmail = '',
+    this.mailtrapFromName = '',
   });
 
   factory SystemConfigModel.fromMap(Map<String, dynamic>? map) {
@@ -24,16 +26,18 @@ class SystemConfigModel {
     return SystemConfigModel(
       claimTimeoutSeconds: (map['claimTimeoutSeconds'] as num?)?.toInt() ?? 180,
       heartbeatTimeoutSeconds: (map['heartbeatTimeoutSeconds'] as num?)?.toInt() ?? 600,
-      resendApiKey: (map['resendApiKey'] ?? map['resend_api_key'] ?? '').toString(),
-      resendFromEmail: (map['resendFromEmail'] ?? map['senderEmail'] ?? '').toString(),
+      mailtrapToken: (map['mailtrapToken'] ?? map['mail_trap_token'] ?? map['resendApiKey'] ?? '').toString(),
+      mailtrapFromEmail: (map['mailtrapFromEmail'] ?? map['mail_trap_from_email'] ?? map['resendFromEmail'] ?? map['senderEmail'] ?? '').toString(),
+      mailtrapFromName: (map['mailtrapFromName'] ?? map['mail_trap_from_name'] ?? map['senderName'] ?? '').toString(),
     );
   }
 
   Map<String, dynamic> toMap() => {
     'claimTimeoutSeconds': claimTimeoutSeconds,
     'heartbeatTimeoutSeconds': heartbeatTimeoutSeconds,
-    if (resendApiKey.isNotEmpty) 'resendApiKey': resendApiKey,
-    if (resendFromEmail.isNotEmpty) 'resendFromEmail': resendFromEmail,
+    if (mailtrapToken.isNotEmpty) 'mailtrapToken': mailtrapToken,
+    if (mailtrapFromEmail.isNotEmpty) 'mailtrapFromEmail': mailtrapFromEmail,
+    if (mailtrapFromName.isNotEmpty) 'mailtrapFromName': mailtrapFromName,
     'updatedAt': DateTime.now().millisecondsSinceEpoch,
   };
 }

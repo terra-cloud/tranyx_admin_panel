@@ -40,10 +40,17 @@ class _SettingsPageState extends State<SettingsPage> {
   // System config lock & timeout state
   String _claimTimeoutStr = '180';
   String _heartbeatTimeoutStr = '600';
-  String _resendApiKey = const String.fromEnvironment('RESEND_API_KEY');
-  String _resendSenderEmail = const String.fromEnvironment(
-    'RESEND_FROM_EMAIL',
-    defaultValue: 'Tranyx Support <onboarding@resend.dev>',
+  String _mailtrapToken = const String.fromEnvironment(
+    'MAIL_TRAP_TOKEN',
+    defaultValue: String.fromEnvironment('MAILTRAP_TOKEN'),
+  );
+  String _mailtrapFromEmail = const String.fromEnvironment(
+    'MAIL_TRAP_FROM_EMAIL',
+    defaultValue: 'support@tranyx.com',
+  );
+  String _mailtrapFromName = const String.fromEnvironment(
+    'MAIL_TRAP_FROM_NAME',
+    defaultValue: 'Tranyx Support',
   );
   String? _configMessage;
   String? _configError;
@@ -83,8 +90,9 @@ class _SettingsPageState extends State<SettingsPage> {
       final updateData = {
         'claimTimeoutSeconds': claimSec,
         'heartbeatTimeoutSeconds': heartbeatSec,
-        'resendApiKey': _resendApiKey.trim(),
-        'resendFromEmail': _resendSenderEmail.trim(),
+        'mailtrapToken': _mailtrapToken.trim(),
+        'mailtrapFromEmail': _mailtrapFromEmail.trim(),
+        'mailtrapFromName': _mailtrapFromName.trim(),
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
       };
 
@@ -98,7 +106,7 @@ class _SettingsPageState extends State<SettingsPage> {
           });
 
       setState(() {
-        _configMessage = 'System request lock timeouts & Resend email credentials updated!';
+        _configMessage = 'System request lock timeouts & Mailtrap email credentials updated!';
       });
     } catch (e) {
       print('[Settings] Failed to update system config: $e');
@@ -338,11 +346,14 @@ class _SettingsPageState extends State<SettingsPage> {
       final cfg = systemConfigAsync.value!;
       _claimTimeoutStr = cfg.claimTimeoutSeconds.toString();
       _heartbeatTimeoutStr = cfg.heartbeatTimeoutSeconds.toString();
-      if (cfg.resendApiKey.isNotEmpty) {
-        _resendApiKey = cfg.resendApiKey;
+      if (cfg.mailtrapToken.isNotEmpty) {
+        _mailtrapToken = cfg.mailtrapToken;
       }
-      if (cfg.resendFromEmail.isNotEmpty) {
-        _resendSenderEmail = cfg.resendFromEmail;
+      if (cfg.mailtrapFromEmail.isNotEmpty) {
+        _mailtrapFromEmail = cfg.mailtrapFromEmail;
+      }
+      if (cfg.mailtrapFromName.isNotEmpty) {
+        _mailtrapFromName = cfg.mailtrapFromName;
       }
       _configInitialized = true;
     }
@@ -439,42 +450,59 @@ class _SettingsPageState extends State<SettingsPage> {
                   div(classes: 'flex flex-col gap-1.5 border-t border-zinc-100 pt-3', [
                     div(classes: 'flex items-center justify-between', [
                       label(classes: 'text-[10px] text-zinc-400 font-bold uppercase tracking-wider', [
-                        Component.text('Resend API Key (Transactional Email)'),
+                        Component.text('Mailtrap API Token (Transactional Email)'),
                       ]),
                       span(
                         classes:
-                            'text-[10px] font-mono ${_resendApiKey.isNotEmpty ? 'text-emerald-600' : 'text-amber-500'} font-bold',
+                            'text-[10px] font-mono ${_mailtrapToken.isNotEmpty ? 'text-emerald-600' : 'text-amber-500'} font-bold',
                         [
-                          Component.text(_resendApiKey.isNotEmpty ? 'Active / Configured' : 'Not Set (Optional)'),
+                          Component.text(_mailtrapToken.isNotEmpty ? 'Active / Configured' : 'Not Set (Optional)'),
                         ],
                       ),
                     ]),
                     input(
-                      value: _resendApiKey,
+                      value: _mailtrapToken,
                       classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 font-mono focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
-                      attributes: {'type': 'text', 'placeholder': 're_...'},
-                      onInput: (dynamic value) => setState(() => _resendApiKey = (value as String?) ?? ''),
+                      attributes: {'type': 'text', 'placeholder': 'Enter Mailtrap API Token'},
+                      onInput: (dynamic value) => setState(() => _mailtrapToken = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
                       Component.text(
-                        'Key used to deliver ticket submission confirmations and response updates to user emails.',
+                        'Token used to deliver ticket submission confirmations and response updates to user emails via Mailtrap.',
                       ),
                     ]),
                   ]),
 
                   div(classes: 'flex flex-col gap-1.5', [
                     label(classes: 'text-[10px] text-zinc-400 font-bold uppercase tracking-wider', [
-                      Component.text('Resend Sender Address'),
+                      Component.text('Mailtrap Sender Email'),
                     ]),
                     input(
-                      value: _resendSenderEmail,
+                      value: _mailtrapFromEmail,
                       classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
-                      attributes: {'type': 'text', 'placeholder': 'Tranyx No-Reply <onboarding@resend.dev>'},
-                      onInput: (dynamic value) => setState(() => _resendSenderEmail = (value as String?) ?? ''),
+                      attributes: {'type': 'text', 'placeholder': 'support@tranyx.com'},
+                      onInput: (dynamic value) => setState(() => _mailtrapFromEmail = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
                       Component.text(
-                        'Sender address for automated ticket emails (e.g. Tranyx No-Reply <noreply@yourdomain.com>).',
+                        'Verified sender address for automated ticket emails (e.g. support@tranyx.com).',
+                      ),
+                    ]),
+                  ]),
+
+                  div(classes: 'flex flex-col gap-1.5', [
+                    label(classes: 'text-[10px] text-zinc-400 font-bold uppercase tracking-wider', [
+                      Component.text('Mailtrap Sender Name'),
+                    ]),
+                    input(
+                      value: _mailtrapFromName,
+                      classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
+                      attributes: {'type': 'text', 'placeholder': 'Tranyx Support'},
+                      onInput: (dynamic value) => setState(() => _mailtrapFromName = (value as String?) ?? ''),
+                    ),
+                    span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
+                      Component.text(
+                        'Display name on delivered outgoing emails (e.g. Tranyx Support).',
                       ),
                     ]),
                   ]),

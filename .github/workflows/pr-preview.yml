@@ -45,13 +45,21 @@ jobs:
           if [ -n "${{ secrets.IMGBB_API_KEY }}" ]; then
             echo "IMGBB_API_KEY=${{ secrets.IMGBB_API_KEY }}" >> .env
           fi
+          if [ -n "${{ secrets.MAIL_TRAP_TOKEN }}" ]; then
+            echo "MAIL_TRAP_TOKEN=${{ secrets.MAIL_TRAP_TOKEN }}" >> .env
+          elif [ -n "${{ secrets.MAILTRAP_TOKEN }}" ]; then
+            echo "MAIL_TRAP_TOKEN=${{ secrets.MAILTRAP_TOKEN }}" >> .env
+          fi
 
       - name: Build Web App
         env:
           IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
+          MAIL_TRAP_TOKEN: ${{ secrets.MAIL_TRAP_TOKEN || secrets.MAILTRAP_TOKEN }}
         run: |
           jaspr clean
-          jaspr build --dart-define=IMGBB_API_KEY="${{ secrets.IMGBB_API_KEY || 'abfd185244dc224ff987946bc9775bfc' }}"
+          jaspr build \
+            --dart-define=IMGBB_API_KEY="${{ secrets.IMGBB_API_KEY || 'abfd185244dc224ff987946bc9775bfc' }}" \
+            --dart-define=MAIL_TRAP_TOKEN="${{ secrets.MAIL_TRAP_TOKEN || secrets.MAILTRAP_TOKEN }}"
 
       - name: Deploy to Firebase Hosting Preview
         uses: FirebaseExtended/action-hosting-deploy@v0

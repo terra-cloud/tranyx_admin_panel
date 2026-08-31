@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import 'resend_email_service.dart';
+import 'mailtrap_email_service.dart';
 
 /// Service responsible for generating and dispatching support ticket email notifications.
 class TicketEmailService {
@@ -317,12 +317,12 @@ class TicketEmailService {
       contentHtml: contentHtml,
     );
 
-    // 0. Direct Transactional Dispatch via Resend API
-    final resendSuccess = await ResendEmailService.sendEmail(
+    // 0. Direct Transactional Dispatch via Mailtrap API
+    final mailtrapSuccess = await MailtrapEmailService.sendEmail(
       recipientEmail: recipientEmail,
+      recipientName: recipientName,
       subject: '[Tranyx Support] Ticket Confirmation: #$referenceNumber - $subject',
       htmlContent: html,
-      replyTo: 'noreply@tranyx.com',
       textContent: 'Your support ticket #$referenceNumber has been received.\n\n'
           'Reference: $referenceNumber\n'
           'Submitted At: $formattedDate\n'
@@ -331,6 +331,7 @@ class TicketEmailService {
           'Subject: $subject\n\n'
           'Details:\n$description\n\n'
           'Our support team will review your ticket and reply shortly.',
+      category: 'Ticket Creation Confirmation',
       firestore: firestore,
     );
 
@@ -354,7 +355,7 @@ class TicketEmailService {
       'ticketId': ticketId,
       'ticketRef': referenceNumber,
       'type': 'ticket_creation_confirmation',
-      'resendDirectSent': resendSuccess,
+      'mailtrapDirectSent': mailtrapSuccess,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
     };
 
@@ -391,7 +392,7 @@ class TicketEmailService {
         {
           'type': 'CREATION_CONFIRMATION',
           'recipient': recipientEmail,
-          'resendDelivered': resendSuccess,
+          'mailtrapDelivered': mailtrapSuccess,
           'timestamp': DateTime.now().millisecondsSinceEpoch,
         }
       ]),
@@ -464,12 +465,12 @@ class TicketEmailService {
       contentHtml: contentHtml,
     );
 
-    // 0. Direct Transactional Dispatch via Resend API
-    final resendSuccess = await ResendEmailService.sendEmail(
+    // 0. Direct Transactional Dispatch via Mailtrap API
+    final mailtrapSuccess = await MailtrapEmailService.sendEmail(
       recipientEmail: recipientEmail,
+      recipientName: recipientName,
       subject: '[Tranyx Support] Update on Ticket #$referenceNumber - $newStatus',
       htmlContent: html,
-      replyTo: 'noreply@tranyx.com',
       textContent: 'Your support ticket #$referenceNumber was updated.\n\n'
           'Reference: $referenceNumber\n'
           'Subject: $subject\n'
@@ -477,6 +478,7 @@ class TicketEmailService {
           'Handled By: $agentName\n\n'
           '${agentResponse != null && agentResponse.isNotEmpty ? "Agent Response:\n$agentResponse\n\n" : ""}'
           'Updated At: $updateTime',
+      category: 'Ticket Status Update',
       firestore: firestore,
     );
 
@@ -499,7 +501,7 @@ class TicketEmailService {
       'ticketRef': referenceNumber,
       'type': 'ticket_status_update',
       'newStatus': newStatus,
-      'resendDirectSent': resendSuccess,
+      'mailtrapDirectSent': mailtrapSuccess,
       'createdAt': DateTime.now().millisecondsSinceEpoch,
     };
 
@@ -512,21 +514,20 @@ class TicketEmailService {
     // Write to backup emails
     await firestore.collection('emails').add(mailData).catchError((_) => firestore.collection('emails').doc());
 
-    // Write in-app notification
-    if (uid.isNotEmpty && uid != 'unknown') {
+    // Update in-app user notification
+    if (uid.isNotEmpty) {
       await firestore.collection('notifications').add({
         'userId': uid,
         'uid': uid,
-        'title': 'Ticket #$referenceNumber Update ($newStatus)',
-        'body': agentResponse != null && agentResponse.isNotEmpty
-            ? agentResponse
-            : 'Your support ticket #$referenceNumber status was updated to $newStatus by $agentName.',
+        'title': 'Ticket #$referenceNumber Updated',
+        'body': 'Your ticket status is now $newStatus. Agent: $agentName.',
         'ticketId': ticketId,
         'ticketRef': referenceNumber,
         'status': newStatus,
-        'type': 'support_ticket_update',
+        'read': false,
         'isRead': false,
         'createdAt': DateTime.now().millisecondsSinceEpoch,
+        'type': 'ticket_status_update',
       }).catchError((_) => firestore.collection('notifications').doc());
     }
 
@@ -537,7 +538,7 @@ class TicketEmailService {
           'type': 'STATUS_UPDATE_$newStatus',
           'recipient': recipientEmail,
           'agent': agentName,
-          'resendDelivered': resendSuccess,
+          'mailtrapDelivered': mailtrapSuccess,
           'timestamp': DateTime.now().millisecondsSinceEpoch,
         }
       ]),
