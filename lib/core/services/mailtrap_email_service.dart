@@ -22,7 +22,7 @@ class MailtrapEmailService {
     'MAIL_TRAP_FROM_EMAIL',
     defaultValue: String.fromEnvironment(
       'MAILTRAP_FROM_EMAIL',
-      defaultValue: 'noreply@tranyx.com',
+      defaultValue: 'noreply@tranyx.app',
     ),
   );
 
@@ -196,12 +196,13 @@ class MailtrapEmailService {
               snap.data()!['mail_trap_from_email'] ??
               snap.data()!['senderEmail'];
           if (sender != null && sender.toString().trim().isNotEmpty) {
-            return sender.toString().trim();
+            final sStr = sender.toString().trim();
+            return sStr.endsWith('@tranyx.com') ? sStr.replaceAll('@tranyx.com', '@tranyx.app') : sStr;
           }
         }
       } catch (_) {}
     }
-    return envSenderEmail.isNotEmpty ? envSenderEmail : 'noreply@tranyx.com';
+    return envSenderEmail.isNotEmpty ? envSenderEmail : 'noreply@tranyx.app';
   }
 
   /// Dynamically resolves the sender display name.
@@ -294,9 +295,14 @@ class MailtrapEmailService {
         if (recipientName != null && recipientName.trim().isNotEmpty) 'name': recipientName.trim(),
       };
 
+      var fromEmail = fromParsed['email'] ?? 'noreply@tranyx.app';
+      if (fromEmail.endsWith('@tranyx.com')) {
+        fromEmail = fromEmail.replaceAll('@tranyx.com', '@tranyx.app');
+      }
+
       final payloadMap = {
         'from': {
-          'email': fromParsed['email'],
+          'email': fromEmail,
           'name': fromParsed['name'],
         },
         'to': [toEntry],

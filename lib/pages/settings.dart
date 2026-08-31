@@ -55,7 +55,7 @@ class _SettingsPageState extends State<SettingsPage> {
   );
   String _mailtrapFromEmail = const String.fromEnvironment(
     'MAIL_TRAP_FROM_EMAIL',
-    defaultValue: 'noreply@tranyx.com',
+    defaultValue: 'noreply@tranyx.app',
   );
   String _mailtrapFromName = const String.fromEnvironment(
     'MAIL_TRAP_FROM_NAME',
@@ -590,12 +590,12 @@ class _SettingsPageState extends State<SettingsPage> {
                     input(
                       value: _mailtrapFromEmail,
                       classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
-                      attributes: {'type': 'text', 'placeholder': 'noreply@tranyx.com'},
+                      attributes: {'type': 'text', 'placeholder': 'noreply@tranyx.app'},
                       onInput: (dynamic value) => setState(() => _mailtrapFromEmail = (value as String?) ?? ''),
                     ),
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
                       Component.text(
-                        'Verified sender address for automated ticket emails (e.g. noreply@tranyx.com).',
+                        'Verified sender address for automated ticket emails (e.g. noreply@tranyx.app).',
                       ),
                     ]),
                   ]),
