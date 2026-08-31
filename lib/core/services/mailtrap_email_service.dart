@@ -32,11 +32,69 @@ class MailtrapEmailService {
     defaultValue: 'Tranyx Support',
   );
 
-  /// Dynamically resolves the active Mailtrap API token (Environment define -> system_config settings -> fallback).
+  static String? _cachedLocalEnvToken;
+  static String? _cachedLocalEnvSenderEmail;
+  static String? _cachedLocalEnvSenderName;
+  static bool _runtimeEnvChecked = false;
+
+  /// Loads .env at runtime during local development (`jaspr serve`) if not passed via compile-time define.
+  static Future<void> _loadRuntimeEnv() async {
+    if (_runtimeEnvChecked) return;
+    _runtimeEnvChecked = true;
+    try {
+      final completer = Completer<String?>();
+      final xhr = web.XMLHttpRequest();
+      xhr.open('GET', '/.env', true);
+      xhr.onLoad.listen((_) {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          completer.complete(xhr.responseText);
+        } else {
+          completer.complete(null);
+        }
+      });
+      xhr.onError.listen((_) => completer.complete(null));
+      xhr.send();
+
+      final content = await completer.future.timeout(
+        const Duration(milliseconds: 1500),
+        onTimeout: () => null,
+      );
+
+      if (content != null && content.isNotEmpty) {
+        for (final line in content.split('\n')) {
+          final trimmed = line.trim();
+          if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+          final eqIdx = trimmed.indexOf('=');
+          if (eqIdx > 0) {
+            final key = trimmed.substring(0, eqIdx).trim();
+            final value = trimmed.substring(eqIdx + 1).trim().replaceAll(RegExp(r'^["\x27]|["\x27]$'), '');
+            if (key == 'MAIL_TRAP_TOKEN' || key == 'MAILTRAP_TOKEN' || key == 'MAILTRAP_API_KEY') {
+              _cachedLocalEnvToken = value;
+            } else if (key == 'MAIL_TRAP_FROM_EMAIL' || key == 'MAILTRAP_FROM_EMAIL') {
+              _cachedLocalEnvSenderEmail = value;
+            } else if (key == 'MAIL_TRAP_FROM_NAME' || key == 'MAILTRAP_FROM_NAME') {
+              _cachedLocalEnvSenderName = value;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// Dynamically resolves the active Mailtrap API token:
+  /// 1. Compile-time `--dart-define=MAIL_TRAP_TOKEN=...`
+  /// 2. Runtime `/.env` fetch (for `jaspr serve` local development)
+  /// 3. Firestore `system_config/settings` (`mailtrapToken`)
   static Future<String> resolveApiToken([FirebaseFirestore? firestore]) async {
     if (envApiToken.isNotEmpty) {
       return envApiToken;
     }
+
+    await _loadRuntimeEnv();
+    if (_cachedLocalEnvToken != null && _cachedLocalEnvToken!.isNotEmpty) {
+      return _cachedLocalEnvToken!;
+    }
+
     for (final db in [FirebaseFirestore.instance, firestore]) {
       if (db == null) continue;
       try {
@@ -53,11 +111,17 @@ class MailtrapEmailService {
         }
       } catch (_) {}
     }
-    return envApiToken;
+
+    return '';
   }
 
   /// Dynamically resolves the sender email address.
   static Future<String> resolveSenderEmail([FirebaseFirestore? firestore]) async {
+    await _loadRuntimeEnv();
+    if (_cachedLocalEnvSenderEmail != null && _cachedLocalEnvSenderEmail!.isNotEmpty) {
+      return _cachedLocalEnvSenderEmail!;
+    }
+
     for (final db in [FirebaseFirestore.instance, firestore]) {
       if (db == null) continue;
       try {
@@ -77,6 +141,11 @@ class MailtrapEmailService {
 
   /// Dynamically resolves the sender display name.
   static Future<String> resolveSenderName([FirebaseFirestore? firestore]) async {
+    await _loadRuntimeEnv();
+    if (_cachedLocalEnvSenderName != null && _cachedLocalEnvSenderName!.isNotEmpty) {
+      return _cachedLocalEnvSenderName!;
+    }
+
     for (final db in [FirebaseFirestore.instance, firestore]) {
       if (db == null) continue;
       try {
@@ -130,14 +199,14 @@ class MailtrapEmailService {
       return false;
     }
 
-    final token = firestore != null ? await resolveApiToken(firestore) : envApiToken;
+    final token = await resolveApiToken(firestore);
     if (token.isEmpty) {
       print('[MailtrapEmailService] No API token configured for Mailtrap.');
       return false;
     }
 
-    final resolvedFromEmail = senderEmail ?? (firestore != null ? await resolveSenderEmail(firestore) : envSenderEmail);
-    final resolvedFromName = senderName ?? (firestore != null ? await resolveSenderName(firestore) : envSenderName);
+    final resolvedFromEmail = senderEmail ?? await resolveSenderEmail(firestore);
+    final resolvedFromName = senderName ?? await resolveSenderName(firestore);
     final fromParsed = parseAddress(resolvedFromEmail, fallbackName: resolvedFromName);
 
     final completer = Completer<bool>();
