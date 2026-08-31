@@ -270,7 +270,51 @@ class TicketEmailService {
     int? submittedAt,
     int? createdAt,
   }) async {
-    if (recipientEmail.isEmpty || !recipientEmail.contains('@')) return;
+    String resolvedEmail = recipientEmail.trim();
+    String resolvedName = recipientName.trim();
+
+    if (resolvedEmail.isEmpty || !resolvedEmail.contains('@') || resolvedEmail == 'N/A') {
+      try {
+        if (uid.isNotEmpty && uid != 'unknown') {
+          final userDoc = await firestore.collection('users').doc(uid).get();
+          if (userDoc.exists && userDoc.data() != null) {
+            final uData = userDoc.data()!;
+            final email = (uData['email'] ?? uData['userEmail'])?.toString().trim();
+            if (email != null && email.contains('@')) {
+              resolvedEmail = email;
+            }
+            final name = (uData['name'] ?? uData['displayName'] ?? uData['userName'])?.toString().trim();
+            if (name != null && name.isNotEmpty && resolvedName.isEmpty) {
+              resolvedName = name;
+            }
+          }
+        }
+
+        if (resolvedEmail.isEmpty || !resolvedEmail.contains('@')) {
+          final tktDoc = await firestore.collection('supportTickets').doc(ticketId).get();
+          if (tktDoc.exists && tktDoc.data() != null) {
+            final tData = tktDoc.data()!;
+            final email = (tData['userEmail'] ?? tData['email'] ?? tData['customerEmail'])?.toString().trim();
+            if (email != null && email.contains('@')) {
+              resolvedEmail = email;
+            }
+            final name = (tData['userName'] ?? tData['name'] ?? tData['customerName'])?.toString().trim();
+            if (name != null && name.isNotEmpty && resolvedName.isEmpty) {
+              resolvedName = name;
+            }
+          }
+        }
+      } catch (e) {
+        print('[TicketEmailService] Error resolving confirmation recipient email: $e');
+      }
+    }
+
+    if (resolvedEmail.isEmpty || !resolvedEmail.contains('@')) {
+      print('[TicketEmailService] ⚠️ Skipping confirmation email: No valid recipient email found for Ticket #$referenceNumber (uid: $uid)');
+      return;
+    }
+
+    print('[TicketEmailService] 📤 Dispatching confirmation email for Ticket #$referenceNumber to $resolvedEmail...');
 
     final effectiveTs = submittedAt ?? createdAt ?? DateTime.now().millisecondsSinceEpoch;
     final formattedDate = formatTimestamp(effectiveTs);
@@ -313,14 +357,14 @@ class TicketEmailService {
       subtitle: 'Official confirmation of your submitted support request.',
       referenceNumber: referenceNumber,
       status: status,
-      recipientName: recipientName.isNotEmpty ? recipientName : 'Valued Customer',
+      recipientName: resolvedName.isNotEmpty ? resolvedName : 'Valued Customer',
       contentHtml: contentHtml,
     );
 
     // 0. Direct Transactional Dispatch via Mailtrap API
     final mailtrapSuccess = await MailtrapEmailService.sendEmail(
-      recipientEmail: recipientEmail,
-      recipientName: recipientName,
+      recipientEmail: resolvedEmail,
+      recipientName: resolvedName,
       subject: '[Tranyx Support] Ticket Confirmation: #$referenceNumber - $subject',
       htmlContent: html,
       textContent: 'Your support ticket #$referenceNumber has been received.\n\n'
@@ -336,7 +380,7 @@ class TicketEmailService {
     );
 
     final mailData = {
-      'to': [recipientEmail],
+      'to': [resolvedEmail],
       'message': {
         'subject': '[Tranyx Support] Ticket Confirmation: #$referenceNumber - $subject',
         'text': 'Your support ticket #$referenceNumber has been received.\n\n'
@@ -349,8 +393,8 @@ class TicketEmailService {
             'Our support team will review your ticket and reply shortly.',
         'html': html,
       },
-      'recipientEmail': recipientEmail,
-      'recipientName': recipientName,
+      'recipientEmail': resolvedEmail,
+      'recipientName': resolvedName,
       'uid': uid,
       'ticketId': ticketId,
       'ticketRef': referenceNumber,
