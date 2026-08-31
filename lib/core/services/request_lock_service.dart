@@ -12,6 +12,8 @@ class SystemConfigModel {
   final String mailtrapToken;
   final String mailtrapFromEmail;
   final String mailtrapFromName;
+  final String mailtrapProxyUrl;
+  final String mailtrapInboxId;
 
   const SystemConfigModel({
     this.claimTimeoutSeconds = 180,
@@ -19,6 +21,8 @@ class SystemConfigModel {
     this.mailtrapToken = '',
     this.mailtrapFromEmail = '',
     this.mailtrapFromName = '',
+    this.mailtrapProxyUrl = '',
+    this.mailtrapInboxId = '4886849',
   });
 
   factory SystemConfigModel.fromMap(Map<String, dynamic>? map) {
@@ -29,6 +33,8 @@ class SystemConfigModel {
       mailtrapToken: (map['mailtrapToken'] ?? map['mail_trap_token'] ?? map['resendApiKey'] ?? '').toString(),
       mailtrapFromEmail: (map['mailtrapFromEmail'] ?? map['mail_trap_from_email'] ?? map['resendFromEmail'] ?? map['senderEmail'] ?? '').toString(),
       mailtrapFromName: (map['mailtrapFromName'] ?? map['mail_trap_from_name'] ?? map['senderName'] ?? '').toString(),
+      mailtrapProxyUrl: (map['mailtrapProxyUrl'] ?? map['mail_trap_proxy_url'] ?? '').toString(),
+      mailtrapInboxId: (map['mailtrapInboxId'] ?? map['mail_trap_inbox_id'] ?? '4886849').toString(),
     );
   }
 
@@ -38,6 +44,8 @@ class SystemConfigModel {
     if (mailtrapToken.isNotEmpty) 'mailtrapToken': mailtrapToken,
     if (mailtrapFromEmail.isNotEmpty) 'mailtrapFromEmail': mailtrapFromEmail,
     if (mailtrapFromName.isNotEmpty) 'mailtrapFromName': mailtrapFromName,
+    if (mailtrapProxyUrl.isNotEmpty) 'mailtrapProxyUrl': mailtrapProxyUrl,
+    if (mailtrapInboxId.isNotEmpty) 'mailtrapInboxId': mailtrapInboxId,
     'updatedAt': DateTime.now().millisecondsSinceEpoch,
   };
 }

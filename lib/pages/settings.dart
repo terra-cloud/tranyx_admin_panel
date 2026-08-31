@@ -44,6 +44,14 @@ class _SettingsPageState extends State<SettingsPage> {
     'MAIL_TRAP_TOKEN',
     defaultValue: String.fromEnvironment('MAILTRAP_TOKEN'),
   );
+  String _mailtrapProxyUrl = const String.fromEnvironment(
+    'MAIL_TRAP_PROXY_URL',
+    defaultValue: String.fromEnvironment('MAILTRAP_PROXY_URL'),
+  );
+  String _mailtrapInboxId = const String.fromEnvironment(
+    'MAIL_TRAP_INBOX_ID',
+    defaultValue: '4886849',
+  );
   String _mailtrapFromEmail = const String.fromEnvironment(
     'MAIL_TRAP_FROM_EMAIL',
     defaultValue: 'support@tranyx.com',
@@ -91,6 +99,8 @@ class _SettingsPageState extends State<SettingsPage> {
         'claimTimeoutSeconds': claimSec,
         'heartbeatTimeoutSeconds': heartbeatSec,
         'mailtrapToken': _mailtrapToken.trim(),
+        'mailtrapProxyUrl': _mailtrapProxyUrl.trim(),
+        'mailtrapInboxId': _mailtrapInboxId.trim(),
         'mailtrapFromEmail': _mailtrapFromEmail.trim(),
         'mailtrapFromName': _mailtrapFromName.trim(),
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
@@ -349,6 +359,12 @@ class _SettingsPageState extends State<SettingsPage> {
       if (cfg.mailtrapToken.isNotEmpty) {
         _mailtrapToken = cfg.mailtrapToken;
       }
+      if (cfg.mailtrapProxyUrl.isNotEmpty) {
+        _mailtrapProxyUrl = cfg.mailtrapProxyUrl;
+      }
+      if (cfg.mailtrapInboxId.isNotEmpty) {
+        _mailtrapInboxId = cfg.mailtrapInboxId;
+      }
       if (cfg.mailtrapFromEmail.isNotEmpty) {
         _mailtrapFromEmail = cfg.mailtrapFromEmail;
       }
@@ -469,6 +485,49 @@ class _SettingsPageState extends State<SettingsPage> {
                     span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
                       Component.text(
                         'Token used to deliver ticket submission confirmations and response updates to user emails via Mailtrap.',
+                      ),
+                    ]),
+                  ]),
+
+                  div(classes: 'flex flex-col gap-1.5', [
+                    div(classes: 'flex items-center justify-between', [
+                      label(classes: 'text-[10px] text-zinc-400 font-bold uppercase tracking-wider', [
+                        Component.text('Cloudflare CORS Proxy URL (Required for Browser)'),
+                      ]),
+                      span(
+                        classes:
+                            'text-[10px] font-mono ${_mailtrapProxyUrl.isNotEmpty ? 'text-emerald-600' : 'text-amber-500'} font-bold',
+                        [
+                          Component.text(_mailtrapProxyUrl.isNotEmpty ? 'Configured' : 'Optional / Direct'),
+                        ],
+                      ),
+                    ]),
+                    input(
+                      value: _mailtrapProxyUrl,
+                      classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 font-mono focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
+                      attributes: {'type': 'text', 'placeholder': 'https://your-worker.workers.dev'},
+                      onInput: (dynamic value) => setState(() => _mailtrapProxyUrl = (value as String?) ?? ''),
+                    ),
+                    span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
+                      Component.text(
+                        'Cloudflare Worker URL that relays email requests with CORS headers enabled.',
+                      ),
+                    ]),
+                  ]),
+
+                  div(classes: 'flex flex-col gap-1.5', [
+                    label(classes: 'text-[10px] text-zinc-400 font-bold uppercase tracking-wider', [
+                      Component.text('Mailtrap Sandbox Inbox ID (For Testing)'),
+                    ]),
+                    input(
+                      value: _mailtrapInboxId,
+                      classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-2.5 text-xs text-zinc-800 font-mono focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
+                      attributes: {'type': 'text', 'placeholder': '4886849'},
+                      onInput: (dynamic value) => setState(() => _mailtrapInboxId = (value as String?) ?? ''),
+                    ),
+                    span(classes: 'text-[10px] text-zinc-400 font-medium leading-relaxed', [
+                      Component.text(
+                        'Inbox ID for Mailtrap Email Testing (Sandbox). Default: 4886849.',
                       ),
                     ]),
                   ]),

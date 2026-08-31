@@ -4,7 +4,7 @@ import 'dart:js_interop';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:web/web.dart' as web;
 
-/// Transactional Email Service powered by Mailtrap Email Sending REST API
+/// Transactional Email Service powered by Mailtrap Email REST API with Cloudflare CORS Proxy support
 class MailtrapEmailService {
   MailtrapEmailService._();
 
@@ -32,9 +32,23 @@ class MailtrapEmailService {
     defaultValue: 'Tranyx Support',
   );
 
+  /// Default compile-time proxy URL (injected via `--dart-define=MAIL_TRAP_PROXY_URL=...`)
+  static const String envProxyUrl = String.fromEnvironment(
+    'MAIL_TRAP_PROXY_URL',
+    defaultValue: String.fromEnvironment('MAILTRAP_PROXY_URL'),
+  );
+
+  /// Default compile-time Sandbox Inbox ID (injected via `--dart-define=MAIL_TRAP_INBOX_ID=...`)
+  static const String envInboxId = String.fromEnvironment(
+    'MAIL_TRAP_INBOX_ID',
+    defaultValue: '4886849',
+  );
+
   static String? _cachedLocalEnvToken;
   static String? _cachedLocalEnvSenderEmail;
   static String? _cachedLocalEnvSenderName;
+  static String? _cachedLocalEnvProxyUrl;
+  static String? _cachedLocalEnvInboxId;
   static bool _runtimeEnvChecked = false;
 
   /// Loads .env at runtime during local development (`jaspr serve`) if not passed via compile-time define.
@@ -74,6 +88,10 @@ class MailtrapEmailService {
               _cachedLocalEnvSenderEmail = value;
             } else if (key == 'MAIL_TRAP_FROM_NAME' || key == 'MAILTRAP_FROM_NAME') {
               _cachedLocalEnvSenderName = value;
+            } else if (key == 'MAIL_TRAP_PROXY_URL' || key == 'MAILTRAP_PROXY_URL') {
+              _cachedLocalEnvProxyUrl = value;
+            } else if (key == 'MAIL_TRAP_INBOX_ID' || key == 'MAILTRAP_INBOX_ID') {
+              _cachedLocalEnvInboxId = value;
             }
           }
         }
@@ -81,10 +99,7 @@ class MailtrapEmailService {
     } catch (_) {}
   }
 
-  /// Dynamically resolves the active Mailtrap API token:
-  /// 1. Compile-time `--dart-define=MAIL_TRAP_TOKEN=...`
-  /// 2. Runtime `/.env` fetch (for `jaspr serve` local development)
-  /// 3. Firestore `system_config/settings` (`mailtrapToken`)
+  /// Dynamically resolves the active Mailtrap API token.
   static Future<String> resolveApiToken([FirebaseFirestore? firestore]) async {
     if (envApiToken.isNotEmpty) {
       return envApiToken;
@@ -113,6 +128,56 @@ class MailtrapEmailService {
     }
 
     return '';
+  }
+
+  /// Dynamically resolves the Cloudflare Worker CORS Proxy URL.
+  static Future<String> resolveProxyUrl([FirebaseFirestore? firestore]) async {
+    if (envProxyUrl.isNotEmpty) {
+      return envProxyUrl;
+    }
+
+    await _loadRuntimeEnv();
+    if (_cachedLocalEnvProxyUrl != null && _cachedLocalEnvProxyUrl!.isNotEmpty) {
+      return _cachedLocalEnvProxyUrl!;
+    }
+
+    for (final db in [FirebaseFirestore.instance, firestore]) {
+      if (db == null) continue;
+      try {
+        final snap = await db.collection('system_config').doc('settings').get();
+        if (snap.exists && snap.data() != null) {
+          final proxy = snap.data()!['mailtrapProxyUrl'] ?? snap.data()!['mail_trap_proxy_url'];
+          if (proxy != null && proxy.toString().trim().isNotEmpty) {
+            return proxy.toString().trim();
+          }
+        }
+      } catch (_) {}
+    }
+
+    return '';
+  }
+
+  /// Dynamically resolves the Sandbox Inbox ID.
+  static Future<String> resolveInboxId([FirebaseFirestore? firestore]) async {
+    await _loadRuntimeEnv();
+    if (_cachedLocalEnvInboxId != null && _cachedLocalEnvInboxId!.isNotEmpty) {
+      return _cachedLocalEnvInboxId!;
+    }
+
+    for (final db in [FirebaseFirestore.instance, firestore]) {
+      if (db == null) continue;
+      try {
+        final snap = await db.collection('system_config').doc('settings').get();
+        if (snap.exists && snap.data() != null) {
+          final inbox = snap.data()!['mailtrapInboxId'] ?? snap.data()!['mail_trap_inbox_id'];
+          if (inbox != null && inbox.toString().trim().isNotEmpty) {
+            return inbox.toString().trim();
+          }
+        }
+      } catch (_) {}
+    }
+
+    return envInboxId.isNotEmpty ? envInboxId : '4886849';
   }
 
   /// Dynamically resolves the sender email address.
@@ -182,7 +247,7 @@ class MailtrapEmailService {
     };
   }
 
-  /// Sends a transactional HTML email directly via Mailtrap Sending REST API.
+  /// Sends a transactional HTML email via Cloudflare CORS Proxy or Mailtrap REST API.
   static Future<bool> sendEmail({
     required String recipientEmail,
     required String subject,
@@ -207,15 +272,22 @@ class MailtrapEmailService {
 
     final resolvedFromEmail = senderEmail ?? await resolveSenderEmail(firestore);
     final resolvedFromName = senderName ?? await resolveSenderName(firestore);
+    final proxyUrl = await resolveProxyUrl(firestore);
+    final inboxId = await resolveInboxId(firestore);
     final fromParsed = parseAddress(resolvedFromEmail, fallbackName: resolvedFromName);
 
     final completer = Completer<bool>();
 
     try {
+      final targetUrl = proxyUrl.isNotEmpty ? proxyUrl : 'https://send.api.mailtrap.io/api/send';
       final xhr = web.XMLHttpRequest();
-      xhr.open('POST', 'https://send.api.mailtrap.io/api/send', true);
+      xhr.open('POST', targetUrl, true);
       xhr.setRequestHeader('Authorization', 'Bearer $token');
+      xhr.setRequestHeader('Api-Token', token);
       xhr.setRequestHeader('Content-Type', 'application/json');
+      if (inboxId.isNotEmpty) {
+        xhr.setRequestHeader('X-Inbox-Id', inboxId);
+      }
 
       final toEntry = <String, dynamic>{
         'email': recipientEmail.trim(),
@@ -247,7 +319,12 @@ class MailtrapEmailService {
       });
 
       xhr.onError.listen((_) {
-        print('[MailtrapEmailService] ❌ Network error connecting to Mailtrap API.');
+        if (proxyUrl.isEmpty) {
+          print('[MailtrapEmailService] ❌ CORS policy blocked direct browser request to Mailtrap API.');
+          print('[MailtrapEmailService] 👉 Please configure MAIL_TRAP_PROXY_URL (Cloudflare Worker) in .env or Settings Console.');
+        } else {
+          print('[MailtrapEmailService] ❌ Network error connecting to Mailtrap proxy at $proxyUrl');
+        }
         completer.complete(false);
       });
 

@@ -51,6 +51,12 @@ jobs:
           elif [ -n "${{ secrets.MAILTRAP_TOKEN }}" ]; then
             echo "MAIL_TRAP_TOKEN=${{ secrets.MAILTRAP_TOKEN }}" >> .env
           fi
+          if [ -n "${{ secrets.MAIL_TRAP_PROXY_URL }}" ]; then
+            echo "MAIL_TRAP_PROXY_URL=${{ secrets.MAIL_TRAP_PROXY_URL }}" >> .env
+          fi
+          if [ -n "${{ secrets.MAIL_TRAP_INBOX_ID }}" ]; then
+            echo "MAIL_TRAP_INBOX_ID=${{ secrets.MAIL_TRAP_INBOX_ID }}" >> .env
+          fi
           if [ -n "${{ secrets.MAIL_TRAP_FROM_EMAIL }}" ]; then
             echo "MAIL_TRAP_FROM_EMAIL=${{ secrets.MAIL_TRAP_FROM_EMAIL }}" >> .env
           fi
@@ -62,6 +68,8 @@ jobs:
         env:
           IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
           MAIL_TRAP_TOKEN: ${{ secrets.MAIL_TRAP_TOKEN || secrets.MAILTRAP_TOKEN }}
+          MAIL_TRAP_PROXY_URL: ${{ secrets.MAIL_TRAP_PROXY_URL }}
+          MAIL_TRAP_INBOX_ID: ${{ secrets.MAIL_TRAP_INBOX_ID }}
           MAIL_TRAP_FROM_EMAIL: ${{ secrets.MAIL_TRAP_FROM_EMAIL || secrets.MAILTRAP_FROM_EMAIL }}
           MAIL_TRAP_FROM_NAME: ${{ secrets.MAIL_TRAP_FROM_NAME || secrets.MAILTRAP_FROM_NAME }}
         run: |
@@ -69,6 +77,8 @@ jobs:
           jaspr build \
             --dart-define=IMGBB_API_KEY="${{ secrets.IMGBB_API_KEY || 'abfd185244dc224ff987946bc9775bfc' }}" \
             --dart-define=MAIL_TRAP_TOKEN="${{ secrets.MAIL_TRAP_TOKEN || secrets.MAILTRAP_TOKEN }}" \
+            --dart-define=MAIL_TRAP_PROXY_URL="${{ secrets.MAIL_TRAP_PROXY_URL }}" \
+            --dart-define=MAIL_TRAP_INBOX_ID="${{ secrets.MAIL_TRAP_INBOX_ID || '4886849' }}" \
             --dart-define=MAIL_TRAP_FROM_EMAIL="${{ secrets.MAIL_TRAP_FROM_EMAIL || secrets.MAILTRAP_FROM_EMAIL || 'support@tranyx.com' }}" \
             --dart-define=MAIL_TRAP_FROM_NAME="${{ secrets.MAIL_TRAP_FROM_NAME || secrets.MAILTRAP_FROM_NAME || 'Tranyx Support' }}"
 
