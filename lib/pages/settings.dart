@@ -9,6 +9,7 @@ import 'package:web/web.dart' as web;
 import '../app.dart';
 import '../core/config/firebase_environments.dart';
 import '../core/providers/environment_provider.dart';
+import '../core/services/mailtrap_email_service.dart';
 import '../core/services/request_lock_service.dart';
 
 class SettingsPage extends StatefulComponent {
@@ -64,6 +65,56 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _configError;
   bool _configLoading = false;
   bool _configInitialized = false;
+
+  // Test integration email state
+  String _testEmailRecipient = 'terraservices.ph@gmail.com';
+  bool _testEmailLoading = false;
+  String? _testEmailFeedback;
+  bool _testEmailSuccess = false;
+
+  Future<void> _sendIntegrationTestEmail(BuildContext context) async {
+    final recipient = _testEmailRecipient.trim();
+    if (recipient.isEmpty || !recipient.contains('@')) {
+      setState(() {
+        _testEmailFeedback = 'Please enter a valid recipient email address.';
+        _testEmailSuccess = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _testEmailLoading = true;
+      _testEmailFeedback = null;
+    });
+
+    try {
+      final firestore = context.read(adminFirestoreProvider);
+      final ok = await MailtrapEmailService.sendTestEmail(
+        recipientEmail: recipient,
+        senderEmail: _mailtrapFromEmail.trim().isNotEmpty ? _mailtrapFromEmail.trim() : null,
+        senderName: _mailtrapFromName.trim().isNotEmpty ? _mailtrapFromName.trim() : null,
+        firestore: firestore,
+      );
+
+      setState(() {
+        _testEmailSuccess = ok;
+        if (ok) {
+          _testEmailFeedback = 'Integration test email dispatched to $recipient! Check logs at mailtrap.io/sending/email_logs or Sandbox inbox.';
+        } else {
+          _testEmailFeedback = 'Failed to dispatch email. Check browser console & verify Token / CORS Proxy URL.';
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _testEmailSuccess = false;
+        _testEmailFeedback = 'Error: $e';
+      });
+    } finally {
+      setState(() {
+        _testEmailLoading = false;
+      });
+    }
+  }
 
   Future<void> _updateSystemConfig(BuildContext context) async {
     final claimSec = int.tryParse(_claimTimeoutStr.trim()) ?? 180;
@@ -580,6 +631,50 @@ class _SettingsPageState extends State<SettingsPage> {
                         Component.text('Save Settings & Credentials'),
                     ],
                   ),
+
+                  // Integration Test Email Block
+                  div(classes: 'mt-4 pt-4 border-t border-zinc-100 flex flex-col gap-2.5 bg-zinc-50/70 p-4 rounded-2xl border border-zinc-200/40', [
+                    div(classes: 'flex items-center justify-between', [
+                      span(classes: 'text-xs font-bold text-zinc-800 flex items-center gap-1.5', [
+                        span([Component.text('✉️')]),
+                        Component.text('Mailtrap Integration Test'),
+                      ]),
+                      span(classes: 'text-[10px] text-zinc-400 font-mono', [
+                        Component.text('mailtrap.io/sending/email_logs'),
+                      ]),
+                    ]),
+                    p(classes: 'text-[11px] text-zinc-500 leading-relaxed', [
+                      Component.text('Dispatch a test integration payload to verify Mailtrap sending and CORS proxy setup.'),
+                    ]),
+                    div(classes: 'flex flex-col sm:flex-row gap-2 mt-1', [
+                      input(
+                        value: _testEmailRecipient,
+                        classes: 'flex-1 bg-white border border-zinc-200/70 rounded-xl px-3 py-2 text-xs text-zinc-800 font-mono focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
+                        attributes: {'type': 'email', 'placeholder': 'terraservices.ph@gmail.com'},
+                        onInput: (dynamic value) => setState(() => _testEmailRecipient = (value as String?) ?? ''),
+                      ),
+                      button(
+                        onClick: _testEmailLoading ? null : () => _sendIntegrationTestEmail(context),
+                        classes: 'px-4 py-2 bg-zinc-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50',
+                        attributes: _testEmailLoading ? {'disabled': 'true'} : {},
+                        [
+                          if (_testEmailLoading)
+                            span(
+                              classes: 'inline-block animate-spin h-3 w-3 border-2 border-white/30 border-t-white rounded-full',
+                              [],
+                            )
+                          else
+                            Component.text('Send Test Email'),
+                        ],
+                      ),
+                    ]),
+                    if (_testEmailFeedback != null)
+                      div(
+                        classes:
+                            'p-2.5 rounded-xl text-[11px] font-medium leading-relaxed ${_testEmailSuccess ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-red-50 border border-red-200 text-red-600'}',
+                        [Component.text(_testEmailFeedback!)],
+                      ),
+                  ]),
                 ]),
               ],
             ),

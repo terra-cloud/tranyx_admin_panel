@@ -336,4 +336,23 @@ class MailtrapEmailService {
 
     return completer.future;
   }
+
+  /// Helper to send a quick integration test email matching the sample spec.
+  static Future<bool> sendTestEmail({
+    String recipientEmail = 'terraservices.ph@gmail.com',
+    String? senderEmail,
+    String? senderName,
+    FirebaseFirestore? firestore,
+  }) async {
+    return sendEmail(
+      recipientEmail: recipientEmail,
+      subject: 'You are awesome!',
+      textContent: 'Congrats for sending test email with Mailtrap!',
+      htmlContent: '<p>Congrats for sending test email with <b>Mailtrap</b>!</p>',
+      category: 'Integration Test',
+      senderEmail: senderEmail,
+      senderName: senderName,
+      firestore: firestore,
+    );
+  }
 }
