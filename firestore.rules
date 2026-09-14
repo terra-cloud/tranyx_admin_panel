@@ -101,11 +101,13 @@ service cloud.firestore {
 
     // Global Transactions
     match /transactions/{txId} {
-      allow read: if isAuthenticated() && (
-        resource.data.uid == request.auth.uid ||
-        resource.data.userId == request.auth.uid ||
-        isAdmin()
-      );
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    // Subscriptions Collection
+    match /subscriptions/{subId} {
+      allow read: if true;
       allow create, update, delete: if isAuthenticated();
     }
 

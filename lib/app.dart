@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
@@ -24,6 +25,7 @@ import 'pages/news.dart';
 import 'pages/reports.dart';
 import 'pages/deposits.dart';
 import 'pages/withdrawals.dart';
+import 'pages/subscriptions.dart';
 
 /// Provider that streams the currently logged-in Admin staff member.
 final adminCurrentUserProvider = StreamProvider<User?>((ref) {
@@ -77,6 +79,9 @@ class AppShell extends StatelessComponent {
             photoUrl: photo,
           );
 
+          // Synchronize authentication and agent registration on target environment Firestore app
+          unawaited(syncEnvAuth(firestore.app, user));
+
           return Router(
             routes: [
               ShellRoute(
@@ -100,6 +105,7 @@ class AppShell extends StatelessComponent {
                   Route(path: '/chats', builder: (context, state) => const ChatsPage()),
                   Route(path: '/tickets', builder: (context, state) => const TicketsPage()),
                   Route(path: '/deposits', builder: (context, state) => const DepositsPage()),
+                  Route(path: '/subscriptions', builder: (context, state) => const SubscriptionsPage()),
                   Route(path: '/withdrawals', builder: (context, state) => const WithdrawalsPage()),
                   Route(path: '/promos', builder: (context, state) => const AdminGuard(child: PromosPage())),
                   Route(path: '/news', builder: (context, state) => const AdminGuard(child: NewsPage())),

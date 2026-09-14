@@ -16,6 +16,7 @@ import '../core/services/request_lock_service.dart';
 import '../core/services/ticket_email_service.dart';
 import '../pages/chats.dart' show supportChatsStreamProvider, activeChatRoomIdProvider;
 import '../pages/deposits.dart' show depositRequestsStreamProvider;
+import '../pages/subscriptions.dart' show pendingSubscriptionsStreamProvider;
 import '../pages/tickets.dart' show ticketsStreamProvider, selectedTicketIdProvider;
 import '../pages/withdrawals.dart' show withdrawalRequestsStreamProvider;
 
@@ -75,6 +76,7 @@ class P2PInterruptItem {
   bool get isWithdrawal => type == 'withdrawal';
   bool get isTicket => type == 'ticket';
   bool get isChat => type == 'chat';
+  bool get isSubscription => type == 'subscription';
 
   bool isClaimExpired(int nowMs, int timeoutSec) {
     if (!isAssigned) return false;
@@ -311,6 +313,7 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
 
   @override
   Component build(BuildContext context) {
+    final subscriptionsAsync = context.watch(pendingSubscriptionsStreamProvider);
     final depositsAsync = context.watch(depositRequestsStreamProvider);
     final withdrawalsAsync = context.watch(withdrawalRequestsStreamProvider);
     final ticketsAsync = context.watch(ticketsStreamProvider);
@@ -324,6 +327,7 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
     final role = profile?.role.toLowerCase() ?? '';
     final isAdmin = role.contains('admin') || currentUserEmail == 'admin@tranyx.app' || currentUserEmail == 'admin@tranyx.com';
 
+    final pendingSubs = subscriptionsAsync.value ?? [];
     final deposits = depositsAsync.value ?? [];
     final withdrawals = withdrawalsAsync.value ?? [];
     final tickets = ticketsAsync.value ?? [];
@@ -346,6 +350,9 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
           m.contains('eth') ||
           m.contains('blockchain');
     }
+
+    // 0. Gather unhandled P2P subscription requests
+    final unhandledSubscriptions = pendingSubs.where((sub) => !_acknowledgedInterruptIds.contains(sub.id)).toList();
 
     // 1. Gather unassigned deposit requests (Excluding On-Chain Crypto/USDT)
     final unhandledDeposits = deposits.where((d) {
@@ -510,6 +517,22 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
 
     // Combine all actionable items
     final List<P2PInterruptItem> actionableItems = [
+      ...unhandledSubscriptions.map(
+        (sub) => P2PInterruptItem(
+          id: sub.id,
+          type: 'subscription',
+          referenceNumber: sub.referenceNumber,
+          userName: sub.userName,
+          userEmail: sub.userEmail,
+          userId: sub.userId,
+          amount: sub.amount,
+          paymentMethod: 'Cash (P2P) • ${sub.isYearly ? "PRO Yearly" : "PRO Monthly"}',
+          subject: '👑 New Hybrid PRO Subscription (${sub.isYearly ? "Yearly" : "Monthly"})',
+          description: 'User ${sub.userName} submitted a Cash (P2P) payment of ₱${sub.amount.toStringAsFixed(2)} for ${sub.plan.toUpperCase()} PRO membership. Ref: ${sub.referenceNumber}',
+          status: sub.status,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(sub.submittedAt),
+        ),
+      ),
       ...unhandledChats.map((c) {
         final assignedAtMs = c.assignedAt;
         final claimDeadlineMs = assignedAtMs != null ? assignedAtMs + (config.claimTimeoutSeconds * 1000) : null;
@@ -614,6 +637,7 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
     final isTicket = item.type == 'ticket';
     final isChat = item.type == 'chat';
     final isDeposit = item.type == 'deposit';
+    final isSubscription = item.type == 'subscription';
     final isGcash = item.paymentMethod.toLowerCase().contains('gcash');
     final isMaya = item.paymentMethod.toLowerCase().contains('maya');
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -660,6 +684,8 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                             ? "bg-purple-500 text-white shadow-purple-500/20"
                             : isTicket
                             ? "bg-indigo-600 text-white shadow-indigo-600/20"
+                            : isSubscription
+                            ? "bg-gradient-to-br from-amber-400 to-purple-600 text-white shadow-purple-500/20"
                             : isDeposit
                             ? "bg-[#0fa958] text-white shadow-[#0fa958]/20"
                             : "bg-amber-500 text-white shadow-amber-500/20"}',
@@ -669,6 +695,8 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                             ? '💬'
                             : isTicket
                             ? '🎫'
+                            : isSubscription
+                            ? '👑'
                             : isDeposit
                             ? '📥'
                             : '📤',
@@ -683,6 +711,8 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                               ? 'Live Support Request'
                               : isTicket
                               ? 'New Support Ticket Raised'
+                              : isSubscription
+                              ? 'New P2P PRO Subscription'
                               : isDeposit
                               ? 'New Deposit Request'
                               : 'New Cashout Request',
@@ -720,6 +750,8 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                             ? 'Assigned to you — Accept live chat within 3-minute window'
                             : isTicket
                             ? 'Assigned to you — Accept within 3-minute window'
+                            : isSubscription
+                            ? 'Customer submitted Cash (P2P) for PRO membership — Verify & Activate'
                             : isDeposit
                             ? 'Customer waiting for payment QR / verification'
                             : 'Customer waiting for agent payout disbursement',
@@ -808,7 +840,7 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                   [
                     div(classes: 'flex flex-col gap-0.5', [
                       span(classes: 'text-[10px] font-bold text-zinc-400 uppercase tracking-wider', [
-                        Component.text(isDeposit ? 'Deposit Amount' : 'Disbursement Amount'),
+                        Component.text(isSubscription ? 'Subscription Amount' : (isDeposit ? 'Deposit Amount' : 'Disbursement Amount')),
                       ]),
                       span(classes: 'text-2xl font-black text-zinc-900 tracking-tight', [
                         Component.text('₱${item.amount.toStringAsFixed(2)}'),
@@ -916,7 +948,9 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                         _activeInterruptItem = null;
                         _claimErrorNotice = null;
                       });
-                      if (isDeposit) {
+                      if (isSubscription) {
+                        Router.of(context).push('/subscriptions');
+                      } else if (isDeposit) {
                         Router.of(context).push('/deposits');
                       } else {
                         Router.of(context).push('/withdrawals');
@@ -924,7 +958,7 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
                     },
                     classes: 'px-5.5 py-2.5 rounded-xl bg-black hover:bg-zinc-800 text-white text-xs font-black transition-all shadow-sm cursor-pointer border-0 outline-none flex items-center gap-2',
                     [
-                      Component.text(isDeposit ? 'Open Deposit Queue' : 'Open Cashout Queue'),
+                      Component.text(isSubscription ? 'Open Subscriptions Queue' : (isDeposit ? 'Open Deposit Queue' : 'Open Cashout Queue')),
                       span(classes: 'text-xs font-bold', [Component.text('→')]),
                     ],
                   ),

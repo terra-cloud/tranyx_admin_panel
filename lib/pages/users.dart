@@ -312,6 +312,10 @@ class UserProfileModel {
   final int terraPoints;
   final List<String> earnedRewards;
   final double availableBalance;
+  final bool isPremium;
+  final String? subscriptionPlan;
+  final String? subscriptionStatus;
+  final Map<String, dynamic>? pendingSubscription;
 
   UserProfileModel({
     required this.uid,
@@ -330,6 +334,10 @@ class UserProfileModel {
     this.terraPoints = 0,
     this.earnedRewards = const [],
     this.availableBalance = 0.0,
+    this.isPremium = false,
+    this.subscriptionPlan,
+    this.subscriptionStatus,
+    this.pendingSubscription,
   });
 
   factory UserProfileModel.fromMap(String uid, Map<String, dynamic> map) {
@@ -355,6 +363,10 @@ class UserProfileModel {
           (map['walletBalance'] as num?)?.toDouble() ??
           (map['balance'] as num?)?.toDouble() ??
           0.0,
+      isPremium: (map['isPremium'] == true) || (map['subscriptionStatus'] == 'active'),
+      subscriptionPlan: map['subscriptionPlan'] as String?,
+      subscriptionStatus: map['subscriptionStatus'] as String?,
+      pendingSubscription: map['pendingSubscription'] != null ? Map<String, dynamic>.from(map['pendingSubscription'] as Map) : null,
     );
   }
 }

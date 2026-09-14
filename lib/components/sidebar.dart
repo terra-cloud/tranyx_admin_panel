@@ -12,6 +12,7 @@ import '../pages/tickets.dart';
 import '../pages/reports.dart';
 import '../pages/deposits.dart';
 import '../pages/withdrawals.dart';
+import '../pages/subscriptions.dart';
 
 class Sidebar extends StatefulComponent {
   const Sidebar({super.key});
@@ -64,6 +65,8 @@ class _SidebarState extends State<Sidebar> {
           data: (list) => list.where((d) => d.status == 'PENDING_VERIFICATION' || d.status == 'PENDING_AGENT').length,
           orElse: () => 0,
         );
+
+    final pendingSubscriptionsCount = context.watch(pendingSubscriptionsCountProvider);
 
     final pendingWithdrawalsCount = context
         .watch(withdrawalRequestsStreamProvider)
@@ -214,6 +217,7 @@ class _SidebarState extends State<Sidebar> {
                 buildMenuItem('Dashboard', '/', '/images/icon_dashboard.png'),
                 buildMenuItem('P2P Deposits', '/deposits', '💳', badgeCount: pendingDepositsCount),
                 buildMenuItem('P2P Cashouts', '/withdrawals', '💸', badgeCount: pendingWithdrawalsCount),
+                buildMenuItem('P2P Subscriptions', '/subscriptions', '👑', badgeCount: pendingSubscriptionsCount),
                 buildMenuItem('Listings', '/listings', '/images/icon_listings.png'),
                 buildMenuItem('Bookings', '/bookings', '/images/icon_bookings.png'),
                 buildMenuItem('KYC Verification', '/kyc', '/images/icon_kyc.png', badgeCount: pendingKycCount),
@@ -381,6 +385,7 @@ class _SidebarState extends State<Sidebar> {
               buildMobileMenuItem('Dashboard', '/', '/images/icon_dashboard.png'),
               buildMobileMenuItem('P2P Deposits', '/deposits', '💳', badgeCount: pendingDepositsCount),
               buildMobileMenuItem('P2P Cashouts', '/withdrawals', '💸', badgeCount: pendingWithdrawalsCount),
+              buildMobileMenuItem('P2P Subscriptions', '/subscriptions', '👑', badgeCount: pendingSubscriptionsCount),
               buildMobileMenuItem('Listings', '/listings', '/images/icon_listings.png'),
               buildMobileMenuItem('Bookings', '/bookings', '/images/icon_bookings.png'),
               buildMobileMenuItem('KYC Verification', '/kyc', '/images/icon_kyc.png', badgeCount: pendingKycCount),

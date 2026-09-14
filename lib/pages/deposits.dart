@@ -13,6 +13,7 @@ import '../app.dart';
 import '../core/providers/environment_provider.dart';
 import 'users.dart';
 import 'withdrawals.dart';
+import 'subscriptions.dart' show pendingSubscriptionsCountProvider, SubscriptionsView;
 
 /// Represents a P2P deposit request submitted by a user.
 class DepositRequest {
@@ -1523,6 +1524,7 @@ class _DepositsPageState extends State<DepositsPage> {
     final userRole = profile?.role.toLowerCase() ?? '';
     final isAdmin = userRole.contains('admin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
 
+    final pendingSubscriptionsCount = context.watch(pendingSubscriptionsCountProvider);
     final allDeposits = depositsAsync.value ?? [];
     final allWithdrawals = withdrawalsAsync.value ?? [];
     final claimedList = claimedAsync.value ?? [];
@@ -1731,6 +1733,7 @@ class _DepositsPageState extends State<DepositsPage> {
             [
               _buildTabButton('awaiting_qr', '⚡ Awaiting QR', count: awaitingQrCount, isUrgent: awaitingQrCount > 0),
               _buildTabButton('pending_proof', '🔍 Verify Proof', count: pendingProofCount, isWarning: pendingProofCount > 0),
+              _buildTabButton('subscriptions', '👑 P2P Subscriptions', count: pendingSubscriptionsCount, isWarning: pendingSubscriptionsCount > 0),
               _buildTabButton('awaiting_payment', '⏳ User Paying', count: awaitingPaymentCount),
               _buildTabButton('approved', 'Approved', count: approvedCount),
               _buildTabButton('rejected', 'Rejected', count: rejectedCount),
@@ -1741,7 +1744,7 @@ class _DepositsPageState extends State<DepositsPage> {
           ),
 
           // Filters & Search Row (Responsive layout)
-          if (_activeTab != 'registry' && _activeTab != 'audit')
+          if (_activeTab != 'registry' && _activeTab != 'audit' && _activeTab != 'subscriptions')
             div(classes: 'flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/70 backdrop-blur-sm p-3 rounded-2xl border border-zinc-200/50 shadow-sm', [
               // Left: Method filter & Quick stats
               div(classes: 'flex items-center gap-2.5 flex-wrap', [
@@ -1791,7 +1794,9 @@ class _DepositsPageState extends State<DepositsPage> {
         ]),
 
         // Tab Contents
-        if (_activeTab == 'registry')
+        if (_activeTab == 'subscriptions')
+          const SubscriptionsView()
+        else if (_activeTab == 'registry')
           _buildClaimedRegistryView(claimedList)
         else if (_activeTab == 'audit')
           _buildAuditLogsView(auditLogs)
