@@ -242,6 +242,8 @@ final p2pSubscriptionsStreamProvider = StreamProvider<List<P2PSubscriptionReques
           final createdAt = (data['createdAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
           final verifiedAt = (data['verifiedAt'] as num?)?.toInt();
 
+          final receiptUrl = (data['receiptUrl'] ?? data['proofImageUrl'] ?? data['proofUrl'] ?? data['imageUrl'] ?? '').toString();
+
           list.add(P2PSubscriptionRequest(
             id: txId,
             userId: uid,
@@ -255,6 +257,7 @@ final p2pSubscriptionsStreamProvider = StreamProvider<List<P2PSubscriptionReques
             submittedAt: createdAt,
             verifiedAt: verifiedAt,
             txId: txId,
+            receiptUrl: receiptUrl.isNotEmpty ? receiptUrl : null,
             reviewedByAdminId: data['reviewedByAdminId'] as String?,
             reviewedByAdminName: data['reviewedByAdminName'] as String?,
             rejectionReason: data['rejectionReason'] as String?,
@@ -281,6 +284,7 @@ final p2pSubscriptionsStreamProvider = StreamProvider<List<P2PSubscriptionReques
       final status = rawStatus == 'ACTIVE' || rawStatus == 'APPROVED'
           ? 'ACTIVE'
           : (rawStatus == 'REJECTED' ? 'REJECTED' : 'PENDING_VERIFICATION');
+      final receiptUrl = (data['receiptUrl'] ?? data['proofImageUrl'] ?? data['proofUrl'] ?? data['imageUrl'] ?? '').toString();
 
       list.add(P2PSubscriptionRequest(
         id: doc.id,
@@ -295,6 +299,7 @@ final p2pSubscriptionsStreamProvider = StreamProvider<List<P2PSubscriptionReques
         submittedAt: (data['createdAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
         verifiedAt: (data['verifiedAt'] as num?)?.toInt(),
         txId: (data['txId'] ?? doc.id).toString(),
+        receiptUrl: receiptUrl.isNotEmpty ? receiptUrl : null,
         reviewedByAdminId: data['reviewedByAdminId'] as String?,
         reviewedByAdminName: data['reviewedByAdminName'] as String?,
         rejectionReason: data['rejectionReason'] as String?,
