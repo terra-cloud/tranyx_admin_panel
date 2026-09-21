@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -54,41 +55,66 @@ final firebaseAuthProvider = Provider<FirebaseAuth>((ref) {
 });
 
 /// Provider that streams the auth state of the authenticated Admin / Staff member from tranyx-admin-portal.
-final activeEnvAuthUserProvider = StreamProvider<User?>((ref) {
+final adminAuthUserProvider = StreamProvider<User?>((ref) {
   final auth = ref.watch(adminAuthProvider);
   return auth.userChanges();
 });
 
 /// Synchronizes admin authentication into the selected environment so that
 /// security rules recognizing `isAdminOrStaff()` succeed without 403 PERMISSION_DENIED.
-Future<void> syncEnvAuth(FirebaseApp app, User? adminUser) async {
-  if (adminUser == null) return;
+Future<User?> syncEnvAuth(FirebaseApp app, User? adminUser) async {
+  if (adminUser == null) return null;
   try {
     final envAuth = FirebaseAuth.instanceFor(app: app);
-    if (envAuth.currentUser == null) {
-      final savedEmail = web.window.localStorage.getItem('tranyx_staff_email');
-      final savedPass = web.window.localStorage.getItem('tranyx_staff_password');
-      if (savedEmail != null && savedPass != null) {
-        try {
-          await envAuth.signInWithEmailAndPassword(email: savedEmail, password: savedPass);
-        } catch (_) {
+    final savedEmail = web.window.localStorage.getItem('tranyx_staff_email') ?? adminUser.email;
+    final savedPass = web.window.localStorage.getItem('tranyx_staff_password');
+
+    // Check if already authenticated on this environment app with the matching email
+    if (envAuth.currentUser != null &&
+        savedEmail != null &&
+        envAuth.currentUser!.email?.toLowerCase() == savedEmail.trim().toLowerCase()) {
+      return envAuth.currentUser;
+    }
+
+    // Sign in using staff credentials
+    if (savedEmail != null && savedEmail.isNotEmpty && savedPass != null && savedPass.isNotEmpty) {
+      try {
+        await envAuth.signInWithEmailAndPassword(
+          email: savedEmail.trim(),
+          password: savedPass,
+        );
+        print('[EnvAuthSync] Signed in to ${app.name} as ${envAuth.currentUser?.email}');
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
+          // Auto-provision staff account on this environment project!
           try {
-            await envAuth.signInAnonymously();
-          } catch (_) {}
+            print('[EnvAuthSync] Account not present in ${app.name}. Auto-provisioning staff account...');
+            await envAuth.createUserWithEmailAndPassword(
+              email: savedEmail.trim(),
+              password: savedPass,
+            );
+            if (adminUser.displayName != null && adminUser.displayName!.isNotEmpty) {
+              await envAuth.currentUser?.updateDisplayName(adminUser.displayName);
+            }
+            print('[EnvAuthSync] Auto-provisioned staff account in ${app.name}: ${envAuth.currentUser?.email}');
+          } catch (createErr) {
+            print('[EnvAuthSync] Auto-provision notice on ${app.name}: $createErr');
+          }
+        } else {
+          print('[EnvAuthSync] Sign-in notice on ${app.name} (${e.code}): ${e.message}');
         }
-      } else {
-        try {
-          await envAuth.signInAnonymously();
-        } catch (_) {}
+      } catch (e) {
+        print('[EnvAuthSync] Sign-in error on ${app.name}: $e');
       }
     }
 
-    final envUid = envAuth.currentUser?.uid;
+    final currentUser = envAuth.currentUser;
+    final envUid = currentUser?.uid;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final firestore = FirebaseFirestore.instanceFor(app: app);
 
     if (envUid != null) {
-      final staffEmail = adminUser.email ?? 'admin@tranyx.app';
+      final staffEmail = currentUser?.email ?? adminUser.email ?? 'admin@tranyx.app';
       try {
         await firestore.collection('p2p_agents').doc(envUid).set({
           'uid': envUid,
@@ -106,12 +132,70 @@ Future<void> syncEnvAuth(FirebaseApp app, User? adminUser) async {
           'name': adminUser.displayName ?? 'Staff Admin',
           'updatedAt': nowMs,
         }, SetOptions(merge: true));
-      } catch (_) {}
+      } catch (docErr) {
+        print('[EnvAuthSync] Document bootstrap notice on ${app.name}: $docErr');
+      }
     }
+
+    return currentUser;
   } catch (e) {
-    print('[EnvAuthSync] Sync notice: $e');
+    print('[EnvAuthSync] Sync notice on ${app.name}: $e');
+    return null;
   }
 }
+
+/// Provider that streams the auth state of the authenticated Admin / Staff member for the active environment.
+final activeEnvAuthUserProvider = StreamProvider<User?>((ref) {
+  final adminAuth = ref.watch(adminAuthProvider);
+  final adminUser = adminAuth.currentUser;
+
+  final appAsync = ref.watch(firebaseAppProvider);
+  return appAsync.when(
+    data: (app) {
+      final envAuth = FirebaseAuth.instanceFor(app: app);
+      final controller = StreamController<User?>();
+
+      // Stream current user immediately if already authenticated
+      if (envAuth.currentUser != null) {
+        controller.add(envAuth.currentUser);
+      }
+
+      // Listen to auth state changes on the active environment app
+      final sub = envAuth.authStateChanges().listen((user) {
+        if (!controller.isClosed) {
+          controller.add(user);
+        }
+      });
+
+      // Synchronize staff authentication into this environment
+      if (adminUser != null) {
+        syncEnvAuth(app, adminUser).then((user) {
+          if (!controller.isClosed && user != null) {
+            controller.add(user);
+          }
+        }).catchError((err) {
+          print('[ActiveEnvAuth] Sync error on ${app.name}: $err');
+        });
+      }
+
+      ref.onDispose(() {
+        sub.cancel();
+        controller.close();
+      });
+
+      return controller.stream;
+    },
+    loading: () => const Stream.empty(),
+    error: (_, __) => const Stream.empty(),
+  );
+});
+
+/// Provider signaling when target environment authentication has completed successfully
+final targetEnvAuthReadyProvider = FutureProvider<bool>((ref) async {
+  final userAsync = ref.watch(activeEnvAuthUserProvider);
+  return userAsync.value != null;
+});
+
 
 /// Structured profile model for the currently authenticated Admin/Staff/Agent user.
 class AdminStaffProfileModel {

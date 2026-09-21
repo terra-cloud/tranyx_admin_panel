@@ -376,7 +376,10 @@ class PlatformTransaction {
 
 /// Provider streaming P2P withdrawal requests in real time from all possible collections.
 final withdrawalRequestsStreamProvider = StreamProvider<List<WithdrawalRequest>>((ref) {
-  ref.watch(activeEnvAuthUserProvider);
+  final envUser = ref.watch(activeEnvAuthUserProvider).value;
+  if (envUser == null) {
+    return const Stream.empty();
+  }
   final firestore = ref.watch(firestoreProvider);
 
   final controller = StreamController<List<WithdrawalRequest>>();
@@ -434,7 +437,10 @@ final withdrawalRequestsStreamProvider = StreamProvider<List<WithdrawalRequest>>
 
 /// Provider streaming all real-time platform transactions.
 final platformTransactionsStreamProvider = StreamProvider<List<PlatformTransaction>>((ref) {
-  ref.watch(activeEnvAuthUserProvider);
+  final envUser = ref.watch(activeEnvAuthUserProvider).value;
+  if (envUser == null) {
+    return const Stream.empty();
+  }
   final firestore = ref.watch(firestoreProvider);
   return firestore.collection('transactions').snapshots().map((snap) {
     final list = snap.docs.map((doc) => PlatformTransaction.fromMap(doc.id, doc.data())).toList();

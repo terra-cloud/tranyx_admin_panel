@@ -94,7 +94,10 @@ class P2PSubscriptionRequest {
 
 /// Real-time stream provider syncing all P2P subscriptions across users, transactions, and deposit collections.
 final p2pSubscriptionsStreamProvider = StreamProvider<List<P2PSubscriptionRequest>>((ref) {
-  ref.watch(activeEnvAuthUserProvider);
+  final envUser = ref.watch(activeEnvAuthUserProvider).value;
+  if (envUser == null) {
+    return const Stream.empty();
+  }
   final firestore = ref.watch(firestoreProvider);
 
   final controller = StreamController<List<P2PSubscriptionRequest>>();

@@ -389,6 +389,8 @@ final p2pDashboardMetricsProvider = Provider<P2PDashboardMetrics>((ref) {
 
 /// Total registered platform users (excludes staff/admin)
 final dbTotalUsersCountProvider = StreamProvider<int>((ref) {
+  final envUser = ref.watch(activeEnvAuthUserProvider).value;
+  if (envUser == null) return Stream.value(0);
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('users')

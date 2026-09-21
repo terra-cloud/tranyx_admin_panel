@@ -144,10 +144,15 @@ final newsPostsStreamProvider = StreamProvider<List<NewsPostItem>>((ref) {
 
   return firestore
       .collection('news_posts')
-      .orderBy('createdAt', descending: true)
       .snapshots()
       .map((snap) {
-        return snap.docs.map((doc) => NewsPostItem.fromMap(doc.id, doc.data())).toList();
+        final list = snap.docs.map((doc) => NewsPostItem.fromMap(doc.id, doc.data())).toList();
+        list.sort((a, b) {
+          final timeA = a.createdAt?.millisecondsSinceEpoch ?? 0;
+          final timeB = b.createdAt?.millisecondsSinceEpoch ?? 0;
+          return timeB.compareTo(timeA);
+        });
+        return list;
       })
       .handleError((err) {
         print('[NewsConsole] Stream failed: $err');

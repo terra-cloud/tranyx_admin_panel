@@ -419,6 +419,10 @@ class TxModel {
 int mathMin(int a, int b) => a < b ? a : b;
 
 final usersStreamProvider = StreamProvider<List<UserProfileModel>>((ref) {
+  final envUser = ref.watch(activeEnvAuthUserProvider).value;
+  if (envUser == null) {
+    return Stream.value(<UserProfileModel>[]);
+  }
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('users')
@@ -1006,6 +1010,35 @@ class _UsersPageState extends State<UsersPage> {
                               },
                               classes: 'px-4 py-2 border border-zinc-200 hover:bg-zinc-50 text-zinc-700 text-[10px] font-black uppercase tracking-wide rounded-xl transition-all',
                               [Component.text('Revoke KYC ID')],
+                            ),
+
+                          if (!_selectedUser!.bgChecked)
+                            button(
+                              onClick: () async {
+                                final firestore = context.read(firestoreProvider);
+                                await firestore.collection('users').doc(_selectedUser!.uid).update({
+                                  'bgChecked': true,
+                                  'verificationLevel': _selectedUser!.idVerified ? 2 : 1,
+                                });
+                                _showToast('✅ Background check cleared.');
+                                setState(() => _selectedUser = null);
+                              },
+                              classes: 'px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-wide rounded-xl shadow-sm transition-all',
+                              [Component.text('Clear BG Check')],
+                            )
+                          else
+                            button(
+                              onClick: () async {
+                                final firestore = context.read(firestoreProvider);
+                                await firestore.collection('users').doc(_selectedUser!.uid).update({
+                                  'bgChecked': false,
+                                  'verificationLevel': _selectedUser!.idVerified ? 1 : 0,
+                                });
+                                _showToast('⚠️ Background check revoked.');
+                                setState(() => _selectedUser = null);
+                              },
+                              classes: 'px-4 py-2 border border-zinc-200 hover:bg-zinc-50 text-zinc-700 text-[10px] font-black uppercase tracking-wide rounded-xl transition-all',
+                              [Component.text('Revoke BG Check')],
                             ),
 
                           // Manage Penalty Dropdown
