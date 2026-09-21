@@ -378,7 +378,7 @@ class PlatformTransaction {
 final withdrawalRequestsStreamProvider = StreamProvider<List<WithdrawalRequest>>((ref) {
   final envUser = ref.watch(activeEnvAuthUserProvider).value;
   if (envUser == null) {
-    return const Stream.empty();
+    return Stream.value(<WithdrawalRequest>[]);
   }
   final firestore = ref.watch(firestoreProvider);
 
@@ -439,7 +439,7 @@ final withdrawalRequestsStreamProvider = StreamProvider<List<WithdrawalRequest>>
 final platformTransactionsStreamProvider = StreamProvider<List<PlatformTransaction>>((ref) {
   final envUser = ref.watch(activeEnvAuthUserProvider).value;
   if (envUser == null) {
-    return const Stream.empty();
+    return Stream.value(<PlatformTransaction>[]);
   }
   final firestore = ref.watch(firestoreProvider);
   return firestore.collection('transactions').snapshots().map((snap) {

@@ -96,7 +96,7 @@ class P2PSubscriptionRequest {
 final p2pSubscriptionsStreamProvider = StreamProvider<List<P2PSubscriptionRequest>>((ref) {
   final envUser = ref.watch(activeEnvAuthUserProvider).value;
   if (envUser == null) {
-    return const Stream.empty();
+    return Stream.value(<P2PSubscriptionRequest>[]);
   }
   final firestore = ref.watch(firestoreProvider);
 

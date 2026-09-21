@@ -122,6 +122,10 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
 
   Future<void> _runSweepRoutine() async {
     try {
+      final envUser = context.read(activeEnvAuthUserProvider).value;
+      if (envUser == null) {
+        return;
+      }
       final firestore = context.read(firestoreProvider);
       final config = context.read(systemConfigStreamProvider).value ?? const SystemConfigModel();
 

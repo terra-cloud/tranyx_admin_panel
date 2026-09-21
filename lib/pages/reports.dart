@@ -8,7 +8,7 @@ import 'listings.dart';
 
 final reportedJobsStreamProvider = StreamProvider<List<ListingData>>((ref) {
   final envUser = ref.watch(activeEnvAuthUserProvider).value;
-  if (envUser == null) return const Stream.empty();
+  if (envUser == null) return Stream.value(<ListingData>[]);
   final firestore = ref.watch(firestoreProvider);
   return firestore.collection('jobs').snapshots().map((snap) {
     return snap.docs
@@ -40,7 +40,7 @@ final reportedJobsStreamProvider = StreamProvider<List<ListingData>>((ref) {
 
 final reportedRentalsStreamProvider = StreamProvider<List<ListingData>>((ref) {
   final envUser = ref.watch(activeEnvAuthUserProvider).value;
-  if (envUser == null) return const Stream.empty();
+  if (envUser == null) return Stream.value(<ListingData>[]);
   final firestore = ref.watch(firestoreProvider);
   return firestore.collection('rentals').snapshots().map((snap) {
     return snap.docs
@@ -73,7 +73,7 @@ final reportedRentalsStreamProvider = StreamProvider<List<ListingData>>((ref) {
 
 final reportedPropertiesStreamProvider = StreamProvider<List<ListingData>>((ref) {
   final envUser = ref.watch(activeEnvAuthUserProvider).value;
-  if (envUser == null) return const Stream.empty();
+  if (envUser == null) return Stream.value(<ListingData>[]);
   final firestore = ref.watch(firestoreProvider);
   return firestore.collection('properties').snapshots().map((snap) {
     return snap.docs

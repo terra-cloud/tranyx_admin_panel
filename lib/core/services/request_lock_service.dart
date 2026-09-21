@@ -639,7 +639,9 @@ class RequestLockService {
         claimTimeoutSec: claimTimeoutSec,
       );
     } catch (e) {
-      print('[RequestLockService] Timeout sweep error for $collectionName: $e');
+      if (!e.toString().contains('permission-denied')) {
+        print('[RequestLockService] Timeout sweep error for $collectionName: $e');
+      }
     }
   }
 }

@@ -221,7 +221,7 @@ final activeChatMessagesStreamProvider = StreamProvider<List<ChatMessage>>((ref)
   }
   final firestore = ref.watch(firestoreProvider);
   final activeChatId = ref.watch(activeChatRoomIdProvider);
-  if (activeChatId == null) return const Stream.empty();
+  if (activeChatId == null) return Stream.value(<ChatMessage>[]);
   return firestore
       .collection('support_chats')
       .doc(activeChatId)

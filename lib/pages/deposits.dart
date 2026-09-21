@@ -499,7 +499,7 @@ class AdminAuditEntry {
 final depositRequestsStreamProvider = StreamProvider<List<DepositRequest>>((ref) {
   final envUser = ref.watch(activeEnvAuthUserProvider).value;
   if (envUser == null) {
-    return const Stream.empty();
+    return Stream.value(<DepositRequest>[]);
   }
   final firestore = ref.watch(firestoreProvider);
 
@@ -552,7 +552,7 @@ final depositRequestsStreamProvider = StreamProvider<List<DepositRequest>>((ref)
 /// Provider streaming claimed P2P reference numbers registry.
 final claimedReferencesStreamProvider = StreamProvider<List<ClaimedReference>>((ref) {
   final envUser = ref.watch(activeEnvAuthUserProvider).value;
-  if (envUser == null) return const Stream.empty();
+  if (envUser == null) return Stream.value(<ClaimedReference>[]);
   final firestore = ref.watch(firestoreProvider);
   return firestore.collection('claimed_p2p_references').snapshots().map((snap) {
     return snap.docs.map((doc) => ClaimedReference.fromMap(doc.id, doc.data())).toList();
@@ -564,7 +564,7 @@ final claimedReferencesStreamProvider = StreamProvider<List<ClaimedReference>>((
 /// Provider streaming Admin Audit Logs.
 final adminAuditLogsStreamProvider = StreamProvider<List<AdminAuditEntry>>((ref) {
   final envUser = ref.watch(activeEnvAuthUserProvider).value;
-  if (envUser == null) return const Stream.empty();
+  if (envUser == null) return Stream.value(<AdminAuditEntry>[]);
   final firestore = ref.watch(firestoreProvider);
   return firestore.collection('admin_audit_logs').snapshots().map((snap) {
     final list = snap.docs.map((doc) => AdminAuditEntry.fromMap(doc.id, doc.data())).toList();

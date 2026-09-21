@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
@@ -79,9 +78,6 @@ class AppShell extends StatelessComponent {
             photoUrl: photo,
           );
 
-          // Synchronize authentication and agent registration on target environment Firestore app
-          unawaited(syncEnvAuth(firestore.app, user));
-
           return Router(
             routes: [
               ShellRoute(
@@ -161,12 +157,24 @@ class AdminGuard extends StatelessComponent {
   }
 }
 
-class HeaderPanel extends StatelessComponent {
+class HeaderPanel extends StatefulComponent {
   const HeaderPanel({super.key});
+
+  @override
+  State<HeaderPanel> createState() => _HeaderPanelState();
+}
+
+class _HeaderPanelState extends State<HeaderPanel> {
+  bool _showAuthModal = false;
+  String _authPassword = '';
+  bool _isAuthenticating = false;
+  String? _authError;
 
   @override
   Component build(BuildContext context) {
     final currentEnv = context.watch(activeEnvironmentProvider);
+    final envUser = context.watch(activeEnvAuthUserProvider).value;
+    final adminUser = context.watch(adminCurrentUserProvider).value;
     final profile = context.watch(currentAdminProfileProvider).value ??
         const AdminStaffProfileModel(
           uid: '',
@@ -177,6 +185,18 @@ class HeaderPanel extends StatelessComponent {
         );
     final soundEnabled = context.watch(globalAlertSoundEnabledProvider);
     final onlineAgents = context.watch(onlineAgentsStreamProvider).value ?? [];
+    final isEnvAuthPending = envUser == null && adminUser != null;
+
+    final userEmail = profile.email.isNotEmpty ? profile.email : (adminUser?.email ?? '');
+    final role = profile.role.toLowerCase();
+    final isAdmin = role.contains('admin') || role.contains('superadmin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
+
+    // Staff and Agents are locked to Production only
+    if (!isAdmin && currentEnv != Environment.production) {
+      Future.microtask(() {
+        context.read(activeEnvironmentProvider.notifier).state = Environment.production;
+      });
+    }
 
     Component buildEnvCapsule(String label, Environment value) {
       final isActive = currentEnv == value;
@@ -193,7 +213,7 @@ class HeaderPanel extends StatelessComponent {
 
     return div(
       classes:
-          'px-4 sm:px-6 md:px-8 py-3 sm:py-4 flex items-center justify-between border-b border-zinc-200/50 bg-[#eff2f0] w-full min-w-0 gap-3',
+          'px-4 sm:px-6 md:px-8 py-3 sm:py-4 flex items-center justify-between border-b border-zinc-200/50 bg-[#eff2f0] w-full min-w-0 gap-3 relative',
       [
         // Left: Logo and name (Hidden on small mobile since mobile header is above)
         div(classes: 'hidden sm:flex items-center gap-2.5 flex-shrink-0', [
@@ -205,27 +225,57 @@ class HeaderPanel extends StatelessComponent {
           span(classes: 'font-black text-sm tracking-wide text-zinc-900 uppercase', [Component.text('Tranyx')]),
         ]),
 
-        // Center: Capsules (Env selector + Online Presence Counter)
+        // Center: Capsules (Env selector if Admin + Online Presence Counter + Env Auth status)
         div(classes: 'flex items-center gap-2 sm:gap-3 flex-wrap min-w-0', [
-          div(
-            classes:
-                'flex items-center gap-1 bg-white p-1 border border-zinc-200/50 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.01)] text-xs overflow-x-auto max-w-full',
-            [
-              buildEnvCapsule('Dev', Environment.development),
-              buildEnvCapsule('Staging', Environment.staging),
-              buildEnvCapsule('Prod', Environment.production),
-            ],
-          ),
+          // Environment Selector: ONLY visible to Administrators
+          if (isAdmin)
+            div(
+              classes:
+                  'flex items-center gap-1 bg-white p-1 border border-zinc-200/50 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.01)] text-xs overflow-x-auto max-w-full',
+              [
+                buildEnvCapsule('Dev', Environment.development),
+                buildEnvCapsule('Staging', Environment.staging),
+                buildEnvCapsule('Prod', Environment.production),
+              ],
+            ),
 
-          // Live Online Agents Count Capsule
-          div(
-            classes:
-                'hidden md:flex items-center gap-2 px-3 py-1.5 bg-white border border-zinc-200/50 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.01)] text-[11px] font-bold text-zinc-700 flex-shrink-0',
-            [
-              span(classes: 'w-2 h-2 rounded-full bg-[#0fa958] animate-pulse', []),
-              Component.text('${onlineAgents.length} ${onlineAgents.length == 1 ? "Agent" : "Agents"} Online'),
-            ],
-          ),
+          // Environment Authentication Status Capsule
+          if (isEnvAuthPending)
+            button(
+              onClick: () {
+                setState(() {
+                  _showAuthModal = true;
+                  _authError = null;
+                  _authPassword = '';
+                });
+              },
+              classes:
+                  'flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-full shadow-sm text-[11px] font-bold transition-all border-0 cursor-pointer animate-pulse flex-shrink-0',
+              [
+                span([Component.text('🔑')]),
+                Component.text(isAdmin ? 'Connect ${currentEnv.name.toUpperCase()}' : 'Connect Live System'),
+              ],
+            )
+          else if (isAdmin)
+            div(
+              classes:
+                  'hidden lg:flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 border border-emerald-200/70 rounded-full text-[10px] font-bold text-emerald-700 flex-shrink-0',
+              [
+                span(classes: 'w-1.5 h-1.5 rounded-full bg-emerald-500', []),
+                Component.text('${currentEnv.name.toUpperCase()} Connected'),
+              ],
+            ),
+
+          // Live Online Agents Count Capsule: ONLY visible to Administrators
+          if (isAdmin)
+            div(
+              classes:
+                  'hidden md:flex items-center gap-2 px-3 py-1.5 bg-white border border-zinc-200/50 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.01)] text-[11px] font-bold text-zinc-700 flex-shrink-0',
+              [
+                span(classes: 'w-2 h-2 rounded-full bg-[#0fa958] animate-pulse', []),
+                Component.text('${onlineAgents.length} ${onlineAgents.length == 1 ? "Agent" : "Agents"} Online'),
+              ],
+            ),
         ]),
 
         // Right: Sound chime toggle + Logged Staff / Admin Profile Pill
@@ -294,6 +344,95 @@ class HeaderPanel extends StatelessComponent {
             ],
           ),
         ]),
+
+        // Interactive Environment Connection Modal
+        if (_showAuthModal)
+          div(
+            classes: 'fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4',
+            [
+              div(
+                classes:
+                    'bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl flex flex-col gap-4 border border-zinc-200 text-left animate-in fade-in zoom-in-95',
+                [
+                  div(classes: 'flex items-center justify-between border-b border-zinc-100 pb-3', [
+                    div(classes: 'flex items-center gap-2', [
+                      span(classes: 'text-xl', [Component.text('🔐')]),
+                      h3(classes: 'text-sm font-black text-zinc-900', [Component.text('Connect to ${currentEnv.name.toUpperCase()}')]),
+                    ]),
+                    button(
+                      onClick: () => setState(() => _showAuthModal = false),
+                      classes: 'text-zinc-400 hover:text-zinc-700 text-sm font-bold border-0 bg-transparent cursor-pointer',
+                      [Component.text('✕')],
+                    ),
+                  ]),
+                  p(classes: 'text-xs text-zinc-600 leading-relaxed m-0', [
+                    Component.text('Enter your staff account password to link your session with ${currentEnv.name.toUpperCase()} (Firebase Project: ${FirebaseEnv.optionsFor(currentEnv).projectId}):'),
+                  ]),
+                  div(classes: 'flex flex-col gap-2', [
+                    div(classes: 'flex justify-between items-center text-[11px]', [
+                      span(classes: 'font-bold text-zinc-700', [Component.text('Staff Email:')]),
+                      span(classes: 'font-semibold text-zinc-500', [Component.text(adminUser?.email ?? 'Staff')]),
+                    ]),
+                    input(
+                      value: _authPassword,
+                      classes: 'w-full px-3 py-2 text-xs border border-zinc-300 rounded-xl focus:outline-none focus:border-black transition-all box-border',
+                      attributes: {'type': 'password', 'placeholder': 'Enter your staff password'},
+                      onInput: (val) => setState(() => _authPassword = val.toString()),
+                    ),
+                    if (_authError != null)
+                      p(classes: 'text-[11px] text-red-500 font-bold m-0', [Component.text(_authError!)]),
+                  ]),
+                  div(classes: 'flex items-center justify-end gap-2 pt-2 border-t border-zinc-100', [
+                    button(
+                      onClick: () => setState(() => _showAuthModal = false),
+                      classes: 'px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 rounded-xl border-0 bg-transparent cursor-pointer',
+                      [Component.text('Cancel')],
+                    ),
+                    button(
+                      onClick: () async {
+                        if (_authPassword.isEmpty) {
+                          setState(() => _authError = 'Please enter your password.');
+                          return;
+                        }
+                        setState(() {
+                          _isAuthenticating = true;
+                          _authError = null;
+                        });
+                        try {
+                          final app = await context.read(firebaseAppProvider.future);
+                          final user = await syncEnvAuth(app, adminUser, explicitPassword: _authPassword);
+                          if (user != null) {
+                            setState(() {
+                              _isAuthenticating = false;
+                              _showAuthModal = false;
+                            });
+                            context.invalidate(activeEnvAuthUserProvider);
+                          } else {
+                            setState(() {
+                              _isAuthenticating = false;
+                              _authError = 'Authentication failed. Please verify your password.';
+                            });
+                          }
+                        } catch (e) {
+                          setState(() {
+                            _isAuthenticating = false;
+                            _authError = e.toString();
+                          });
+                        }
+                      },
+                      classes:
+                          'px-5 py-2 text-xs font-bold bg-black text-white rounded-xl border-0 cursor-pointer shadow-md hover:bg-zinc-800 transition-all flex items-center gap-1.5 ${_isAuthenticating ? "opacity-50 pointer-events-none" : ""}',
+                      [
+                        if (_isAuthenticating)
+                          div(classes: 'animate-spin h-3 w-3 border-2 border-white/30 border-t-white rounded-full', []),
+                        Component.text(_isAuthenticating ? 'Connecting...' : 'Connect Environment'),
+                      ],
+                    ),
+                  ]),
+                ],
+              ),
+            ],
+          ),
       ],
     );
   }

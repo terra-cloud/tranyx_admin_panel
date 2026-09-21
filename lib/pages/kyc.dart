@@ -116,10 +116,11 @@ class KycSubmission {
 }
 
 final kycQueueStreamProvider = StreamProvider<List<KycSubmission>>((ref) {
-  final userAsync = ref.watch(activeEnvAuthUserProvider);
-  if (userAsync.value == null) {
+  final adminUser = ref.watch(adminAuthUserProvider).value;
+  if (adminUser == null) {
     return Stream.value(<KycSubmission>[]);
   }
+  ref.watch(activeEnvAuthUserProvider);
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('kyc_submissions')
@@ -151,6 +152,14 @@ class _KycPageState extends State<KycPage> {
   KycSubmission? _selectedBgCheckSubmission;
   String _activeTab = 'all'; // 'all', 'id', 'bg'
   bool _isProcessing = false;
+  String? _toastMessage;
+
+  void _showToast(String msg) {
+    setState(() => _toastMessage = msg);
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _toastMessage = null);
+    });
+  }
 
   // Independent ID Verification update helper
   Future<void> _updateIdStatus(String uid, String status, {bool isApprove = false}) async {
@@ -213,8 +222,10 @@ class _KycPageState extends State<KycPage> {
           setState(() => _selectedSubmission = KycSubmission.fromMap(uid, updatedDoc.data()!));
         }
       }
+      _showToast(isApprove ? '✅ ID Verification approved!' : '⚠️ ID Verification marked as rejected.');
     } catch (e) {
       print('[KYC] Error updating ID status: $e');
+      _showToast('❌ Failed to update ID status: $e');
     } finally {
       setState(() => _isProcessing = false);
     }
@@ -284,8 +295,10 @@ class _KycPageState extends State<KycPage> {
           if (_selectedBgCheckSubmission?.uid == uid) _selectedBgCheckSubmission = updatedSub;
         });
       }
+      _showToast(isApprove ? '🛡️ Background check cleared and verified!' : '⚠️ Background check marked as rejected.');
     } catch (e) {
       print('[KYC] Error updating Background Check status: $e');
+      _showToast('❌ Failed to update background check: $e');
     } finally {
       setState(() => _isProcessing = false);
     }
@@ -331,8 +344,10 @@ class _KycPageState extends State<KycPage> {
           if (_selectedBgCheckSubmission?.uid == uid) _selectedBgCheckSubmission = updatedSub;
         });
       }
+      _showToast(isApprove ? '🌟 Fully cleared and upgraded to Level 2!' : '⚠️ Submission rejected.');
     } catch (e) {
       print('[KYC] Error updating both verification statuses: $e');
+      _showToast('❌ Failed to update KYC: $e');
     } finally {
       setState(() => _isProcessing = false);
     }
@@ -670,6 +685,14 @@ class _KycPageState extends State<KycPage> {
       // Expandable detailed General Inspection Modal dialog
       if (_selectedSubmission != null)
         _buildGeneralInspectionModal(_selectedSubmission!, users),
+
+      // Floating Toast Notification
+      if (_toastMessage != null)
+        div(
+          classes:
+              'fixed bottom-6 right-6 z-[11000] px-5 py-3 rounded-2xl bg-zinc-900 text-white text-xs font-bold shadow-2xl border border-zinc-700 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-3 duration-200',
+          [Component.text(_toastMessage!)],
+        ),
     ]);
   }
 
