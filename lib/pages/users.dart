@@ -355,7 +355,7 @@ class UserProfileModel {
       photoUrl: map['photoURL'] ?? map['photoUrl'] ?? map['avatarUrl'] ?? map['avatar'],
       banned: map['banned'] ?? false,
       suspendedUntil: map['suspendedUntil'] as int?,
-      terraPoints: map['terraPoints'] ?? 0,
+      terraPoints: (map['terraPoints'] as num?)?.toInt() ?? (int.tryParse(map['terraPoints']?.toString() ?? '') ?? 0),
       earnedRewards: map['earnedRewards'] != null ? List<String>.from(map['earnedRewards']) : const [],
       availableBalance:
           (map['tyxBalance'] as num?)?.toDouble() ??
@@ -367,6 +367,52 @@ class UserProfileModel {
       subscriptionPlan: map['subscriptionPlan'] as String?,
       subscriptionStatus: map['subscriptionStatus'] as String?,
       pendingSubscription: map['pendingSubscription'] != null ? Map<String, dynamic>.from(map['pendingSubscription'] as Map) : null,
+    );
+  }
+
+  UserProfileModel copyWith({
+    String? uid,
+    String? name,
+    String? email,
+    String? phoneNumber,
+    bool? idVerified,
+    bool? bgChecked,
+    int? verificationLevel,
+    String? walletPublicKey,
+    String? connectedWalletType,
+    String? role,
+    String? photoUrl,
+    bool? banned,
+    int? suspendedUntil,
+    int? terraPoints,
+    List<String>? earnedRewards,
+    double? availableBalance,
+    bool? isPremium,
+    String? subscriptionPlan,
+    String? subscriptionStatus,
+    Map<String, dynamic>? pendingSubscription,
+  }) {
+    return UserProfileModel(
+      uid: uid ?? this.uid,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      idVerified: idVerified ?? this.idVerified,
+      bgChecked: bgChecked ?? this.bgChecked,
+      verificationLevel: verificationLevel ?? this.verificationLevel,
+      walletPublicKey: walletPublicKey ?? this.walletPublicKey,
+      connectedWalletType: connectedWalletType ?? this.connectedWalletType,
+      role: role ?? this.role,
+      photoUrl: photoUrl ?? this.photoUrl,
+      banned: banned ?? this.banned,
+      suspendedUntil: suspendedUntil ?? this.suspendedUntil,
+      terraPoints: terraPoints ?? this.terraPoints,
+      earnedRewards: earnedRewards ?? this.earnedRewards,
+      availableBalance: availableBalance ?? this.availableBalance,
+      isPremium: isPremium ?? this.isPremium,
+      subscriptionPlan: subscriptionPlan ?? this.subscriptionPlan,
+      subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
+      pendingSubscription: pendingSubscription ?? this.pendingSubscription,
     );
   }
 }
@@ -603,9 +649,13 @@ class _UsersPageState extends State<UsersPage> {
 
   // Custom rewards form state
   String _customRewardTitle = '';
-  int _customRewardPoints = 100;
+  String _customRewardPointsStr = '';
+  bool _isAwardingPoints = false;
 
   Future<void> _awardQuest(UserProfileModel user, String questId, String title, String category, int points) async {
+    if (_isAwardingPoints) return;
+    setState(() => _isAwardingPoints = true);
+
     final firestore = context.read(firestoreProvider);
     final historyId = '${user.uid}_${questId}_${DateTime.now().millisecondsSinceEpoch}';
 
@@ -620,34 +670,27 @@ class _UsersPageState extends State<UsersPage> {
         'createdAt': DateTime.now().millisecondsSinceEpoch,
       });
 
-      // 2. Update User Profile
+      // 2. Update User Profile atomically
       final updatedRewards = List<String>.from(user.earnedRewards)..add(questId);
-      await firestore.collection('users').doc(user.uid).update({
-        'terraPoints': user.terraPoints + points,
-        'earnedRewards': updatedRewards,
-      });
+      await firestore.collection('users').doc(user.uid).set({
+        'terraPoints': FieldValue.increment(points),
+        'earnedRewards': FieldValue.arrayUnion([questId]),
+      }, SetOptions(merge: true));
 
+      final newTotalPoints = user.terraPoints + points;
       setState(() {
-        _selectedUser = UserProfileModel(
-          uid: user.uid,
-          name: user.name,
-          email: user.email,
-          phoneNumber: user.phoneNumber,
-          idVerified: user.idVerified,
-          bgChecked: user.bgChecked,
-          verificationLevel: user.verificationLevel,
-          walletPublicKey: user.walletPublicKey,
-          connectedWalletType: user.connectedWalletType,
-          role: user.role,
-          banned: user.banned,
-          suspendedUntil: user.suspendedUntil,
-          terraPoints: user.terraPoints + points,
+        _selectedUser = user.copyWith(
+          terraPoints: newTotalPoints,
           earnedRewards: updatedRewards,
         );
+        _customRewardTitle = '';
+        _customRewardPointsStr = '';
+        _isAwardingPoints = false;
       });
 
       _showToast('🪙 Awarded $points TP to ${user.name} for "$title"');
     } catch (e) {
+      setState(() => _isAwardingPoints = false);
       _showToast('❌ Failed to award points: $e');
     }
   }
@@ -1433,7 +1476,7 @@ class _UsersPageState extends State<UsersPage> {
                             ]),
                             input(
                               value: _customRewardTitle,
-                              onInput: (v) => setState(() => _customRewardTitle = v as String),
+                              onInput: (v) => setState(() => _customRewardTitle = (v as String?) ?? ''),
                               classes: 'px-3 py-2 bg-[#f3f6f4] border border-zinc-200 rounded-lg text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/20',
                               attributes: {'placeholder': 'e.g. Community Bonus'},
                             ),
@@ -1443,32 +1486,36 @@ class _UsersPageState extends State<UsersPage> {
                               Component.text('Points'),
                             ]),
                             input(
-                              value: _customRewardPoints.toString(),
-                              onInput: (v) {
-                                final val = int.tryParse(v as String) ?? 0;
-                                setState(() => _customRewardPoints = val);
+                              value: _customRewardPointsStr,
+                              onInput: (dynamic v) {
+                                final raw = (v?.toString() ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+                                setState(() => _customRewardPointsStr = raw);
                               },
                               classes: 'px-3 py-2 bg-[#f3f6f4] border border-zinc-200 rounded-lg text-xs text-zinc-900 focus:outline-none focus:ring-1 focus:ring-black/20',
-                              attributes: {'type': 'number'},
+                              attributes: {
+                                'type': 'text',
+                                'inputmode': 'numeric',
+                                'placeholder': 'e.g. 100',
+                              },
                             ),
                           ]),
                           div(classes: 'flex flex-col gap-1 justify-end', [
                             button(
-                              onClick: () {
-                                final title = _customRewardTitle.trim();
-                                if (title.isEmpty || _customRewardPoints <= 0) {
-                                  _showToast('⚠️ Please enter a title and points value > 0.');
-                                  return;
-                                }
-                                final questId = 'custom_${DateTime.now().millisecondsSinceEpoch}';
-                                _awardQuest(_selectedUser!, questId, title, 'Custom', _customRewardPoints);
-                                setState(() {
-                                  _customRewardTitle = '';
-                                  _customRewardPoints = 100;
-                                });
-                              },
-                              classes: 'w-full py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md shadow-indigo-500/10 transition-all text-center',
-                              [Component.text('Award Custom')],
+                              onClick: _isAwardingPoints
+                                  ? null
+                                  : () {
+                                      final title = _customRewardTitle.trim();
+                                      final points = int.tryParse(_customRewardPointsStr.trim()) ?? 0;
+                                      if (title.isEmpty || points <= 0) {
+                                        _showToast('⚠️ Please enter a title and a points value > 0.');
+                                        return;
+                                      }
+                                      final questId = 'custom_${DateTime.now().millisecondsSinceEpoch}';
+                                      _awardQuest(_selectedUser!, questId, title, 'Custom', points);
+                                    },
+                              classes:
+                                  'w-full py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md shadow-indigo-500/10 transition-all text-center ${_isAwardingPoints ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}',
+                              [Component.text(_isAwardingPoints ? 'Awarding...' : 'Award Custom')],
                             ),
                           ]),
                         ]),
