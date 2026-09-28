@@ -13,6 +13,7 @@ import '../pages/reports.dart';
 import '../pages/deposits.dart';
 import '../pages/withdrawals.dart';
 import '../pages/subscriptions.dart';
+import '../pages/disputes.dart';
 
 class Sidebar extends StatefulComponent {
   const Sidebar({super.key});
@@ -91,6 +92,13 @@ class _SidebarState extends State<Sidebar> {
         .watch(combinedReportedListingsProvider)
         .maybeWhen(
           data: (list) => list.length,
+          orElse: () => 0,
+        );
+
+    final pendingDisputesCount = context
+        .watch(disputesStreamProvider)
+        .maybeWhen(
+          data: (list) => list.where((d) => d.isOpen).length,
           orElse: () => 0,
         );
 
@@ -229,6 +237,7 @@ class _SidebarState extends State<Sidebar> {
                   ]),
                 buildMenuItem('Live Support', '/chats', '/images/icon_chats.png'),
                 buildMenuItem('Support Tickets', '/tickets', '/images/icon_tickets.png', badgeCount: openTicketsCount),
+                buildMenuItem('Gig Disputes', '/disputes', '⚖️', badgeCount: pendingDisputesCount),
                 buildMenuItem('User Accounts', '/users', '/images/icon_users.png'),
 
                 // SECTION: Growth & Governance
