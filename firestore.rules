@@ -292,6 +292,18 @@ service cloud.firestore {
     // WORKSPACE: VEHICLE RENTALS & ESCROWS
     // ------------------------------------------------------------------------
 
+    // Helper to validate vehicle rental pricing constraints
+    function isValidVehiclePricing(data) {
+      let priceDaily = ('priceDaily' in data && data.priceDaily is number) ? data.priceDaily : 0.0;
+      let price12h = ('price12h' in data && data.price12h is number) ? data.price12h : 0.0;
+      let priceWeekly = ('priceWeekly' in data && data.priceWeekly is number) ? data.priceWeekly : 0.0;
+      let priceMonthly = ('priceMonthly' in data && data.priceMonthly is number) ? data.priceMonthly : 0.0;
+      return priceDaily > 0.0 &&
+        (price12h == 0.0 || (price12h >= priceDaily * 0.4 && price12h <= priceDaily)) &&
+        (priceWeekly == 0.0 || (priceWeekly >= priceDaily * 3.5 && priceWeekly > priceDaily)) &&
+        (priceMonthly == 0.0 || (priceMonthly >= priceDaily * 12.0 && (priceWeekly == 0.0 || priceMonthly > priceWeekly)));
+    }
+
     // Helper to check if current user is the renter, rentee, or host of an escrow
     function isRentalEscrowParty(data) {
       return ('renterId' in data && data.renterId == request.auth.uid) || 
@@ -302,12 +314,14 @@ service cloud.firestore {
     // Vehicle Rentals Collection (Anti-Exploitation: Host CANNOT alter pricing once booked)
     match /rentals/{rentalId} {
       allow read: if true;
-      allow create: if isActiveUser() && request.resource.data.hostId == request.auth.uid;
+      allow create: if isActiveUser() && request.resource.data.hostId == request.auth.uid && isValidVehiclePricing(request.resource.data);
       
       allow update: if 
         // 1. Host (Vehicle Owner): Can update vehicle/price details & accept bookings when status is Available
         (isActiveUser() && resource.data.hostId == request.auth.uid && 
           (resource.data.status == 'Available' || resource.data.status == 'available') &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['priceDaily', 'price12h', 'priceWeekly', 'priceMonthly']) ||
+           isValidVehiclePricing(request.resource.data)) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'brand', 'model', 'year', 'type', 'plateNumber', 'vehicleValue', 
             'ltoCrNumber', 'ltoOrNumber', 'insuranceProvider', 'insurancePolicyNumber', 
