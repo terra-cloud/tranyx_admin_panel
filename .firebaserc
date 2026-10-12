@@ -1,5 +1,9 @@
 {
   "projects": {
-    "default": "tranyx-admin-portal"
+    "default": "tranyx-admin-portal",
+    "admin": "tranyx-admin-portal",
+    "dev": "tranyx-dev",
+    "uat": "tranyx-uat",
+    "prod": "tranyx-app"
   }
 }
