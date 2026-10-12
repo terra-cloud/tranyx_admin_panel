@@ -784,9 +784,28 @@ service cloud.firestore {
 
     // Direct Chats Collection
     match /chats/{chatId} {
-      allow read, write: if isActiveUser() || isAdminOrStaff();
+      function isChatParticipant() {
+        return (resource != null && 'userIds' in resource.data && request.auth.uid in resource.data.userIds) ||
+               (request.resource != null && 'userIds' in request.resource.data && request.auth.uid in request.resource.data.userIds) ||
+               chatId.matches('^rental_[^_]+_' + request.auth.uid + '$') ||
+               chatId.matches('^property_[^_]+_' + request.auth.uid + '$') ||
+               chatId.matches('^support_' + request.auth.uid + '$') ||
+               chatId.matches('^job_[^_]+_' + request.auth.uid + '$') ||
+               chatId.matches('^' + request.auth.uid + '_.*');
+      }
+
+      allow read: if isAdminOrStaff() || (isActiveUser() && isChatParticipant());
+      allow write: if isAdminOrStaff() || (isActiveUser() && isChatParticipant());
+
       match /messages/{messageId} {
-        allow read, write: if isActiveUser() || isAdminOrStaff();
+        allow read: if isAdminOrStaff() || (isActiveUser() && (
+          isChatParticipant() ||
+          (resource != null && resource.data.senderId == request.auth.uid)
+        ));
+        allow write: if isAdminOrStaff() || (isActiveUser() && (
+          isChatParticipant() ||
+          request.resource.data.senderId == request.auth.uid
+        ));
       }
     }
 
