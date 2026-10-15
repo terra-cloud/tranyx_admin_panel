@@ -317,19 +317,40 @@ service cloud.firestore {
       allow create: if isActiveUser() && request.resource.data.hostId == request.auth.uid && isValidVehiclePricing(request.resource.data);
       
       allow update: if 
-        // 1. Host (Vehicle Owner): Can update vehicle/price details & accept bookings when status is Available
+        // 1. Host (Vehicle Owner): Can update vehicle/price details & accept bookings when not actively rented
         (isActiveUser() && resource.data.hostId == request.auth.uid && 
-          (resource.data.status == 'Available' || resource.data.status == 'available') &&
+          request.resource.data.hostId == resource.data.hostId &&
+          !(resource.data.status in ['Booked', 'Rented', 'On the way to Rentee', 'Returning', 'Active']) &&
+          (request.resource.data.status in ['Available', 'available', 'Not Accepting Bookings', 'Awaiting Signature', 'awaiting signature'] ||
+           request.resource.data.status == resource.data.status) &&
           (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['priceDaily', 'price12h', 'priceWeekly', 'priceMonthly']) ||
            isValidVehiclePricing(request.resource.data)) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'brand', 'model', 'year', 'type', 'plateNumber', 'vehicleValue', 
-            'ltoCrNumber', 'ltoOrNumber', 'insuranceProvider', 'insurancePolicyNumber', 
-            'franchisePermit', 'interiorPhotoUrl', 'frontPhotoUrl', 'backPhotoUrl', 
-            'contractType', 'contractTerms', 'price12h', 'priceDaily', 'priceWeekly', 
-            'priceMonthly', 'extensionRatePerHour', 'latePenaltyRatePerHour', 'status', 
-            'fuelType', 'transmission', 'offersDriver', 'driverDailyPrice', 'driverNote', 
-            'driverLicenseNumber', 'renteeId', 'renteeName', 'renteePhotoUrl', 
+            // Identity & metadata
+            'id', 'hostName', 'hostPhotoUrl', 'acceptingBookings', 'status',
+            'isListingFeeWaived', 'createdAt', 'updatedAt',
+            // Vehicle specs
+            'brand', 'model', 'vehicleModel', 'year', 'type', 'vehicleType',
+            'plateNumber', 'transmission', 'fuelType', 'seatingCapacity',
+            'mileageLimitPerDay', 'minDriverAge', 'fuelPolicy', 'description', 'features',
+            // Pricing & deposit
+            'price12h', 'hourlyRate', 'priceDaily', 'PricePerDay', 'pricePerDay',
+            'priceWeekly', 'weeklyRate', 'priceMonthly', 'monthlyRate',
+            'allowedDurations', 'extensionRatePerHour', 'latePenaltyRatePerHour',
+            'vehicleValue', 'securityDeposit', 'depositType', 'depositValue',
+            'securityDepositPolicy',
+            // Location & compliance
+            'location', 'pickupAddress', 'pickupLat', 'pickupLng',
+            'ltoCrNumber', 'ltoOrNumber', 'insuranceProvider', 'insurancePolicyNumber',
+            'franchisePermit', 'gpsTrackerId',
+            // Photos & legal terms
+            'photoUrl', 'interiorPhotoUrl', 'frontPhotoUrl', 'backPhotoUrl',
+            'extraPhotos', 'contractType', 'contractTerms', 'legalTerms',
+            'termsPreset', 'termsTitle', 'termsContent', 'requireRenteeSignature',
+            // Driver options
+            'offersDriver', 'driverDailyPrice', 'driverNote', 'driverLicenseNumber',
+            // Trip & rentee fields
+            'renteeId', 'renteeName', 'renteePhotoUrl', 
             'renteePhone', 'renteeRating', 'startEpoch', 'endEpoch', 'expectedReturnEpoch', 
             'deliveryType', 'deliveryAddress', 'deliveryFee', 'currentLocationLat', 
             'currentLocationLng', 'fuelLevel', 'odoMeter', 'pickupPhotos', 
@@ -342,8 +363,8 @@ service cloud.firestore {
             'verificationGovtIdUrl', 'verificationStatus', 'hostIsVerified', 
             'hostVerificationStatus', 'hostVerificationTier', 'renteeIsVerified', 
             'renteeVerificationStatus', 'renteeVerificationTier',
-            // Listing deletion, archival, pause/resume & GPS tracking
-            'isDeleted', 'acceptingBookings', 'deletedAt', 'gpsTrackerId'
+            // Listing deletion & archival
+            'isDeleted', 'deletedAt'
           ])
         ) ||
         // 1b. Host: When awaiting signature, can revoke approval (back to Available) or activate lease
@@ -677,26 +698,42 @@ service cloud.firestore {
       allow create: if isActiveUser() && request.resource.data.hostId == request.auth.uid;
       
       allow update: if 
-        // 1. Host (Property Owner): Can update property details & accept bookings when status is Available
+        // 1. Host (Property Owner): Can update property details & accept bookings when not actively rented
         (isActiveUser() && resource.data.hostId == request.auth.uid && 
-          (resource.data.status == 'Available' || resource.data.status == 'available') &&
+          request.resource.data.hostId == resource.data.hostId &&
+          (resource.data.status == 'Available' || resource.data.status == 'available' || resource.data.status == 'Not Accepting Bookings') &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'title', 'description', 'propertyType', 'address', 'landmark', 
-            'lat', 'lng', 'bedrooms', 'bathrooms', 'maxGuests', 'nightlyPrice', 
-            'weeklyDiscount', 'monthlyDiscount', 'cleaningFee', 'depositAmount', 
-            'amenities', 'houseRules', 'images', 'contractType', 'contractTerms', 
-            'status', 'renteeId', 'renteeName', 'renteePhotoUrl', 'checkInDate', 
+            // Identity & metadata
+            'id', 'hostName', 'hostPhotoUrl', 'title', 'type', 'category',
+            'propertyType', 'description', 'status', 'acceptingBookings',
+            'isListingFeeWaived', 'createdAt', 'updatedAt',
+            // Pricing & deposit
+            'pricePerMonth', 'priceMonthly', 'priceWeekly', 'priceDaily',
+            'nightlyPrice', 'weeklyDiscount', 'monthlyDiscount', 'cleaningFee',
+            'allowedDurations', 'depositMonths', 'depositAmount',
+            'securityDepositAmount', 'advanceAmount', 'depositType',
+            'depositValue', 'securityDepositPolicy',
+            // Location & specs
+            'address', 'location', 'landmark', 'lat', 'lng', 'latitude', 'longitude',
+            'bedrooms', 'bathrooms', 'maxGuests', 'sqft', 'furnishing',
+            'amenities', 'houseRules',
+            // Photos & legal terms
+            'photoUrl', 'photoUrls', 'images', 'contractType', 'contractTerms',
+            'legalTerms', 'termsPreset', 'termsTitle', 'termsContent',
+            'requireRenteeSignature',
+            // Lease & rentee fields
+            'renteeId', 'renteeName', 'renteePhotoUrl', 'checkInDate', 
             'checkOutDate', 'hostRated', 'renteeRated',
             // Booking acceptance & lease metadata
             'rentalDurationType', 'rentalMultiplier', 'startDate', 'endDate', 
-            'totalCost', 'baseRentAmount', 'securityDepositAmount', 'bookingFee', 
+            'totalCost', 'baseRentAmount', 'bookingFee', 
             'customerPlatformFeeRate', 'hostCommissionRate', 'renteeSignatureName', 
             'signedAt', 'currentRequestId', 'allowChat', 'licenseNumber', 
             'verificationSelfieUrl', 'verificationGovtIdUrl', 'verificationStatus', 
             'hostIsVerified', 'hostVerificationStatus', 'hostVerificationTier', 
             'renteeIsVerified', 'renteeVerificationStatus', 'renteeVerificationTier',
-            // Listing deletion, archival & pause/resume
-            'isDeleted', 'acceptingBookings', 'deletedAt'
+            // Listing deletion & archival
+            'isDeleted', 'deletedAt'
           ])
         ) ||
         // 1b. Host: When awaiting signature, can revoke approval (back to Available) or activate lease
@@ -798,28 +835,10 @@ service cloud.firestore {
 
     // Direct Chats Collection
     match /chats/{chatId} {
-      function isChatParticipant() {
-        return (resource != null && 'userIds' in resource.data && request.auth.uid in resource.data.userIds) ||
-               (request.resource != null && 'userIds' in request.resource.data && request.auth.uid in request.resource.data.userIds) ||
-               chatId.matches('^rental_[^_]+_' + request.auth.uid + '$') ||
-               chatId.matches('^property_[^_]+_' + request.auth.uid + '$') ||
-               chatId.matches('^support_' + request.auth.uid + '$') ||
-               chatId.matches('^job_[^_]+_' + request.auth.uid + '$') ||
-               chatId.matches('^' + request.auth.uid + '_.*');
-      }
-
-      allow read: if isAdminOrStaff() || (isActiveUser() && isChatParticipant());
-      allow write: if isAdminOrStaff() || (isActiveUser() && isChatParticipant());
+      allow read, write: if isActiveUser() || isAdminOrStaff();
 
       match /messages/{messageId} {
-        allow read: if isAdminOrStaff() || (isActiveUser() && (
-          isChatParticipant() ||
-          (resource != null && resource.data.senderId == request.auth.uid)
-        ));
-        allow write: if isAdminOrStaff() || (isActiveUser() && (
-          isChatParticipant() ||
-          request.resource.data.senderId == request.auth.uid
-        ));
+        allow read, write: if isActiveUser() || isAdminOrStaff();
       }
     }
 
@@ -967,10 +986,10 @@ service cloud.firestore {
       allow read, write: if isAdminOrStaff();
     }
 
-    // Config Collection (App-level public read-only config)
-    match /config/app_config {
+    // Config Collection (App-level and third-party API configs)
+    match /config/{docId} {
       allow read: if isAuthenticated();
-      allow write: if false;
+      allow write: if isAdminOrStaff();
     }
 
     // Platform Fees Collection (Admin managed)
