@@ -117,22 +117,56 @@ service cloud.firestore {
       return isAuthenticated() && (data.get('uid', '') == request.auth.uid || data.get('userId', '') == request.auth.uid);
     }
 
-    // Owner edits to a withdrawal request after create: allowlist of the fields the owner's cancel and
-    // confirm-receipt writes touch (web firebase_service.dart cancelP2pWithdrawalRequest /
-    // confirmP2pWithdrawalCompleted, mobile transit_repository.dart). Status may only move to CANCELLED
-    // before an agent claims it, or to APPROVED once the agent has sent proof (PENDING_CONFIRMATION).
-    // balanceDeducted/refundedAt may only change as part of that cancel, and only to "not deducted",
-    // so an owner can't re-arm a refund. adminUid may only name the owner. Everything else is admin/agent only.
+    // Owner edits to a withdrawal request after create. The owner only ever cancels (before an agent
+    // claims it) or confirms receipt (once the agent sent proof, PENDING_CONFIRMATION -> APPROVED):
+    // web firebase_service.dart cancelP2pWithdrawalRequest / confirmP2pWithdrawalCompleted, mobile
+    // transit_repository.dart. Every owner write must be one of those two transitions, and each extra
+    // field is pinned to it: p2pStatus mirrors the transition, balanceDeducted/refundedAt and
+    // rejectionReason only on cancel (never re-arming a refund), adminUid only on confirm and only the
+    // owner. verifiedAt (epoch ms, both apps write DateTime.now()) can't predate the request or sit more
+    // than 5 minutes past request.time; cancel still sets it because shipped mobile/web clients do.
+    // Everything else is admin/agent only.
     function isOwnerWithdrawalUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
+      let next = request.resource.data;
       let from = resource.data.get('status', '');
-      let to = request.resource.data.get('status', '');
+      let to = next.get('status', '');
       let cancelling = changed.hasAny(['status']) && to == 'CANCELLED' && from in ['WAITING_FOR_AGENT', 'PENDING_REVIEW', 'PENDING'];
-      return ownsRecord(resource.data) &&
+      let confirming = changed.hasAny(['status']) && to == 'APPROVED' && from == 'PENDING_CONFIRMATION';
+      return ownsRecord(resource.data) && (cancelling || confirming) &&
         changed.hasOnly(['status', 'p2pStatus', 'balanceDeducted', 'refundedAt', 'rejectionReason', 'verifiedAt', 'updatedAt', 'adminUid']) &&
-        (!changed.hasAny(['status']) || cancelling || (to == 'APPROVED' && from == 'PENDING_CONFIRMATION')) &&
-        (!changed.hasAny(['balanceDeducted', 'refundedAt']) || (cancelling && request.resource.data.get('balanceDeducted', false) == false)) &&
-        (!changed.hasAny(['adminUid']) || request.resource.data.adminUid == request.auth.uid);
+        (!changed.hasAny(['p2pStatus']) || next.p2pStatus == (cancelling ? 'CANCELLED' : 'COMPLETED')) &&
+        (!changed.hasAny(['balanceDeducted', 'refundedAt']) || (cancelling && next.get('balanceDeducted', false) == false)) &&
+        (!changed.hasAny(['rejectionReason']) || (cancelling && next.rejectionReason is string && next.rejectionReason.size() <= 500)) &&
+        (!changed.hasAny(['adminUid']) || (confirming && next.adminUid == request.auth.uid)) &&
+        (!changed.hasAny(['verifiedAt']) || (next.verifiedAt is number &&
+          next.verifiedAt >= resource.data.get('createdAt', request.time.toMillis() - 300000) &&
+          next.verifiedAt <= request.time.toMillis() + 300000));
+    }
+
+    // Job-derived global transaction ids (tranyx_app.dart completion flow): payout_nyx_<jobId> is the
+    // worker's payout, fees_emp_<jobId> the employer's fees, and either party reads both by id.
+    function isTxJobParticipant(txId) {
+      let jobPath = /databases/$(database)/documents/jobs/$(txId.replace('^(payout_nyx|fees_emp)_', ''));
+      return txId.matches('^(payout_nyx|fees_emp)_.+') && exists(jobPath) &&
+        (get(jobPath).data.creatorId == request.auth.uid || get(jobPath).data.get('acceptedApplicantId', null) == request.auth.uid);
+    }
+
+    // Structured global transaction ids name the record they belong to, so their uid must be that
+    // record's party (app writers: job completion payout_nyx_ = hired worker, fees_emp_ = employer;
+    // cancel/delete refund_job_ / refund_stale_job_ = employer; deletePropertyRental refund_prop_ =
+    // host; P2P p2p_dep_ / p2p_with_ = owner of the deposit / withdrawal request written just before).
+    function isTxIdParty(txId, uid) {
+      let jobPath = /databases/$(database)/documents/jobs/$(txId.replace('^(payout_nyx|fees_emp|refund_job|refund_stale_job)_', ''));
+      let propPath = /databases/$(database)/documents/properties/$(txId.replace('^refund_prop_', ''));
+      let depPath = /databases/$(database)/documents/deposit_requests/$(txId.replace('^p2p_dep_', ''));
+      let wrPath = /databases/$(database)/documents/withdrawal_requests/$(txId.replace('^p2p_with_', ''));
+      return
+        (txId.matches('^payout_nyx_.+') && exists(jobPath) && get(jobPath).data.get('acceptedApplicantId', null) == uid) ||
+        (txId.matches('^(fees_emp|refund_job|refund_stale_job)_.+') && exists(jobPath) && get(jobPath).data.creatorId == uid) ||
+        (txId.matches('^refund_prop_.+') && exists(propPath) && get(propPath).data.hostId == uid) ||
+        (txId.matches('^p2p_dep_.+') && exists(depPath) && get(depPath).data.get('uid', '') == uid) ||
+        (txId.matches('^p2p_with_.+') && exists(wrPath) && get(wrPath).data.get('uid', '') == uid);
     }
 
     // Users Collection (Strict segregation of User vs Admin fields)
@@ -239,12 +273,23 @@ service cloud.firestore {
 
     // Global Transactions Collection
     match /transactions/{txId} {
-      // get: signed-in only, because employer/worker flows read each other's job tx docs by id
-      // (tranyx_app.dart payout_nyx_* / fees_emp_*, firebase_service.dart existingTx checks), and some
-      // of those ids don't exist yet. list: owner only (getMyTransactions filters uid == caller).
-      allow get: if isAuthenticated();
+      // get: owner, a participant of the job a payout_nyx_/fees_emp_ id names (only while the doc's
+      // uid is still that job's worker/employer, so re-creating a deleted job id grants nothing), or
+      // admin/agent. An id that doesn't exist yet is readable by any signed-in user (existence only):
+      // the app's idempotency checks (existingTx, txNyxDoc/txEmpDoc, p2p_* lookups) read before writing.
+      // Missing payout_nyx_/fees_emp_/refund_prop_ ids only by that job's participants / the host, so
+      // denied-vs-missing can't be used to probe someone else's records.
+      // list: owner only (getMyTransactions filters uid == caller).
+      allow get: if isAuthenticated() &&
+        ((resource == null && (!txId.matches('^(payout_nyx|fees_emp|refund_prop)_.*') ||
+            isTxJobParticipant(txId) || isTxIdParty(txId, request.auth.uid))) ||
+          (resource != null && ownsRecord(resource.data)) ||
+          (isTxJobParticipant(txId) && isTxIdParty(txId, resource.data.get('uid', ''))) || isAdminOrStaff());
       allow list: if isAdminOrStaff() || (isAuthenticated() && resource.data.uid == request.auth.uid);
-      allow create: if isAdminOrStaff() || (isActiveUser() && request.resource.data.uid == request.auth.uid && !request.resource.data.type.matches('^(payout|rebate|fee_deduction)$'));
+      // create: a structured id (see isTxIdParty) only by its own party, so nobody can squat a
+      // public job / property / request id before the real writer.
+      allow create: if isAdminOrStaff() || (isActiveUser() && request.resource.data.uid == request.auth.uid && !request.resource.data.type.matches('^(payout|rebate|fee_deduction)$') &&
+        (!txId.matches('^(payout_nyx|fees_emp|refund_job|refund_stale_job|refund_prop|p2p)_.*') || isTxIdParty(txId, request.auth.uid)));
       allow update: if isAdminOrStaff() || (isActiveUser() && resource.data.uid == request.auth.uid);
       allow delete: if isAdminOrStaff();
     }
@@ -601,12 +646,16 @@ service cloud.firestore {
       // 4. Admin / Staff
       allow update: if isAdminOrStaff();
 
+      // A creator can't delete a job that already has payout/fee records: the tx docs would outlive
+      // it and the public job id could be re-created by someone else (deleteJob / tranyx_app.dart
+      // only delete Open/Cancelled jobs, which never have them).
       allow delete: if (isActiveUser() && resource.data.creatorId == request.auth.uid && (
         resource.data.status == 'Open' || 
         resource.data.status == 'open' || 
         resource.data.status == 'Cancelled' || 
         resource.data.status == 'cancelled'
-      )) || isAdminOrStaff();
+      ) && !exists(/databases/$(database)/documents/transactions/$('payout_nyx_' + jobId)) &&
+        !exists(/databases/$(database)/documents/transactions/$('fees_emp_' + jobId))) || isAdminOrStaff();
 
       // Subcollection: Applications
       match /applications/{applicantId} {
