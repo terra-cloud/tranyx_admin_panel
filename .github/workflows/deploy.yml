@@ -75,7 +75,7 @@ jobs:
         run: |
           jaspr clean
           jaspr build \
-            --dart-define=IMGBB_API_KEY="${{ secrets.IMGBB_API_KEY || 'abfd185244dc224ff987946bc9775bfc' }}" \
+            --dart-define=IMGBB_API_KEY="${{ secrets.IMGBB_API_KEY }}" \
             --dart-define=MAIL_TRAP_TOKEN="${{ secrets.MAIL_TRAP_TOKEN || secrets.MAILTRAP_TOKEN }}" \
             --dart-define=MAIL_TRAP_PROXY_URL="${{ secrets.MAIL_TRAP_PROXY_URL }}" \
             --dart-define=MAIL_TRAP_INBOX_ID="${{ secrets.MAIL_TRAP_INBOX_ID || '4886849' }}" \

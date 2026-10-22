@@ -9,12 +9,12 @@ class ImgBBService {
   /// Default compile-time API key (injected via `--dart-define=IMGBB_API_KEY=...` in CI/CD)
   static const String envApiKey = String.fromEnvironment(
     'IMGBB_API_KEY',
-    defaultValue: 'abfd185244dc224ff987946bc9775bfc',
+    defaultValue: '',
   );
 
-  /// Dynamically resolves the active ImgBB API key (Environment define -> Firestore config -> Local fallback).
+  /// Resolves the ImgBB API key: compile-time define, then Firestore `config/imgbb` (staff-readable). Empty if neither is set.
   static Future<String> resolveApiKey(FirebaseFirestore firestore) async {
-    if (envApiKey.isNotEmpty && envApiKey != 'abfd185244dc224ff987946bc9775bfc') {
+    if (envApiKey.isNotEmpty) {
       return envApiKey;
     }
     try {
@@ -26,12 +26,20 @@ class ImgBBService {
         }
       }
     } catch (_) {}
-    return envApiKey;
+    return '';
+  }
+
+  static Future<String> _requireKey(String? explicitApiKey, FirebaseFirestore? firestore) async {
+    final key = explicitApiKey ?? (firestore != null ? await resolveApiKey(firestore) : envApiKey);
+    if (key.trim().isEmpty) {
+      throw StateError('ImgBB API key is not configured. Set the IMGBB_API_KEY CI secret (--dart-define) or config/imgbb.apiKey.');
+    }
+    return key;
   }
 
   /// Uploads a selected [web.File] directly to ImgBB and returns the public hosted image URL.
   static Future<String> uploadFile(web.File file, {FirebaseFirestore? firestore, String? explicitApiKey}) async {
-    final key = explicitApiKey ?? (firestore != null ? await resolveApiKey(firestore) : envApiKey);
+    final key = await _requireKey(explicitApiKey, firestore);
     final completer = Completer<String>();
 
     final formData = web.FormData();
@@ -67,7 +75,7 @@ class ImgBBService {
 
   /// Uploads a base64 or Data URL image string to ImgBB and returns the hosted image URL.
   static Future<String> uploadBase64(String base64OrDataUrl, {FirebaseFirestore? firestore, String? explicitApiKey}) async {
-    final key = explicitApiKey ?? (firestore != null ? await resolveApiKey(firestore) : envApiKey);
+    final key = await _requireKey(explicitApiKey, firestore);
     final completer = Completer<String>();
 
     String cleanBase64 = base64OrDataUrl.trim();

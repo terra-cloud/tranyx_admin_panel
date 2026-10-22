@@ -818,6 +818,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
               print('[ImgBB] Base64 upload fallback error: $fallbackErr');
               if (mounted) {
                 setState(() => _isUploadingProof = false);
+                _triggerToast('Receipt upload failed: $fallbackErr');
               }
             }
           }
