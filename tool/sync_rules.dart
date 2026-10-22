@@ -36,6 +36,21 @@ void main() {
     exit(1);
   }
 
+  // Only sync reviewed rules: the source checkout must be on develop with no local rules changes,
+  // or firestore.rules must match TRANYX_RULES_SHA256 (sha256 hex of the exact file to deploy).
+  final branch = _git(activeWorkspace.path, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  final dirty = _git(activeWorkspace.path, ['status', '--porcelain', '--', 'firestore.rules', 'firestore_rules']);
+  if (branch != 'develop' || dirty == null || dirty.isNotEmpty) {
+    final expected = (Platform.environment['TRANYX_RULES_SHA256'] ?? '').trim().toLowerCase();
+    final actual = _sha256(sourceRules.path);
+    if (expected.isEmpty || actual != expected) {
+      stderr.writeln('Error: ${activeWorkspace.path} is on "${branch ?? 'unknown'}"'
+          '${dirty == null || dirty.isNotEmpty ? ' with uncommitted or unreadable rules changes' : ''}, not a clean develop, '
+          'and firestore.rules sha256 ($actual) does not match TRANYX_RULES_SHA256. Sync aborted.');
+      exit(1);
+    }
+  }
+
   final content = sourceRules.readAsStringSync();
 
   // Integrity checks
@@ -50,4 +65,28 @@ void main() {
   targetFile.writeAsStringSync(content);
 
   print('[SYNC SUCCESS] Successfully synchronized firestore.rules from ${sourceRules.path} (${content.length} bytes).');
+}
+
+String? _git(String dir, List<String> args) {
+  try {
+    final result = Process.runSync('git', args, workingDirectory: dir);
+    return result.exitCode == 0 ? (result.stdout as String).trim() : null;
+  } on ProcessException {
+    return null;
+  }
+}
+
+String? _sha256(String path) {
+  for (final cmd in [
+    ['shasum', '-a', '256', path],
+    ['sha256sum', path],
+  ]) {
+    try {
+      final result = Process.runSync(cmd.first, cmd.sublist(1));
+      if (result.exitCode == 0) return (result.stdout as String).split(RegExp(r'\s+')).first.toLowerCase();
+    } on ProcessException {
+      continue;
+    }
+  }
+  return null;
 }
