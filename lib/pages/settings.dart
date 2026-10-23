@@ -66,6 +66,17 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _configLoading = false;
   bool _configInitialized = false;
 
+  // Job Acknowledgment SLA Configuration State
+  String _slaImmDeliveryStr = '15';
+  String _slaOnDemandStr = '60';
+  String _slaScheduledLocalStr = '240';
+  String _slaRemoteStr = '240';
+  String _slaLongTermStr = '720';
+  String? _slaMessage;
+  String? _slaError;
+  bool _slaLoading = false;
+  bool _slaInitialized = false;
+
   // Test integration email state
   String _testEmailRecipient = 'terraservices.ph@gmail.com';
   bool _testEmailLoading = false;
@@ -177,6 +188,90 @@ class _SettingsPageState extends State<SettingsPage> {
     } finally {
       setState(() {
         _configLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadSlaConfig(BuildContext context) async {
+    if (_slaLoading) return;
+    _slaLoading = true;
+    try {
+      final adminFirestore = context.read(adminFirestoreProvider);
+      final doc = await adminFirestore.collection('platform_config').doc('job_sla').get();
+      if (doc.exists && doc.data() != null) {
+        final d = doc.data()!;
+        setState(() {
+          _slaImmDeliveryStr = (d['immediateDeliveryMinutes'] ?? 15).toString();
+          _slaOnDemandStr = (d['onDemandLocalMinutes'] ?? 60).toString();
+          _slaScheduledLocalStr = (d['scheduledLocalMinutes'] ?? 240).toString();
+          _slaRemoteStr = (d['remoteOnlineMinutes'] ?? 240).toString();
+          _slaLongTermStr = (d['longTermProjectMinutes'] ?? 720).toString();
+          _slaInitialized = true;
+        });
+      } else {
+        setState(() => _slaInitialized = true);
+      }
+    } catch (e) {
+      print('[Settings] Error loading SLA config: $e');
+    } finally {
+      _slaLoading = false;
+    }
+  }
+
+  Future<void> _updateSlaConfig(BuildContext context) async {
+    final imm = int.tryParse(_slaImmDeliveryStr.trim()) ?? 15;
+    final onDem = int.tryParse(_slaOnDemandStr.trim()) ?? 60;
+    final sched = int.tryParse(_slaScheduledLocalStr.trim()) ?? 240;
+    final rem = int.tryParse(_slaRemoteStr.trim()) ?? 240;
+    final lt = int.tryParse(_slaLongTermStr.trim()) ?? 720;
+
+    if (imm <= 0 || onDem <= 0 || sched <= 0 || rem <= 0 || lt <= 0) {
+      setState(() {
+        _slaError = 'All SLA durations must be positive numbers of minutes.';
+        _slaMessage = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _slaLoading = true;
+      _slaError = null;
+      _slaMessage = null;
+    });
+
+    try {
+      final adminFirestore = context.read(adminFirestoreProvider);
+      final activeFirestore = context.read(firestoreProvider);
+
+      final updateData = {
+        'immediateDeliveryMinutes': imm,
+        'onDemandLocalMinutes': onDem,
+        'scheduledLocalMinutes': sched,
+        'remoteOnlineMinutes': rem,
+        'longTermProjectMinutes': lt,
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+      };
+
+      await adminFirestore.collection('platform_config').doc('job_sla').set(updateData, SetOptions(merge: true));
+      await activeFirestore
+          .collection('platform_config')
+          .doc('job_sla')
+          .set(updateData, SetOptions(merge: true))
+          .catchError((e) {
+            print('[Settings] Active firestore SLA sync notice: $e');
+          });
+
+      setState(() {
+        _slaMessage = 'Platform Job Acknowledgment SLAs successfully saved!';
+      });
+    } catch (e) {
+      print('[Settings] Failed to update SLA config: $e');
+      setState(() {
+        _slaError = 'Failed to update SLA config: $e';
+      });
+    } finally {
+      setState(() {
+        _slaLoading = false;
       });
     }
   }
@@ -423,6 +518,10 @@ class _SettingsPageState extends State<SettingsPage> {
         _mailtrapFromName = cfg.mailtrapFromName;
       }
       _configInitialized = true;
+    }
+
+    if (isAdmin && !_slaInitialized && !_slaLoading) {
+      _loadSlaConfig(context);
     }
 
     return div(classes: 'flex-1 p-6 md:p-8 flex flex-col gap-6 max-w-7xl mx-auto w-full bg-[#eff2f0]', [
@@ -675,6 +774,149 @@ class _SettingsPageState extends State<SettingsPage> {
                         [Component.text(_testEmailFeedback!)],
                       ),
                   ]),
+                ]),
+              ],
+            ),
+
+          // Panel 1b: Platform Job Acknowledgment SLA Timers (Admin only)
+          if (isAdmin)
+            div(
+              classes: 'p-6 rounded-[28px] border border-zinc-200/50 bg-white flex flex-col gap-4 shadow-[0_8px_30px_rgba(0,0,0,0.015)]',
+              [
+                h4(classes: 'text-sm font-bold text-zinc-900 flex items-center justify-between border-b border-zinc-50 pb-3', [
+                  div(classes: 'flex items-center gap-2', [
+                    span([Component.text('⏳')]),
+                    Component.text('Job Acknowledgment SLA Timers'),
+                  ]),
+                  if (_slaLoading)
+                    span(classes: 'inline-block animate-spin h-3.5 w-3.5 border-2 border-zinc-300 border-t-zinc-700 rounded-full', []),
+                ]),
+                p(classes: 'text-xs text-zinc-500 leading-relaxed font-medium', [
+                  Component.text(
+                    'Global SLA windows (in minutes) for Nyxians to acknowledge newly hired gigs before reminders or expiration triggers.',
+                  ),
+                ]),
+
+                if (_slaMessage != null)
+                  div(
+                    classes: 'p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[#0fa958] text-xs font-semibold',
+                    [Component.text(_slaMessage!)],
+                  ),
+                if (_slaError != null)
+                  div(classes: 'p-3 rounded-xl bg-red-50 border border-red-200 text-red-500 text-xs font-semibold', [
+                    Component.text(_slaError!),
+                  ]),
+
+                div(classes: 'flex flex-col gap-3.5', [
+                  // Category A
+                  div(classes: 'p-3.5 rounded-2xl bg-amber-50/40 border border-amber-200/60 flex flex-col gap-1.5', [
+                    div(classes: 'flex items-center justify-between', [
+                      span(classes: 'text-xs font-bold text-amber-900', [Component.text('Category A: Immediate / Delivery / Errand')]),
+                      span(classes: 'text-[10px] text-amber-700 font-mono font-bold', [Component.text('Reminder: 5m before')]),
+                    ]),
+                    p(classes: 'text-[11px] text-zinc-500', [Component.text('Food/item delivery, courier tasks, fast market errands.')]),
+                    div(classes: 'flex items-center gap-3 pt-1', [
+                      label(classes: 'text-xs font-semibold text-zinc-700 shrink-0', [Component.text('SLA Window:')]),
+                      input(
+                        value: _slaImmDeliveryStr,
+                        classes: 'w-24 bg-white border border-zinc-300 rounded-xl px-3 py-1.5 text-xs text-zinc-800 font-mono focus:outline-none focus:border-black',
+                        attributes: {'type': 'number', 'min': '1'},
+                        onInput: (dynamic value) => setState(() => _slaImmDeliveryStr = (value as String?) ?? ''),
+                      ),
+                      span(classes: 'text-xs text-zinc-400', [Component.text('minutes (default: 15)')]),
+                    ]),
+                  ]),
+
+                  // Category B
+                  div(classes: 'p-3.5 rounded-2xl bg-blue-50/40 border border-blue-200/60 flex flex-col gap-1.5', [
+                    div(classes: 'flex items-center justify-between', [
+                      span(classes: 'text-xs font-bold text-blue-900', [Component.text('Category B: On-Demand Local Service')]),
+                      span(classes: 'text-[10px] text-blue-700 font-mono font-bold', [Component.text('Reminder: 30m before')]),
+                    ]),
+                    p(classes: 'text-[11px] text-zinc-500', [Component.text('Cleaning, repair services, moving, assistance, personal services.')]),
+                    div(classes: 'flex items-center gap-3 pt-1', [
+                      label(classes: 'text-xs font-semibold text-zinc-700 shrink-0', [Component.text('SLA Window:')]),
+                      input(
+                        value: _slaOnDemandStr,
+                        classes: 'w-24 bg-white border border-zinc-300 rounded-xl px-3 py-1.5 text-xs text-zinc-800 font-mono focus:outline-none focus:border-black',
+                        attributes: {'type': 'number', 'min': '1'},
+                        onInput: (dynamic value) => setState(() => _slaOnDemandStr = (value as String?) ?? ''),
+                      ),
+                      span(classes: 'text-xs text-zinc-400', [Component.text('minutes (default: 60 / 1 hr)')]),
+                    ]),
+                  ]),
+
+                  // Category C
+                  div(classes: 'p-3.5 rounded-2xl bg-indigo-50/40 border border-indigo-200/60 flex flex-col gap-1.5', [
+                    div(classes: 'flex items-center justify-between', [
+                      span(classes: 'text-xs font-bold text-indigo-900', [Component.text('Category C: Scheduled Local Job')]),
+                      span(classes: 'text-[10px] text-indigo-700 font-mono font-bold', [Component.text('Reminder: 2h before')]),
+                    ]),
+                    p(classes: 'text-[11px] text-zinc-500', [Component.text('Event photography, weekend repair. Capped at configured Job Start Time.')]),
+                    div(classes: 'flex items-center gap-3 pt-1', [
+                      label(classes: 'text-xs font-semibold text-zinc-700 shrink-0', [Component.text('SLA Window:')]),
+                      input(
+                        value: _slaScheduledLocalStr,
+                        classes: 'w-24 bg-white border border-zinc-300 rounded-xl px-3 py-1.5 text-xs text-zinc-800 font-mono focus:outline-none focus:border-black',
+                        attributes: {'type': 'number', 'min': '1'},
+                        onInput: (dynamic value) => setState(() => _slaScheduledLocalStr = (value as String?) ?? ''),
+                      ),
+                      span(classes: 'text-xs text-zinc-400', [Component.text('minutes (default: 240 / 4 hrs)')]),
+                    ]),
+                  ]),
+
+                  // Category D
+                  div(classes: 'p-3.5 rounded-2xl bg-purple-50/40 border border-purple-200/60 flex flex-col gap-1.5', [
+                    div(classes: 'flex items-center justify-between', [
+                      span(classes: 'text-xs font-bold text-purple-900', [Component.text('Category D: Remote / Online Work')]),
+                      span(classes: 'text-[10px] text-purple-700 font-mono font-bold', [Component.text('Reminder: 2h before')]),
+                    ]),
+                    p(classes: 'text-[11px] text-zinc-500', [Component.text('Design, coding, virtual assistance, copywriting, translation.')]),
+                    div(classes: 'flex items-center gap-3 pt-1', [
+                      label(classes: 'text-xs font-semibold text-zinc-700 shrink-0', [Component.text('SLA Window:')]),
+                      input(
+                        value: _slaRemoteStr,
+                        classes: 'w-24 bg-white border border-zinc-300 rounded-xl px-3 py-1.5 text-xs text-zinc-800 font-mono focus:outline-none focus:border-black',
+                        attributes: {'type': 'number', 'min': '1'},
+                        onInput: (dynamic value) => setState(() => _slaRemoteStr = (value as String?) ?? ''),
+                      ),
+                      span(classes: 'text-xs text-zinc-400', [Component.text('minutes (default: 240 / 4 hrs)')]),
+                    ]),
+                  ]),
+
+                  // Category E
+                  div(classes: 'p-3.5 rounded-2xl bg-emerald-50/40 border border-emerald-200/60 flex flex-col gap-1.5', [
+                    div(classes: 'flex items-center justify-between', [
+                      span(classes: 'text-xs font-bold text-emerald-900', [Component.text('Category E: Long-Term / Project-Based')]),
+                      span(classes: 'text-[10px] text-emerald-700 font-mono font-bold', [Component.text('Reminder: 6h before')]),
+                    ]),
+                    p(classes: 'text-[11px] text-zinc-500', [Component.text('Multi-day contracts, recurring tasks, milestones.')]),
+                    div(classes: 'flex items-center gap-3 pt-1', [
+                      label(classes: 'text-xs font-semibold text-zinc-700 shrink-0', [Component.text('SLA Window:')]),
+                      input(
+                        value: _slaLongTermStr,
+                        classes: 'w-24 bg-white border border-zinc-300 rounded-xl px-3 py-1.5 text-xs text-zinc-800 font-mono focus:outline-none focus:border-black',
+                        attributes: {'type': 'number', 'min': '1'},
+                        onInput: (dynamic value) => setState(() => _slaLongTermStr = (value as String?) ?? ''),
+                      ),
+                      span(classes: 'text-xs text-zinc-400', [Component.text('minutes (default: 720 / 12 hrs)')]),
+                    ]),
+                  ]),
+
+                  button(
+                    onClick: _slaLoading ? null : () => _updateSlaConfig(context),
+                    classes: 'w-full py-3 bg-black hover:bg-zinc-800 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-black/10 flex items-center justify-center gap-2 mt-1',
+                    attributes: _slaLoading ? {'disabled': 'true'} : {},
+                    [
+                      if (_slaLoading)
+                        span(
+                          classes: 'inline-block animate-spin h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full',
+                          [],
+                        )
+                      else
+                        Component.text('Save Job SLA Timers'),
+                    ],
+                  ),
                 ]),
               ],
             ),
