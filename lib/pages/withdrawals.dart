@@ -13,6 +13,7 @@ import '../core/providers/environment_provider.dart';
 import '../core/services/imgbb_service.dart';
 import 'users.dart';
 import 'deposits.dart' show depositRequestsStreamProvider;
+import '../core/services/staff_ops_service.dart';
 
 /// Represents a P2P withdrawal request submitted by a user.
 class WithdrawalRequest {
@@ -616,133 +617,23 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
   /// Step 1: Agent Claims P2P Cashout (Locks against agent conflicts)
   Future<void> _executeClaimCashout(WithdrawalRequest req, fb.User? adminUser) async {
     if (_isProcessing) return;
-
-    setState(() {
-      _isProcessing = true;
-    });
-
-    final firestore = context.read(firestoreProvider);
-    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
-    final agentUid = effectiveUser?.uid ?? 'admin_agent';
-    final agentName = effectiveUser?.displayName?.isNotEmpty == true
-        ? effectiveUser!.displayName!
-        : (effectiveUser?.email?.isNotEmpty == true ? effectiveUser!.email! : 'Admin Agent');
-    final agentPhone = '0917-888-9999';
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    setState(() => _isProcessing = true);
 
     try {
-      final docRef = firestore.collection('withdrawal_requests').doc(req.id);
-      final currentSnap = await docRef.get();
-      if (currentSnap.exists) {
-        final data = currentSnap.data()!;
-        final rawStatus = (data['status'] ?? '').toString().toUpperCase();
-        final currentAgent = (data['agentId'] ?? '').toString().trim();
-        final otherName = (data['agentName'] ?? (currentAgent.isNotEmpty ? currentAgent : 'another agent')).toString();
-
-        // 1. Check if already claimed by someone else
-        if (currentAgent.isNotEmpty && currentAgent != agentUid) {
-          _triggerToast('🔒 Action Blocked: Order was already claimed by $otherName. Conflict prevented.');
-          setState(() {
-            _isProcessing = false;
-            _activeInterruptWithdrawal = null;
-          });
-          _closeInspector();
-          return;
-        }
-
-        // 2. Check if status is no longer open/waiting
-        final isAvailable = rawStatus == 'WAITING_FOR_AGENT' ||
-            rawStatus == 'REQUESTED' ||
-            rawStatus == 'OPEN' ||
-            rawStatus == 'PENDING';
-
-        if (!isAvailable) {
-          _triggerToast('🔒 Action Blocked: Order is no longer available (Status: $rawStatus, handled by $otherName).');
-          setState(() {
-            _isProcessing = false;
-            _activeInterruptWithdrawal = null;
-          });
-          _closeInspector();
-          return;
-        }
-      }
-
-      // Update withdrawal request across collections
-      final claimPayload = {
-        'status': 'AWAITING_AGENT_PAYMENT',
-        'amount': req.amount,
-        'feeAmount': req.feeAmount,
-        'netAmount': req.netAmount,
-        'paymentMethod': req.paymentMethod,
-        'accountName': req.userAccountName,
-        'accountNumber': req.userAccountNumber,
-        'userAccountName': req.userAccountName,
-        'userAccountNumber': req.userAccountNumber,
-        'userId': req.uid,
-        'uid': req.uid,
-        'userName': req.userName,
-        'agentId': agentUid,
-        'agentName': agentName,
-        'agentPhone': agentPhone,
-        'claimedAt': nowMs,
-        'updatedAt': nowMs,
-      };
-      await docRef.set(claimPayload, SetOptions(merge: true));
-
-      try {
-        await firestore.collection('withdrawals').doc(req.id).set(claimPayload, SetOptions(merge: true));
-      } catch (_) {}
-
-      // Update linked transaction
-      try {
-        final txDocRef = firestore.collection('transactions').doc('p2p_with_${req.id}');
-        await txDocRef.set({
-          'status': 'AWAITING_AGENT_PAYMENT',
-          'amount': req.amount,
-          'desc': 'Agent $agentName claimed your order and is transferring ₱${req.amount.toStringAsFixed(2)} to your ${req.paymentMethod}.',
-          'agentId': agentUid,
-          'agentName': agentName,
-          'updatedAt': nowMs,
-        }, SetOptions(merge: true));
-      } catch (_) {}
-
-      // Write notification to user
-      try {
-        await firestore.collection('notifications').doc().set({
-          'uid': req.uid,
-          'userId': req.uid,
-          'title': 'Agent Claimed Cashout Request',
-          'message': 'Agent $agentName is now sending ₱${req.amount.toStringAsFixed(2)} to your ${req.paymentMethod} account ($req.userAccountNumber).',
-          'body': 'Agent $agentName claimed your ₱${req.amount.toStringAsFixed(2)} cashout.',
-          'type': 'P2P_CASHOUT_CLAIMED',
-          'category': 'wallet',
-          'withdrawalRequestId': req.id,
-          'isRead': false,
-          'read': false,
-          'createdAt': nowMs,
-          'timestamp': nowMs,
-        });
-      } catch (_) {}
-
-      // Log to admin audit
-      try {
-        await firestore.collection('admin_audit_logs').doc().set({
-          'withdrawalRequestId': req.id,
-          'userId': req.uid,
-          'userName': req.userName,
-          'amount': req.amount,
-          'paymentMethod': req.paymentMethod,
-          'action': 'CLAIMED_BY_AGENT',
-          'reviewedByAdminId': agentUid,
-          'reviewedByAdminName': agentName,
-          'timestamp': nowMs,
-          'type': 'WITHDRAWAL_CLAIM',
-        });
-      } catch (_) {}
-
+      // Server-side claim (staffOps): role check, one transaction so two agents cannot both win, and the status
+      // whitelist covers every "waiting" status the queue shows (TRAD-12: PENDING_REVIEW used to be refused).
+      final app = await context.read(firebaseAppProvider.future);
+      await callStaffOps(app, 'claimWithdrawal', {'withdrawalId': req.id});
       _triggerToast('Cashout claimed! You are now assigned to fulfill ₱${req.amount.toStringAsFixed(2)} to ${req.userAccountName}.');
       if (_activeInterruptWithdrawal?.id == req.id) {
         _activeInterruptWithdrawal = null;
+      }
+    } on StaffOpsException catch (e) {
+      final blocked = e.detailCode == 'CLAIMED_BY_OTHER' || e.detailCode == 'NOT_CLAIMABLE';
+      _triggerToast(blocked ? '🔒 Action Blocked: ${e.message}' : 'Failed to claim cashout: ${e.message}');
+      if (blocked) {
+        _activeInterruptWithdrawal = null;
+        _closeInspector();
       }
     } catch (e) {
       _triggerToast('Failed to claim cashout: $e');
@@ -1126,200 +1017,18 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
 
     setState(() => _isProcessing = true);
 
-    final firestore = context.read(firestoreProvider);
-    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
-    final adminUid = effectiveUser?.uid ?? 'admin_portal';
-    final adminName = effectiveUser?.displayName?.isNotEmpty == true
-        ? effectiveUser!.displayName!
-        : (effectiveUser?.email?.isNotEmpty == true ? effectiveUser!.email! : 'Admin Staff');
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-
     try {
-      // 1. Full 100% Refund to User across all user documents & wallet stores
-      final targetUserDocRefs = <DocumentReference<Map<String, dynamic>>>[
-        firestore.collection('users').doc(req.uid),
-      ];
-
-      try {
-        if (req.uid.isNotEmpty) {
-          final qSnap = await firestore.collection('users').where('uid', isEqualTo: req.uid).get();
-          for (final d in qSnap.docs) {
-            if (!targetUserDocRefs.any((r) => r.id == d.id)) targetUserDocRefs.add(d.reference);
-          }
-        }
-        if (req.userEmail.isNotEmpty) {
-          final qSnap2 = await firestore.collection('users').where('email', isEqualTo: req.userEmail).get();
-          for (final d in qSnap2.docs) {
-            if (!targetUserDocRefs.any((r) => r.id == d.id)) targetUserDocRefs.add(d.reference);
-          }
-        }
-      } catch (_) {}
-
-      double currentBalance = 0.0;
-      for (final uRef in targetUserDocRefs) {
-        try {
-          final userDocSnap = await uRef.get();
-          if (userDocSnap.exists) {
-            final uData = userDocSnap.data()!;
-            final b = (uData['tyxBalance'] as num?)?.toDouble() ??
-                (uData['availableBalance'] as num?)?.toDouble() ??
-                (uData['walletBalance'] as num?)?.toDouble() ??
-                (uData['balance'] as num?)?.toDouble() ??
-                (uData['fiatBalance'] as num?)?.toDouble() ??
-                (uData['phpBalance'] as num?)?.toDouble() ??
-                0.0;
-            if (b > currentBalance) currentBalance = b;
-          }
-        } catch (_) {}
-      }
-
-      final restoredBalance = currentBalance + req.amount;
-
-      // Update user balances
-      for (final uRef in targetUserDocRefs) {
-        try {
-          await uRef.set({
-            'uid': req.uid,
-            'name': req.userName,
-            'email': req.userEmail,
-            'tyxBalance': restoredBalance,
-            'availableBalance': restoredBalance,
-            'walletBalance': restoredBalance,
-            'balance': restoredBalance,
-            'fiatBalance': restoredBalance,
-            'phpBalance': restoredBalance,
-            'totalBalance': restoredBalance,
-            'updatedAt': nowMs,
-          }, SetOptions(merge: true));
-        } catch (_) {}
-      }
-
-      // Update top-level wallets collection
-      try {
-        await firestore.collection('wallets').doc(req.uid).set({
-          'userId': req.uid,
-          'uid': req.uid,
-          'tyxBalance': restoredBalance,
-          'balance': restoredBalance,
-          'availableBalance': restoredBalance,
-          'walletBalance': restoredBalance,
-          'fiatBalance': restoredBalance,
-          'phpBalance': restoredBalance,
-          'updatedAt': nowMs,
-        }, SetOptions(merge: true));
-      } catch (_) {}
-
-      // 2. Mark withdrawal request as REJECTED in all target collections
-      final docRef = firestore.collection('withdrawal_requests').doc(req.id);
-      final rejectUpdateData = {
-        'status': 'REJECTED',
-        'amount': req.amount,
-        'feeAmount': req.feeAmount,
-        'netAmount': req.netAmount,
-        'paymentMethod': req.paymentMethod,
-        'accountName': req.userAccountName,
-        'accountNumber': req.userAccountNumber,
-        'userAccountName': req.userAccountName,
-        'userAccountNumber': req.userAccountNumber,
-        'userId': req.uid,
-        'uid': req.uid,
-        'userName': req.userName,
-        'adminUid': adminUid,
-        'reviewedByAdminId': adminUid,
-        'reviewedByAdminName': adminName,
-        'reviewedAt': nowMs,
-        'action': 'REJECTED',
-        'rejectionReason': finalReason,
-        'rejectionNote': _customRejectNote.trim(),
-        'verifiedAt': nowMs,
-        'updatedAt': nowMs,
-      };
-      await docRef.set(rejectUpdateData, SetOptions(merge: true));
-
-      try {
-        await firestore.collection('withdrawals').doc(req.id).set(rejectUpdateData, SetOptions(merge: true));
-      } catch (_) {}
-
-      // Update User Wallet Sub-collection: /wallets/{userId}/transactions/{requestId}
-      try {
-        final walletRejectData = {
-          'status': 'REJECTED',
-          'rejectionReason': finalReason,
-          'isPending': false,
-          'updatedAt': nowMs,
-        };
-        await firestore.collection('wallets').doc(req.uid).collection('transactions').doc(req.id).set(walletRejectData, SetOptions(merge: true));
-        await firestore.collection('wallets').doc(req.uid).collection('transactions').doc('p2p_with_${req.id}').set(walletRejectData, SetOptions(merge: true));
-      } catch (_) {}
-
-      // 3. Update transaction to CANCELLED / REJECTED
-      try {
-        final txDocData = {
-          'status': 'CANCELLED',
-          'rejectionReason': finalReason,
-          'desc': 'Cashout rejected: $finalReason. ₱${req.amount.toStringAsFixed(2)} refunded to wallet.',
-          'verifiedAt': nowMs,
-          'updatedAt': nowMs,
-        };
-        await firestore.collection('transactions').doc(req.id).set(txDocData, SetOptions(merge: true));
-        await firestore.collection('transactions').doc('p2p_with_${req.id}').set(txDocData, SetOptions(merge: true));
-      } catch (_) {}
-
-      // Update user transactions subcollection
-      try {
-        final userTxRejectData = {
-          'status': 'REJECTED',
-          'rejectionReason': finalReason,
-          'updatedAt': nowMs,
-        };
-        await firestore.collection('users').doc(req.uid).collection('transactions').doc(req.id).set(userTxRejectData, SetOptions(merge: true));
-        await firestore.collection('users').doc(req.uid).collection('transactions').doc('p2p_with_${req.id}').set(userTxRejectData, SetOptions(merge: true));
-      } catch (_) {}
-
-      // 4. Send notification with refund announcement
-      try {
-        await firestore.collection('notifications').doc().set({
-          'uid': req.uid,
-          'userId': req.uid,
-          'title': 'Cashout Request Rejected — 100% Refunded',
-          'message': 'Your ₱${req.amount.toStringAsFixed(2)} ${req.paymentMethod} cashout was rejected ($finalReason). The funds have been refunded to your wallet balance.',
-          'body': 'Cashout rejected. ₱${req.amount.toStringAsFixed(2)} refunded.',
-          'type': 'WITHDRAWAL_REJECTED',
-          'category': 'wallet',
-          'amount': req.amount,
-          'newBalance': restoredBalance,
-          'reason': finalReason,
-          'withdrawalRequestId': req.id,
-          'isRead': false,
-          'read': false,
-          'createdAt': nowMs,
-          'timestamp': nowMs,
-        });
-      } catch (_) {}
-
-      // 5. Immutable Admin Audit Log
-      try {
-        await firestore.collection('admin_audit_logs').doc().set({
-          'withdrawalRequestId': req.id,
-          'userId': req.uid,
-          'userName': req.userName,
-          'userEmail': req.userEmail,
-          'amount': req.amount,
-          'paymentMethod': req.paymentMethod,
-          'action': 'REJECTED',
-          'rejectionReason': finalReason,
-          'rejectionNote': _customRejectNote.trim(),
-          'refundedBalance': restoredBalance,
-          'reviewedByAdminId': adminUid,
-          'reviewedByAdminName': adminName,
-          'reviewedAt': nowMs,
-          'timestamp': nowMs,
-          'type': 'WITHDRAWAL_REJECTION',
-        });
-      } catch (_) {}
-
-      _triggerToast('Cashout rejected. ₱${req.amount.toStringAsFixed(2)} refunded 100% to ${req.userName}.');
+      // The 100% refund, the REJECTED status, the ledger rows, the notification and the audit entry are all applied
+      // by staffOps in one transaction; it refunds at most once, so a double click or retry cannot refund twice.
+      final app = await context.read(firebaseAppProvider.future);
+      final res = await callStaffOps(app, 'rejectWithdrawal', {'withdrawalId': req.id, 'reason': finalReason});
+      final refunded = (res['refunded'] as num?)?.toDouble() ?? 0.0;
+      _triggerToast(refunded > 0
+          ? 'Cashout rejected. ₱${refunded.toStringAsFixed(2)} refunded 100% to ${req.userName}.'
+          : 'Cashout rejected.');
       _closeInspector();
+    } on StaffOpsException catch (e) {
+      _triggerToast('Rejection failed: ${e.message}');
     } catch (e) {
       _triggerToast('Rejection failed: $e');
     } finally {
@@ -1332,31 +1041,13 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
 
-    final firestore = context.read(firestoreProvider);
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-
     try {
-      final docRef = firestore.collection('withdrawal_requests').doc(req.id);
-      await docRef.set({
-        'status': 'WAITING_FOR_AGENT',
-        'agentId': FieldValue.delete(),
-        'agentName': FieldValue.delete(),
-        'agentPhone': FieldValue.delete(),
-        'claimedAt': FieldValue.delete(),
-        'updatedAt': nowMs,
-      }, SetOptions(merge: true));
-
-      try {
-        final txDocRef = firestore.collection('transactions').doc('p2p_with_${req.id}');
-        await txDocRef.set({
-          'status': 'WAITING_FOR_AGENT',
-          'desc': 'Awaiting Payment Agent fulfillment to ${req.userAccountNumber} (${req.userAccountName})',
-          'updatedAt': nowMs,
-        }, SetOptions(merge: true));
-      } catch (_) {}
-
+      final app = await context.read(firebaseAppProvider.future);
+      await callStaffOps(app, 'releaseClaim', {'withdrawalId': req.id});
       _triggerToast('Order released back to public queue.');
       _closeInspector();
+    } on StaffOpsException catch (e) {
+      _triggerToast('Failed to release order: ${e.message}');
     } catch (e) {
       _triggerToast('Failed to release order: $e');
     } finally {

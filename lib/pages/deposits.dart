@@ -14,6 +14,7 @@ import '../core/providers/environment_provider.dart';
 import 'users.dart';
 import 'withdrawals.dart';
 import 'subscriptions.dart' show pendingSubscriptionsCountProvider, SubscriptionsView;
+import '../core/services/staff_ops_service.dart';
 
 /// Represents a P2P deposit request submitted by a user.
 class DepositRequest {
@@ -1136,270 +1137,22 @@ class _DepositsPageState extends State<DepositsPage> {
   /// Deposit Approval Workflow with atomic Firestore execution
   Future<void> _executeApproveDeposit(DepositRequest deposit, fb.User? adminUser) async {
     if (_isProcessing) return;
-
-    setState(() {
-      _isProcessing = true;
-    });
-
-    final firestore = context.read(firestoreProvider);
-    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
-    final adminUid = effectiveUser?.uid ?? 'admin_portal';
-    final adminName = effectiveUser?.displayName?.isNotEmpty == true
-        ? effectiveUser!.displayName!
-        : (effectiveUser?.email?.isNotEmpty == true ? effectiveUser!.email! : 'Admin Staff');
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final normalizedRef = deposit.referenceNumber.trim().toUpperCase();
-
-    // Ensure effective user has admin/agent credentials in users/{uid} and p2p_agents/{uid}
-    if (effectiveUser != null) {
-      final myUid = effectiveUser.uid;
-      final myEmail = effectiveUser.email ?? 'admin@tranyx.app';
-      try {
-        await firestore.collection('users').doc(myUid).set({
-          'uid': myUid,
-          'email': myEmail,
-          'role': 'admin',
-          'isAdmin': true,
-          'name': adminName,
-          'updatedAt': nowMs,
-        }, SetOptions(merge: true));
-        await firestore.collection('p2p_agents').doc(myUid).set({
-          'uid': myUid,
-          'email': myEmail,
-          'role': 'agent',
-          'isActive': true,
-          'updatedAt': nowMs,
-        }, SetOptions(merge: true));
-      } catch (authSeedErr) {
-        print('[Deposits] Admin role verification notice: $authSeedErr');
-      }
-    }
+    setState(() => _isProcessing = true);
 
     try {
-      // 1. Double check against claimed_p2p_references collection (Safe)
-      try {
-        final existingClaimSnap = await firestore.collection('claimed_p2p_references').doc(normalizedRef).get();
-        if (existingClaimSnap.exists) {
-          final existingData = existingClaimSnap.data()!;
-          final claimant = existingData['userName'] ?? 'another user';
-          _triggerToast('Approval blocked: Reference #$normalizedRef was already claimed by $claimant.');
-          setState(() {
-            _isProcessing = false;
-          });
-          return;
-        }
-      } catch (checkErr) {
-        print('[Deposits] Notice checking claimed references: $checkErr');
-      }
-
-      // 2. Resolve User Document References (by ID, UID, and Email)
-      final depositDocRef = firestore.collection('deposit_requests').doc(deposit.id);
-      final primaryUserDocRef = firestore.collection('users').doc(deposit.userId);
-      final claimedRefDoc = firestore.collection('claimed_p2p_references').doc(normalizedRef);
-      final auditLogDoc = firestore.collection('admin_audit_logs').doc();
-      final txDoc = firestore.collection('transactions').doc();
-
-      final targetUserDocRefs = <DocumentReference<Map<String, dynamic>>>[primaryUserDocRef];
-      try {
-        if (deposit.userId.isNotEmpty) {
-          final qSnap = await firestore.collection('users').where('uid', isEqualTo: deposit.userId).get();
-          for (final d in qSnap.docs) {
-            if (!targetUserDocRefs.any((r) => r.id == d.id)) targetUserDocRefs.add(d.reference);
-          }
-        }
-        if (deposit.userEmail.isNotEmpty) {
-          final qSnap2 = await firestore.collection('users').where('email', isEqualTo: deposit.userEmail).get();
-          for (final d in qSnap2.docs) {
-            if (!targetUserDocRefs.any((r) => r.id == d.id)) targetUserDocRefs.add(d.reference);
-          }
-        }
-      } catch (lookupErr) {
-        print('[Deposits] User query notice: $lookupErr');
-      }
-
-      // Read current balance across all matching documents
-      double currentBalance = 0.0;
-      for (final uRef in targetUserDocRefs) {
-        try {
-          final userDocSnap = await uRef.get();
-          if (userDocSnap.exists) {
-            final uData = userDocSnap.data()!;
-            final b = (uData['tyxBalance'] as num?)?.toDouble() ??
-                (uData['availableBalance'] as num?)?.toDouble() ??
-                (uData['walletBalance'] as num?)?.toDouble() ??
-                (uData['balance'] as num?)?.toDouble() ??
-                (uData['fiatBalance'] as num?)?.toDouble() ??
-                (uData['phpBalance'] as num?)?.toDouble() ??
-                0.0;
-            if (b > currentBalance) currentBalance = b;
-          }
-        } catch (getUErr) {
-          print('[Deposits] Notice fetching user balance: $getUErr');
-        }
-      }
-      final newBalance = currentBalance + deposit.amount;
-
-      // Update Deposit Request status to APPROVED
-      await depositDocRef.set({
-        'status': 'APPROVED',
-        'reviewedByAdminId': adminUid,
-        'reviewedByAdminName': adminName,
-        'reviewedAt': nowMs,
-        'action': 'APPROVED',
-        'updatedAt': nowMs,
-      }, SetOptions(merge: true));
-
-      // Update User Balance across all matching user documents
-      for (final uRef in targetUserDocRefs) {
-        try {
-          await uRef.set({
-            'uid': deposit.userId,
-            'name': deposit.userName,
-            'email': deposit.userEmail,
-            'tyxBalance': newBalance,
-            'availableBalance': newBalance,
-            'walletBalance': newBalance,
-            'balance': newBalance,
-            'fiatBalance': newBalance,
-            'phpBalance': newBalance,
-            'totalBalance': newBalance,
-            'updatedAt': nowMs,
-          }, SetOptions(merge: true));
-        } catch (userUpErr) {
-          print('[Deposits] User balance update notice on ${uRef.id}: $userUpErr');
-        }
-
-        // Write to user subcollections for mobile/web app synchronization
-        try {
-          await uRef.collection('transactions').doc(txDoc.id).set({
-            'type': 'deposit',
-            'amount': deposit.amount,
-            'status': 'COMPLETED',
-            'referenceNumber': deposit.referenceNumber,
-            'paymentMethod': deposit.paymentMethod,
-            'createdAt': nowMs,
-            'timestamp': nowMs,
-          }, SetOptions(merge: true));
-        } catch (_) {}
-
-        try {
-          await uRef.collection('ledger').doc().set({
-            'type': 'CREDIT',
-            'category': 'p2p_deposit',
-            'amount': deposit.amount,
-            'balanceAfter': newBalance,
-            'referenceNumber': deposit.referenceNumber,
-            'depositRequestId': deposit.id,
-            'createdAt': nowMs,
-            'timestamp': nowMs,
-          }, SetOptions(merge: true));
-        } catch (_) {}
-      }
-
-      // Update Top-Level Wallets Collection (if present in schema)
-      try {
-        final walletDocRef = firestore.collection('wallets').doc(deposit.userId);
-        await walletDocRef.set({
-          'userId': deposit.userId,
-          'uid': deposit.userId,
-          'tyxBalance': newBalance,
-          'balance': newBalance,
-          'availableBalance': newBalance,
-          'walletBalance': newBalance,
-          'fiatBalance': newBalance,
-          'phpBalance': newBalance,
-          'updatedAt': nowMs,
-        }, SetOptions(merge: true));
-      } catch (_) {}
-
-      // Write Real-Time Push Notification for User
-      try {
-        await firestore.collection('notifications').doc().set({
-          'uid': deposit.userId,
-          'userId': deposit.userId,
-          'title': 'Deposit Approved! ₱${deposit.amount.toStringAsFixed(2)} Added',
-          'message': 'Your ₱${deposit.amount.toStringAsFixed(2)} top-up via ${deposit.paymentMethod} (Ref #${deposit.referenceNumber}) has been approved and credited to your wallet.',
-          'body': 'Your ₱${deposit.amount.toStringAsFixed(2)} deposit has been approved.',
-          'type': 'DEPOSIT_APPROVED',
-          'category': 'wallet',
-          'amount': deposit.amount,
-          'newBalance': newBalance,
-          'referenceNumber': deposit.referenceNumber,
-          'depositRequestId': deposit.id,
-          'isRead': false,
-          'read': false,
-          'createdAt': nowMs,
-          'timestamp': nowMs,
-        });
-      } catch (notifErr) {
-        print('[Deposits] Notification write notice: $notifErr');
-      }
-
-      // Add Reference Number to claimed_p2p_references Registry (Safe)
-      try {
-        await claimedRefDoc.set({
-          'referenceNumber': deposit.referenceNumber,
-          'depositRequestId': deposit.id,
-          'userId': deposit.userId,
-          'userName': deposit.userName,
-          'amount': deposit.amount,
-          'paymentMethod': deposit.paymentMethod,
-          'approvedAt': nowMs,
-          'approvedByAdminId': adminUid,
-          'approvedByAdminName': adminName,
-          'createdAt': nowMs,
-        });
-      } catch (claimErr) {
-        print('[Deposits] Claimed reference write skipped: $claimErr');
-      }
-
-      // Record in Global Transactions
-      try {
-        await txDoc.set({
-          'uid': deposit.userId,
-          'type': 'deposit',
-          'category': 'p2p_deposit',
-          'amount': deposit.amount,
-          'status': 'COMPLETED',
-          'paymentMethod': deposit.paymentMethod,
-          'referenceNumber': deposit.referenceNumber,
-          'depositRequestId': deposit.id,
-          'signature': 'P2P-${deposit.referenceNumber}',
-          'createdAt': nowMs,
-          'timestamp': nowMs,
-          'title': 'Deposit via ${deposit.paymentMethod}',
-          'description': 'Reference #${deposit.referenceNumber} approved by $adminName',
-        });
-      } catch (txErr) {
-        print('[Deposits] Transaction record skipped: $txErr');
-      }
-
-      // Write Immutable Admin Audit Log (Safe)
-      try {
-        await auditLogDoc.set({
-          'depositRequestId': deposit.id,
-          'userId': deposit.userId,
-          'userName': deposit.userName,
-          'userEmail': deposit.userEmail,
-          'amount': deposit.amount,
-          'paymentMethod': deposit.paymentMethod,
-          'referenceNumber': deposit.referenceNumber,
-          'action': 'APPROVED',
-          'reviewedByAdminId': adminUid,
-          'reviewedByAdminName': adminName,
-          'reviewedAt': nowMs,
-          'timestamp': nowMs,
-          'type': 'DEPOSIT_APPROVAL',
-        });
-      } catch (auditErr) {
-        print('[Deposits] Audit log write skipped: $auditErr');
-      }
-
-      _triggerToast('Deposit approved! ₱${deposit.amount.toStringAsFixed(2)} credited to ${deposit.userName}.');
+      // The credit amount and the depositor come from the deposit request on the server (not from this page); the
+      // reference registry check, the one-time credit, ledger, notification and audit entry run in one transaction.
+      final app = await context.read(firebaseAppProvider.future);
+      final res = await callStaffOps(app, 'approveDeposit', {'depositId': deposit.id});
+      final credited = (res['credited'] as num?)?.toDouble() ?? deposit.amount;
+      _triggerToast('Deposit approved! ₱${credited.toStringAsFixed(2)} credited to ${deposit.userName}.');
       setState(() {
         _showRejectModal = false;
       });
       _closeInspector();
+    } on StaffOpsException catch (e) {
+      print('[Deposits] Approval error: ${e.code} ${e.detailCode ?? ''}');
+      _triggerToast(e.detailCode == 'REFERENCE_CLAIMED' ? 'Approval blocked: ${e.message}' : 'Approval failed: ${e.message}');
     } catch (e) {
       print('[Deposits] Approval error: $e');
       _triggerToast('Approval failed: $e');
