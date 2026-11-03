@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:web/web.dart' as web;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:jaspr/dom.dart';
@@ -5,7 +7,10 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:riverpod/legacy.dart';
 
+import '../core/models/qna_message.dart';
 import '../core/providers/environment_provider.dart';
+
+export '../core/models/qna_message.dart';
 
 // Navigation tab: 'services', 'vehicles', 'properties'
 final listingsTabProvider = StateProvider<String>((ref) => 'services');
@@ -15,57 +20,41 @@ final listingsCursorsProvider = StateProvider<List<DocumentSnapshot?>>((ref) => 
 // Shared provider for global search integration
 final selectedListingIdProvider = StateProvider<String?>((ref) => null);
 
-class QnaMessage {
-  final String id;
-  final String senderName;
-  final String text;
-  final int createdAt;
-  final String? reply;
-
-  QnaMessage({required this.id, required this.senderName, required this.text, required this.createdAt, this.reply});
-
-  factory QnaMessage.fromMap(String id, Map<String, dynamic> map) {
-    return QnaMessage(
-      id: id,
-      senderName: map['senderName'] ?? map['userName'] ?? 'User',
-      text: map['text'] ?? map['question'] ?? '',
-      createdAt: map['createdAt'] ?? 0,
-      reply: map['reply'] ?? map['answer'],
-    );
-  }
-}
-
+/// Live questions for one listing, merged from `questions` and the legacy `qna` subcollection. Real data only:
+/// an empty listing shows an empty feed (it used to show two hard-coded sample questions, TRAD-13).
 final listingQnaStreamProvider = StreamProvider.family<List<QnaMessage>, (String, String)>((ref, arg) {
   final firestore = ref.watch(firestoreProvider);
   final (colName, listingId) = arg;
-  return firestore
-      .collection(colName)
-      .doc(listingId)
-      .collection('qna')
-      .orderBy('createdAt', descending: false)
-      .snapshots()
-      .map((snap) {
-        if (snap.docs.isEmpty) {
-          // Fallback mock questions for UAT and UAT demo board
-          return [
-            QnaMessage(
-              id: 'mock_1',
-              senderName: 'Michael Tan',
-              text: 'Is this rate negotiable for long-term hires?',
-              createdAt: DateTime.now().subtract(const Duration(hours: 12)).millisecondsSinceEpoch,
-              reply: 'Yes, we offer special discounts for durations exceeding 15 days.',
-            ),
-            QnaMessage(
-              id: 'mock_2',
-              senderName: 'Sophia Reyes',
-              text: 'Are pets allowed in the vehicle/property?',
-              createdAt: DateTime.now().subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
-            ),
-          ];
-        }
-        return snap.docs.map((d) => QnaMessage.fromMap(d.id, d.data())).toList();
-      })
-      .handleError((_) => <QnaMessage>[]);
+  final controller = StreamController<List<QnaMessage>>();
+  final latest = <String, List<QnaMessage>>{'questions': const [], 'qna': const []};
+
+  void emit() {
+    final all = [...latest['questions']!, ...latest['qna']!]..sort((x, y) => x.createdAt.compareTo(y.createdAt));
+    if (!controller.isClosed) controller.add(all);
+  }
+
+  final subs = <StreamSubscription>[];
+  for (final sub in ['questions', 'qna']) {
+    subs.add(
+      firestore.collection(colName).doc(listingId).collection(sub).snapshots().listen(
+        (snap) {
+          latest[sub] = snap.docs.map((d) => QnaMessage.fromMap(d.id, d.data(), sub: sub)).toList();
+          emit();
+        },
+        onError: (_) {
+          latest[sub] = const [];
+          emit();
+        },
+      ),
+    );
+  }
+  ref.onDispose(() {
+    for (final s in subs) {
+      s.cancel();
+    }
+    controller.close();
+  });
+  return controller.stream;
 });
 
 class ListingData {
@@ -582,15 +571,15 @@ class _ListingsPageState extends State<ListingsPage> {
                                           : activeTab == 'properties'
                                           ? 'properties'
                                           : 'jobs';
-                                      if (qna.id.startsWith('mock_')) {
-                                        web.window.alert('Mock question removed.');
-                                      } else {
+                                      try {
                                         await firestore
                                             .collection(col)
                                             .doc(_detailsModalItem!.id)
-                                            .collection('qna')
+                                            .collection(qna.sub)
                                             .doc(qna.id)
                                             .delete();
+                                      } catch (e) {
+                                        web.window.alert('Could not remove the message: $e');
                                       }
                                     }
                                   },
@@ -601,7 +590,7 @@ class _ListingsPageState extends State<ListingsPage> {
                               p(classes: 'text-zinc-650 font-medium', [Component.text(qna.text)]),
                               if (qna.reply != null)
                                 div(classes: 'pl-3 border-l border-indigo-400 flex flex-col gap-0.5 mt-1 text-[10px]', [
-                                  span(classes: 'font-extrabold text-indigo-500', [Component.text('Admin Response:')]),
+                                  span(classes: 'font-extrabold text-indigo-500', [Component.text('Answer:')]),
                                   p(classes: 'text-zinc-600 font-medium', [Component.text(qna.reply!)]),
                                 ])
                               else
@@ -621,17 +610,19 @@ class _ListingsPageState extends State<ListingsPage> {
                                           : activeTab == 'properties'
                                           ? 'properties'
                                           : 'jobs';
-                                      if (qna.id.startsWith('mock_')) {
-                                        web.window.alert('Mock reply posted: "$repText"');
-                                      } else {
+                                      try {
                                         await firestore
                                             .collection(col)
                                             .doc(_detailsModalItem!.id)
-                                            .collection('qna')
+                                            .collection(qna.sub)
                                             .doc(qna.id)
                                             .update({
-                                              'reply': repText,
+                                              QnaMessage.replyField(col, qna.sub): repText,
+                                              'answeredAt': DateTime.now().millisecondsSinceEpoch,
                                             });
+                                        setState(() => _activeReplies.remove(qna.id));
+                                      } catch (e) {
+                                        web.window.alert('Could not post the reply: $e');
                                       }
                                     },
                                     classes: 'px-3 py-1 bg-indigo-500 hover:bg-indigo-600 text-white font-extrabold rounded-lg text-[9px] transition-colors shadow-sm',
