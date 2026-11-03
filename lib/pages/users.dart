@@ -9,6 +9,7 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:jaspr_riverpod/legacy.dart';
 
 import '../app.dart';
+import '../core/models/reward_points.dart';
 import '../core/providers/environment_provider.dart';
 import '../core/config/firebase_environments.dart';
 
@@ -660,8 +661,11 @@ class _UsersPageState extends State<UsersPage> {
     final historyId = '${user.uid}_${questId}_${DateTime.now().millisecondsSinceEpoch}';
 
     try {
-      // 1. Log to points_history
-      await firestore.collection('points_history').doc(historyId).set({
+      // One atomic batch: the history row and the balance bump either both land or neither does (previously a
+      // rules/network failure on the second write left an orphaned history row and no points).
+      final updatedRewards = List<String>.from(user.earnedRewards)..add(questId);
+      final batch = firestore.batch();
+      batch.set(firestore.collection('points_history').doc(historyId), {
         'uid': user.uid,
         'questId': questId,
         'points': points,
@@ -669,13 +673,11 @@ class _UsersPageState extends State<UsersPage> {
         'category': category,
         'createdAt': DateTime.now().millisecondsSinceEpoch,
       });
-
-      // 2. Update User Profile atomically
-      final updatedRewards = List<String>.from(user.earnedRewards)..add(questId);
-      await firestore.collection('users').doc(user.uid).set({
+      batch.set(firestore.collection('users').doc(user.uid), {
         'terraPoints': FieldValue.increment(points),
         'earnedRewards': FieldValue.arrayUnion([questId]),
       }, SetOptions(merge: true));
+      await batch.commit();
 
       final newTotalPoints = user.terraPoints + points;
       setState(() {
@@ -688,7 +690,7 @@ class _UsersPageState extends State<UsersPage> {
         _isAwardingPoints = false;
       });
 
-      _showToast('🪙 Awarded $points TP to ${user.name} for "$title"');
+      _showToast('✅ Awarded $points TP to ${user.name} for "$title"');
     } catch (e) {
       setState(() => _isAwardingPoints = false);
       _showToast('❌ Failed to award points: $e');
@@ -1505,9 +1507,9 @@ class _UsersPageState extends State<UsersPage> {
                                   ? null
                                   : () {
                                       final title = _customRewardTitle.trim();
-                                      final points = int.tryParse(_customRewardPointsStr.trim()) ?? 0;
-                                      if (title.isEmpty || points <= 0) {
-                                        _showToast('⚠️ Please enter a title and a points value > 0.');
+                                      final points = parseAwardPoints(_customRewardPointsStr);
+                                      if (title.isEmpty || points == null) {
+                                        _showToast('⚠️ Enter a title and a whole number of points between 1 and $kMaxManualAwardPoints.');
                                         return;
                                       }
                                       final questId = 'custom_${DateTime.now().millisecondsSinceEpoch}';
