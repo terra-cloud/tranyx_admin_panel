@@ -564,6 +564,17 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
     });
   }
 
+  bool _isSolanaPayout(WithdrawalRequest r) {
+    final m = '${r.rawData['method'] ?? ''} ${r.rawData['payoutMethod'] ?? ''} ${r.paymentMethod}'.toLowerCase();
+    return m.contains('solana') || (r.rawData['walletPublicKey'] ?? '').toString().isNotEmpty;
+  }
+
+  /// The wallet address stored on the withdrawal itself; empty when missing or not a plausible base58 key.
+  String _recipientSolanaWallet(WithdrawalRequest r) {
+    final v = (r.rawData['walletPublicKey'] ?? r.rawData['walletAddress'] ?? '').toString().trim();
+    return RegExp(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$').hasMatch(v) ? v : '';
+  }
+
   void _copyToClipboard(String fieldKey, String text) {
     try {
       web.window.navigator.clipboard.writeText(text);
@@ -2370,6 +2381,30 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
                       [Component.text(_copiedFields['insp_phone_${req.id}'] == true ? 'Copied ✓' : 'Copy Phone')],
                     ),
                   ]),
+
+                  // TRAD-12: the destination wallet recorded on the withdrawal when it was requested (never inferred
+                  // or substituted from the user's current wallet).
+                  if (_isSolanaPayout(req))
+                    () {
+                      final wallet = _recipientSolanaWallet(req);
+                      return div(classes: 'flex items-center justify-between border-t border-zinc-100 pt-2', [
+                        div(classes: 'flex flex-col min-w-0', [
+                          span(classes: 'text-[10px] text-zinc-400 uppercase font-black', [Component.text('Recipient Solana Wallet Address')]),
+                          if (wallet.isNotEmpty)
+                            span(classes: 'font-mono font-bold text-[11px] text-zinc-900 break-all', [Component.text(wallet)])
+                          else
+                            span(classes: 'font-bold text-xs text-rose-600', [
+                              Component.text('Missing: no wallet address is recorded on this withdrawal. Do not send funds; ask the user to reconnect their wallet.'),
+                            ]),
+                        ]),
+                        if (wallet.isNotEmpty)
+                          button(
+                            onClick: () => _copyToClipboard('insp_wallet_${req.id}', wallet),
+                            classes: 'ml-2 px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-xs font-bold text-indigo-700 border-0 cursor-pointer',
+                            [Component.text(_copiedFields['insp_wallet_${req.id}'] == true ? 'Copied ✓' : 'Copy Address')],
+                          ),
+                      ]);
+                    }(),
 
                   if (req.referenceNumber.isNotEmpty)
                     div(classes: 'flex items-center justify-between border-t border-zinc-100 pt-2', [
