@@ -4,6 +4,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:riverpod/legacy.dart';
 
+import '../core/models/work_status.dart';
 import '../core/providers/environment_provider.dart';
 
 // Navigation tab: 'services', 'vehicles', 'properties'
@@ -121,6 +122,16 @@ final paginatedBookingsProvider = FutureProvider<List<BookingData>>((ref) async 
       print('[Bookings] Services applications load failed/timed out: $e');
       return <BookingData>[];
     }
+    // Parent jobs (one read per distinct job on this page): the hire + acknowledgement state lives there.
+    final jobs = <String, Map<String, dynamic>?>{};
+    await Future.wait(snap.docs.map((doc) async {
+      final jobRef = doc.reference.parent.parent;
+      if (jobRef == null || jobs.containsKey(jobRef.id)) return;
+      jobs[jobRef.id] = null;
+      try {
+        jobs[jobRef.id] = (await jobRef.get().timeout(const Duration(seconds: 4))).data();
+      } catch (_) {}
+    }));
     return snap.docs.map((doc) {
       final data = doc.data();
       final rate = (data['proposalRate'] as num?)?.toDouble() ?? 0.0;
@@ -130,7 +141,11 @@ final paginatedBookingsProvider = FutureProvider<List<BookingData>>((ref) async 
         clientName: data['applicantName'] ?? 'Applicant',
         providerName: 'Job #${data['jobId'] ?? ''}',
         rateLabel: '₱${rate.toStringAsFixed(2)}',
-        status: data['status'] ?? 'Pending',
+        status: workStatusFor(
+          applicationStatus: (data['status'] ?? 'Pending').toString(),
+          applicantUid: (data['applicantUid'] ?? doc.id).toString(),
+          job: jobs[doc.reference.parent.parent?.id],
+        ),
         createdAt: DateTime.fromMillisecondsSinceEpoch(data['createdAt'] ?? 0),
         icon: '💼',
         rawData: data,
@@ -355,7 +370,7 @@ class _BookingsPageState extends State<BookingsPage> {
                               'px-3 py-1 rounded-full text-[9px] font-extrabold border '
                               '${_detailsModalItem!.status == 'Approved' || _detailsModalItem!.status == 'Completed' || _detailsModalItem!.status == 'Active'
                                   ? 'bg-[#e2f1e9] text-[#0fa958] border-emerald-500/10'
-                                  : _detailsModalItem!.status == 'Pending'
+                                  : (_detailsModalItem!.status == 'Pending' || _detailsModalItem!.status == kAwaitingAcknowledgement)
                                   ? 'bg-amber-50 text-amber-500 border-amber-500/10'
                                   : 'bg-zinc-100 text-zinc-500 border-zinc-200'}',
                           [Component.text(_detailsModalItem!.status.toUpperCase())],
@@ -630,6 +645,12 @@ class _BookingsPageState extends State<BookingsPage> {
                 [
                   option(value: '', selected: _statusFilter == '', [Component.text('ALL STATUSES')]),
                   option(value: 'pending', selected: _statusFilter == 'pending', [Component.text('PENDING')]),
+                  if (activeTab == 'services')
+                    option(
+                      value: 'awaiting acknowledgement',
+                      selected: _statusFilter == 'awaiting acknowledgement',
+                      [Component.text('AWAITING ACKNOWLEDGEMENT')],
+                    ),
                   option(value: 'approved', selected: _statusFilter == 'approved', [Component.text('APPROVED')]),
                   option(value: 'completed', selected: _statusFilter == 'completed', [Component.text('COMPLETED')]),
                   option(value: 'cancelled', selected: _statusFilter == 'cancelled', [Component.text('CANCELLED')]),
@@ -787,7 +808,7 @@ class _BookingsPageState extends State<BookingsPage> {
                                   'px-3 py-1 rounded-full text-[9px] font-extrabold border '
                                   '${item.status == 'Approved' || item.status == 'Completed' || item.status == 'Active'
                                       ? 'bg-[#e2f1e9] text-[#0fa958] border-emerald-500/10'
-                                      : item.status == 'Pending'
+                                      : (item.status == 'Pending' || item.status == kAwaitingAcknowledgement)
                                       ? 'bg-amber-50 text-amber-500 border-amber-500/10'
                                       : 'bg-zinc-100 text-zinc-500 border-zinc-200'}',
                               [Component.text(item.status.toUpperCase())],
