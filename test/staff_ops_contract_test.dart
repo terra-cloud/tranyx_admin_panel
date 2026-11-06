@@ -448,6 +448,14 @@ void main() async {
     final lib = Directory('lib').listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.dart'));
     final shippedClassic = lib.any((f) => f.readAsStringSync().contains('6LfRzBIuAAAAAG0WSzlXuPZDi2aJPgUoZ48lvlX5'));
     check('the unverified classic tranyx.app site key is not compiled in', !shippedClassic);
+    final envAuth = File('lib/core/providers/environment_provider.dart').readAsStringSync();
+    check(
+      'workspace sign-in does not write user-doc staff flags',
+      !envAuth.contains("'isAdmin': true") &&
+          !envAuth.contains("'isP2pAgent': true") &&
+          !envAuth.contains("collection('p2p_agents')") &&
+          envAuth.contains('FirebaseAuth.instanceFor(app: app)'),
+    );
   }
 
   for (final op in MissingStaffOp.values) {
