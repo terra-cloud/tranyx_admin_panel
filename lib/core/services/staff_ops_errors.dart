@@ -17,7 +17,14 @@ class StaffOpsException implements Exception {
 }
 
 /// Turns the callable HTTP response into the function's `result` map, or throws a [StaffOpsException].
-Map<String, dynamic> parseStaffOpsResponse(int statusCode, String bodyText) {
+///
+/// When [presentedAppCheckToken] is true, HTTP 401 is explained as an auth or App Check
+/// rejection. The client does not treat that response as success and does not disable enforcement.
+Map<String, dynamic> parseStaffOpsResponse(
+  int statusCode,
+  String bodyText, {
+  bool presentedAppCheckToken = false,
+}) {
   Map<String, dynamic> body;
   try {
     body = (jsonDecode(bodyText) as Map).cast<String, dynamic>();
@@ -32,8 +39,22 @@ Map<String, dynamic> parseStaffOpsResponse(int statusCode, String bodyText) {
     final e = error is Map ? error.cast<String, dynamic>() : <String, dynamic>{};
     final status = (e['status'] ?? 'INTERNAL').toString().toLowerCase().replaceAll('_', '-');
     final details = e['details'];
-    final detailCode = details is Map ? details['code']?.toString() : null;
-    throw StaffOpsException(status, (e['message'] ?? 'The request failed.').toString(), detailCode: detailCode);
+    var detailCode = details is Map ? details['code']?.toString() : null;
+    final message = (e['message'] ?? 'The request failed.').toString();
+    final lower = message.toLowerCase();
+    if (detailCode == null && (lower.contains('app check') || lower.contains('appcheck'))) {
+      detailCode = 'APP_CHECK_REJECTED';
+    }
+    if (statusCode == 401 && presentedAppCheckToken) {
+      throw StaffOpsException(
+        'unauthenticated',
+        'staffOps rejected the call (HTTP 401) after an ID token and an App Check token were both sent. '
+            'Confirm this staff member is signed in to the environment and that Firebase App Check accepts this portal origin. '
+            'ENFORCE_APP_CHECK defaults to true. This client did not disable it. Server message: $message',
+        detailCode: detailCode ?? 'APP_CHECK_OR_AUTH_REJECTED',
+      );
+    }
+    throw StaffOpsException(status, message, detailCode: detailCode);
   }
   final result = body['result'] ?? body['data'];
   return result is Map ? result.cast<String, dynamic>() : <String, dynamic>{};
