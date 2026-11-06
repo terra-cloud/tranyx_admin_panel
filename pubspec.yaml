@@ -18,6 +18,7 @@ dependencies:
   riverpod: ^3.3.2
   state_notifier: ^1.0.0
   web: ^1.1.1
+  firebase_app_check: ^0.4.9
 
 dev_dependencies:
   build_runner: ^2.10.0

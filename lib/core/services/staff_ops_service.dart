@@ -1,54 +1,95 @@
-import 'dart:convert';
-import 'dart:math' as math;
-
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:http/http.dart' as http;
+import 'package:web/web.dart' as web;
 
+import 'staff_ops_contract.dart';
 import 'staff_ops_errors.dart';
+
+export 'staff_ops_contract.dart';
 export 'staff_ops_errors.dart';
 
-String _newKey() {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  final r = math.Random.secure();
-  return 'so_${DateTime.now().millisecondsSinceEpoch}_${List.generate(10, (_) => chars[r.nextInt(chars.length)]).join()}';
-}
+final Map<String, Future<void>> _appCheckActivation = {};
 
-/// Calls the workspace `staffOps` Cloud Function (staff / P2P-agent balance operations, run server-side with a
-/// role check, an idempotency key, one Firestore transaction and an audit-log entry). The portal never writes
-/// `tyxBalance` itself any more.
+/// Calls the workspace `staffOps` Cloud Function.
 ///
-/// [app] is the Firebase app of the ACTIVE environment (the staff member is signed into it by `syncEnvAuth`);
-/// `FUNCTIONS_BASE_URL` (dart-define) points at an emulator.
+/// Sends the staff ID token and an App Check token (`X-Firebase-AppCheck`). App Check is
+/// activated per environment app with the reCAPTCHA v3 site key from
+/// `APP_CHECK_RECAPTCHA_SITE_KEY_DEV`, `_UAT`, or `_PROD`. Those defines are empty in this
+/// repo; a build must supply the site key registered for that Firebase web app.
+///
+/// `APP_CHECK_DEBUG_TOKEN` is used only when `FUNCTIONS_BASE_URL` is set (emulator). It is
+/// exchanged by the App Check debug provider; the raw UUID is not copied into the header.
+/// Enforcement is not turned off when a token cannot be obtained: the call throws and no
+/// request is sent.
+///
+/// A 401 is retried once with a refreshed ID token and a limited-use App Check token, which
+/// still satisfies `enforceAppCheck` if the function also consumes tokens. A second 401 is
+/// returned as a failure, not a success.
 Future<Map<String, dynamic>> callStaffOps(
   FirebaseApp app,
   String action,
   Map<String, dynamic> data, {
-  String? idempotencyKey,
+  required String idempotencyKey,
   Duration timeout = const Duration(seconds: 70),
 }) async {
+  ensureSupportedStaffOpsAction(action);
+  if (idempotencyKey.trim().isEmpty) {
+    throw const StaffOpsException(
+      'failed-precondition',
+      'staffOps call is missing a stable idempotency key. No request was sent.',
+      detailCode: 'IDEMPOTENCY_KEY_REQUIRED',
+    );
+  }
+
   final user = FirebaseAuth.instanceFor(app: app).currentUser;
   if (user == null) {
-    throw const StaffOpsException('unauthenticated', 'You are not signed in to this environment. Sign out and in again.');
+    throw const StaffOpsException(
+      'unauthenticated',
+      'You are not signed in to this environment. Sign out and in again.',
+    );
   }
-  const base = String.fromEnvironment('FUNCTIONS_BASE_URL');
-  final url = base.isNotEmpty
-      ? '$base/staffOps'
-      : 'https://us-central1-${app.options.projectId}.cloudfunctions.net/staffOps';
-  final key = idempotencyKey ?? _newKey();
 
-  Future<http.Response> post(String? token) => http
-      .post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json', if (token != null) 'Authorization': 'Bearer $token'},
-        body: jsonEncode({'data': {'idempotencyKey': key, 'action': action, ...data}}),
-      )
-      .timeout(timeout);
+  const functionsBaseUrl = String.fromEnvironment('FUNCTIONS_BASE_URL');
+  final url = staffOpsUrl(projectId: app.options.projectId, functionsBaseUrl: functionsBaseUrl);
+
+  Future<http.Response> post(String idToken, String appCheckToken) {
+    final prepared = prepareStaffOpsCall(
+      url: url,
+      action: action,
+      idempotencyKey: idempotencyKey,
+      data: data,
+      idToken: idToken,
+      appCheckToken: appCheckToken,
+    );
+    return http.post(Uri.parse(prepared.url), headers: prepared.headers, body: prepared.body).timeout(timeout);
+  }
 
   http.Response res;
   try {
-    res = await post(await user.getIdToken());
-    if (res.statusCode == 401) res = await post(await user.getIdToken(true));
+    final idToken = await user.getIdToken();
+    if (idToken == null || idToken.isEmpty) {
+      throw const StaffOpsException(
+        'unauthenticated',
+        'You are not signed in to this environment. Sign out and in again.',
+      );
+    }
+    final appCheck = await _appCheckToken(app, limitedUse: false);
+    res = await post(idToken, appCheck);
+    if (res.statusCode == 401) {
+      final refreshed = await user.getIdToken(true);
+      if (refreshed == null || refreshed.isEmpty) {
+        throw const StaffOpsException(
+          'unauthenticated',
+          'You are not signed in to this environment. Sign out and in again.',
+        );
+      }
+      final limited = await _appCheckToken(app, limitedUse: true);
+      res = await post(refreshed, limited);
+    }
+  } on StaffOpsException {
+    rethrow;
   } catch (_) {
     throw const StaffOpsException(
       'network',
@@ -56,5 +97,93 @@ Future<Map<String, dynamic>> callStaffOps(
     );
   }
 
-  return parseStaffOpsResponse(res.statusCode, res.body);
+  return parseStaffOpsResponse(res.statusCode, res.body, presentedAppCheckToken: true);
+}
+
+Future<String> _appCheckToken(FirebaseApp app, {required bool limitedUse}) async {
+  final config = AppCheckClientConfig.forProject(app.options.projectId);
+  if (!config.ready) {
+    throw StaffOpsException(
+      'failed-precondition',
+      config.blockingReason!,
+      detailCode: 'APP_CHECK_NOT_CONFIGURED',
+    );
+  }
+  if (!config.useDebugToken) {
+    _clearStaleDebugProvider(app.name);
+  }
+  await _ensureActivated(app, config);
+  final check = FirebaseAppCheck.instanceFor(app: app);
+  try {
+    final String? token = limitedUse ? await check.getLimitedUseToken() : await check.getToken();
+    final trimmed = token?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      throw StaffOpsException(
+        'failed-precondition',
+        'App Check returned an empty token for ${app.options.projectId}. staffOps enforces App Check (ENFORCE_APP_CHECK defaults to true). No request was sent and enforcement was not disabled.',
+        detailCode: 'APP_CHECK_TOKEN_MISSING',
+      );
+    }
+    return trimmed;
+  } on StaffOpsException {
+    rethrow;
+  } on FirebaseException catch (e) {
+    throw StaffOpsException(
+      'failed-precondition',
+      'App Check token request failed (${e.code}) for ${app.options.projectId}. Confirm the reCAPTCHA v3 site key registered in Firebase App Check matches the dart-define for this project, and that this portal origin is allowed. No staffOps request was sent and enforcement was not disabled.',
+      detailCode: 'APP_CHECK_TOKEN_MISSING',
+    );
+  }
+}
+
+Future<void> _ensureActivated(FirebaseApp app, AppCheckClientConfig config) async {
+  final pending = _appCheckActivation[app.name];
+  if (pending != null) {
+    await pending;
+    return;
+  }
+  final future = _activateAppCheck(app, config);
+  _appCheckActivation[app.name] = future;
+  try {
+    await future;
+  } catch (_) {
+    if (identical(_appCheckActivation[app.name], future)) {
+      _appCheckActivation.remove(app.name);
+    }
+    rethrow;
+  }
+}
+
+Future<void> _activateAppCheck(FirebaseApp app, AppCheckClientConfig config) async {
+  final WebProvider provider = config.useDebugToken
+      ? WebDebugProvider(debugToken: config.debugToken)
+      : ReCaptchaV3Provider(config.siteKey!);
+  try {
+    final check = FirebaseAppCheck.instanceFor(app: app);
+    await check.activate(providerWeb: provider);
+    await check.setTokenAutoRefreshEnabled(!config.useDebugToken);
+  } on StaffOpsException {
+    rethrow;
+  } on FirebaseException catch (e) {
+    throw StaffOpsException(
+      'failed-precondition',
+      'App Check failed to start (${e.code}) for ${app.options.projectId}. No staffOps request was sent and enforcement was not disabled.',
+      detailCode: 'APP_CHECK_NOT_CONFIGURED',
+    );
+  }
+}
+
+/// Drops a debug provider left in web storage by an emulator session so a later
+/// non-emulator call does not reuse it. The App Check plugin reads these keys itself.
+void _clearStaleDebugProvider(String appName) {
+  try {
+    final typeKey = 'FlutterFire-$appName-recaptchaType';
+    final siteKey = 'FlutterFire-$appName-recaptchaSiteKey';
+    for (final store in [web.window.localStorage, web.window.sessionStorage]) {
+      if (store.getItem(typeKey) == 'debug') {
+        store.removeItem(typeKey);
+        store.removeItem(siteKey);
+      }
+    }
+  } catch (_) {}
 }

@@ -124,6 +124,7 @@ class _DisputesPageState extends State<DisputesPage> {
   double _nyxianPercent = 50.0;
   bool _isExecuting = false;
   String? _executionError;
+  final StaffOpsIdempotencyKeys _staffOpsKeys = StaffOpsIdempotencyKeys();
 
   void _openArbitrationModal(DisputeItem dispute) {
     setState(() {
@@ -164,13 +165,18 @@ class _DisputesPageState extends State<DisputesPage> {
       // The server derives the parties and the escrow amount from the job + escrow docs (the dispute doc is
       // user-created) and settles the wallets, escrow, job, dispute and chat notice in one transaction, once.
       final app = await context.read(firebaseAppProvider.future);
-      final res = await callStaffOps(app, 'resolveDispute', {
-        'disputeId': dispute.id,
-        'resolutionType': _resolutionType,
-        'employerPercent': _employerPercent,
-        'nyxianPercent': _nyxianPercent,
-        'notes': _notes.trim(),
-      });
+      final res = await withStableStaffOpsKey(
+        _staffOpsKeys,
+        'resolveDispute',
+        dispute.id,
+        (key) => callStaffOps(app, 'resolveDispute', {
+          'disputeId': dispute.id,
+          'resolutionType': _resolutionType,
+          'employerPercent': _employerPercent,
+          'nyxianPercent': _nyxianPercent,
+          'notes': _notes.trim(),
+        }, idempotencyKey: key),
+      );
 
       // Mirror the ruling into the admin-portal project's dispute record (non-money bookkeeping).
       try {

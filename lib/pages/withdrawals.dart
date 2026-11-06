@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:jaspr/dom.dart';
@@ -468,6 +467,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
 
   // Multi-selection & Batch Operations
   final Set<String> _selectedWithdrawalIds = {};
+  final StaffOpsIdempotencyKeys _staffOpsKeys = StaffOpsIdempotencyKeys();
 
   // Audio Chime & Interrupt Alert States
   bool _soundEnabled = true;
@@ -492,6 +492,8 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
   bool _showCreateCashoutModal = false;
   String _createUserId = '';
   String _createUserName = '';
+  // Filled from the user picker. Not read: manual create does not write a cashout.
+  // ignore: unused_field
   String _createUserEmail = '';
   String _createPaymentMethod = 'GCash';
   String _createAccountName = '';
@@ -566,13 +568,12 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
 
   bool _isSolanaPayout(WithdrawalRequest r) {
     final m = '${r.rawData['method'] ?? ''} ${r.rawData['payoutMethod'] ?? ''} ${r.paymentMethod}'.toLowerCase();
-    return m.contains('solana') || (r.rawData['walletPublicKey'] ?? '').toString().isNotEmpty;
+    final recorded = (r.rawData['walletPublicKey'] ?? r.rawData['walletAddress'] ?? '').toString().trim();
+    return m.contains('solana') || recorded.isNotEmpty;
   }
 
-  /// The wallet address stored on the withdrawal itself; empty when missing or not a plausible base58 key.
-  String _recipientSolanaWallet(WithdrawalRequest r) {
-    final v = (r.rawData['walletPublicKey'] ?? r.rawData['walletAddress'] ?? '').toString().trim();
-    return RegExp(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$').hasMatch(v) ? v : '';
+  RecipientWalletAssessment _recipientWallet(WithdrawalRequest r, UserProfileModel? profile) {
+    return assessRecipientWallet(withdrawal: r.rawData, linkedProfileWallet: profile?.walletPublicKey);
   }
 
   void _copyToClipboard(String fieldKey, String text) {
@@ -634,7 +635,12 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
       // Server-side claim (staffOps): role check, one transaction so two agents cannot both win, and the status
       // whitelist covers every "waiting" status the queue shows (TRAD-12: PENDING_REVIEW used to be refused).
       final app = await context.read(firebaseAppProvider.future);
-      await callStaffOps(app, 'claimWithdrawal', {'withdrawalId': req.id});
+      await withStableStaffOpsKey(
+        _staffOpsKeys,
+        'claimWithdrawal',
+        req.id,
+        (key) => callStaffOps(app, 'claimWithdrawal', {'withdrawalId': req.id}, idempotencyKey: key),
+      );
       _triggerToast('Cashout claimed! You are now assigned to fulfill ₱${req.amount.toStringAsFixed(2)} to ${req.userAccountName}.');
       if (_activeInterruptWithdrawal?.id == req.id) {
         _activeInterruptWithdrawal = null;
@@ -729,7 +735,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
     });
   }
 
-  /// Step 2: Agent Submits Payout Proof & Reference Number
+  /// Step 2: Record payout proof. staffOps has no proof action, so this does not write.
   Future<void> _executeSubmitProof(WithdrawalRequest req, fb.User? adminUser) async {
     final refNum = _proofReferenceNumber.trim().toUpperCase();
     if (refNum.isEmpty) {
@@ -740,276 +746,18 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
       _triggerToast('Please select or upload a transfer proof screenshot file.');
       return;
     }
-
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
-
-    final firestore = context.read(firestoreProvider);
-    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
-    final agentUid = effectiveUser?.uid ?? 'admin_agent';
-    final agentName = effectiveUser?.displayName?.isNotEmpty == true
-        ? effectiveUser!.displayName!
-        : (effectiveUser?.email?.isNotEmpty == true ? effectiveUser!.email! : 'Admin Agent');
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-
-    // Resolve final ImgBB public URL
-    String finalProofUrl = _proofImageUrlInput.trim();
-    if (!finalProofUrl.startsWith('http://') && !finalProofUrl.startsWith('https://')) {
-      try {
-        finalProofUrl = await ImgBBService.uploadBase64(finalProofUrl, firestore: firestore);
-      } catch (err) {
-        print('[SubmitProof] Upload to ImgBB before commit failed: $err');
-      }
-    }
-
-    try {
-      final docRef = firestore.collection('withdrawal_requests').doc(req.id);
-      final proofUpdateData = {
-        'status': 'PENDING_CONFIRMATION',
-        'amount': req.amount,
-        'feeAmount': req.feeAmount,
-        'netAmount': req.netAmount,
-        'paymentMethod': req.paymentMethod,
-        'accountName': req.userAccountName,
-        'accountNumber': req.userAccountNumber,
-        'userAccountName': req.userAccountName,
-        'userAccountNumber': req.userAccountNumber,
-        'userId': req.uid,
-        'uid': req.uid,
-        'userName': req.userName,
-        'referenceNumber': refNum,
-        'proofImageUrl': finalProofUrl,
-        'proofSubmittedAt': nowMs,
-        'action': 'PROOF_SUBMITTED',
-        'agentId': req.agentId ?? agentUid,
-        'agentName': agentName,
-        'updatedAt': nowMs,
-      };
-      await docRef.set(proofUpdateData, SetOptions(merge: true));
-
-      try {
-        await firestore.collection('withdrawals').doc(req.id).set(proofUpdateData, SetOptions(merge: true));
-      } catch (_) {}
-
-      // Update linked transactions
-      try {
-        final txDocData = {
-          'status': 'PENDING_CONFIRMATION',
-          'amount': req.amount,
-          'referenceNumber': refNum,
-          'proofImageUrl': finalProofUrl,
-          'desc': 'Agent transferred ₱${req.amount.toStringAsFixed(2)} via ${req.paymentMethod} (Ref: #$refNum). Awaiting final confirmation.',
-          'updatedAt': nowMs,
-        };
-        await firestore.collection('transactions').doc(req.id).set(txDocData, SetOptions(merge: true));
-        await firestore.collection('transactions').doc('p2p_with_${req.id}').set(txDocData, SetOptions(merge: true));
-
-        // Update /wallets/{userId}/transactions/{requestId}
-        await firestore.collection('wallets').doc(req.uid).collection('transactions').doc(req.id).set(txDocData, SetOptions(merge: true));
-        await firestore.collection('wallets').doc(req.uid).collection('transactions').doc('p2p_with_${req.id}').set(txDocData, SetOptions(merge: true));
-      } catch (_) {}
-
-      // Write notification for user
-      try {
-        await firestore.collection('notifications').doc().set({
-          'uid': req.uid,
-          'userId': req.uid,
-          'title': 'Payout Sent — Confirm Receipt',
-          'message': 'Agent sent ₱${req.amount.toStringAsFixed(2)} to your ${req.paymentMethod} (Ref #$refNum). Please check your balance.',
-          'body': 'Payout sent via ${req.paymentMethod}. Ref #$refNum.',
-          'type': 'P2P_CASHOUT_PROOF_SUBMITTED',
-          'category': 'wallet',
-          'amount': req.amount,
-          'referenceNumber': refNum,
-          'withdrawalRequestId': req.id,
-          'isRead': false,
-          'read': false,
-          'createdAt': nowMs,
-          'timestamp': nowMs,
-        });
-      } catch (_) {}
-
-      // Admin Audit
-      try {
-        await firestore.collection('admin_audit_logs').doc().set({
-          'withdrawalRequestId': req.id,
-          'userId': req.uid,
-          'userName': req.userName,
-          'amount': req.amount,
-          'paymentMethod': req.paymentMethod,
-          'referenceNumber': refNum,
-          'action': 'PROOF_SUBMITTED',
-          'reviewedByAdminId': agentUid,
-          'reviewedByAdminName': agentName,
-          'timestamp': nowMs,
-          'type': 'WITHDRAWAL_PROOF',
-        });
-      } catch (_) {}
-
-      _triggerToast('Transfer proof & Ref #$refNum submitted successfully.');
-      setState(() {
-        _showSubmitProofModal = false;
-        _proofReferenceNumber = '';
-        _proofImageUrlInput = '';
-      });
-      _closeInspector();
-    } catch (e) {
-      _triggerToast('Failed to submit proof: $e');
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
+    _triggerToast(missingStaffOpMessage(MissingStaffOp.submitCashoutProof));
+    if (mounted) setState(() => _isProcessing = false);
   }
 
-  /// Step 3: Approve & Finalize Cashout
+  /// Step 3: Finalize a cashout. There is no staffOps approve-cashout action, so this does not write.
   Future<void> _executeApproveWithdrawal(WithdrawalRequest req, fb.User? adminUser) async {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
-
-    final firestore = context.read(firestoreProvider);
-    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
-    final adminUid = effectiveUser?.uid ?? 'admin_portal';
-    final adminName = effectiveUser?.displayName?.isNotEmpty == true
-        ? effectiveUser!.displayName!
-        : (effectiveUser?.email?.isNotEmpty == true ? effectiveUser!.email! : 'Admin Staff');
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final refNum = req.referenceNumber.isNotEmpty ? req.referenceNumber : 'COMPLETED';
-
-    try {
-      final docRef = firestore.collection('withdrawal_requests').doc(req.id);
-      final approveUpdateData = {
-        'status': 'APPROVED',
-        'amount': req.amount,
-        'feeAmount': req.feeAmount,
-        'netAmount': req.netAmount,
-        'paymentMethod': req.paymentMethod,
-        'accountName': req.userAccountName,
-        'accountNumber': req.userAccountNumber,
-        'userAccountName': req.userAccountName,
-        'userAccountNumber': req.userAccountNumber,
-        'userId': req.uid,
-        'uid': req.uid,
-        'userName': req.userName,
-        'referenceNumber': refNum,
-        'proofImageUrl': req.proofImageUrl,
-        'adminUid': adminUid,
-        'reviewedByAdminId': adminUid,
-        'reviewedByAdminName': adminName,
-        'verifiedAt': nowMs,
-        'approvedAt': nowMs,
-        'action': 'APPROVED',
-        'updatedAt': nowMs,
-      };
-      await docRef.set(approveUpdateData, SetOptions(merge: true));
-
-      try {
-        await firestore.collection('withdrawals').doc(req.id).set(approveUpdateData, SetOptions(merge: true));
-      } catch (_) {}
-
-      // User Wallet Sub-collection Ledger: /wallets/{userId}/transactions/{requestId}
-      try {
-        final walletTxData = {
-          'id': req.id,
-          'type': 'WITHDRAWAL',
-          'direction': 'DEBIT',
-          'amount': req.amount,
-          'payoutMethod': req.paymentMethod,
-          'paymentMethod': req.paymentMethod,
-          'referenceNumber': refNum,
-          'status': 'COMPLETED',
-          'isPending': false,
-          'updatedAt': nowMs,
-          'completedAt': nowMs,
-        };
-        await firestore.collection('wallets').doc(req.uid).collection('transactions').doc(req.id).set(walletTxData, SetOptions(merge: true));
-        await firestore.collection('wallets').doc(req.uid).collection('transactions').doc('p2p_with_${req.id}').set(walletTxData, SetOptions(merge: true));
-      } catch (_) {}
-
-      // Global Transaction Status
-      try {
-        final globalTxData = {
-          'status': 'COMPLETED',
-          'desc': 'Cashout of ₱${req.amount.toStringAsFixed(2)} completed via ${req.paymentMethod} (Ref: #$refNum)',
-          'verifiedAt': nowMs,
-          'adminUid': adminUid,
-          'updatedAt': nowMs,
-        };
-        await firestore.collection('transactions').doc(req.id).set(globalTxData, SetOptions(merge: true));
-        await firestore.collection('transactions').doc('p2p_with_${req.id}').set(globalTxData, SetOptions(merge: true));
-      } catch (_) {}
-
-      // Write to user ledger & subcollection
-      try {
-        final primaryUserDocRef = firestore.collection('users').doc(req.uid);
-        final userTxData = {
-          'type': 'withdraw',
-          'amount': -req.amount,
-          'status': 'COMPLETED',
-          'referenceNumber': refNum,
-          'paymentMethod': req.paymentMethod,
-          'createdAt': nowMs,
-          'timestamp': nowMs,
-          'updatedAt': nowMs,
-        };
-        await primaryUserDocRef.collection('transactions').doc(req.id).set(userTxData, SetOptions(merge: true));
-        await primaryUserDocRef.collection('transactions').doc('p2p_with_${req.id}').set(userTxData, SetOptions(merge: true));
-
-        await primaryUserDocRef.collection('ledger').doc().set({
-          'type': 'DEBIT',
-          'category': 'p2p_withdrawal',
-          'amount': req.amount,
-          'referenceNumber': refNum,
-          'withdrawalRequestId': req.id,
-          'createdAt': nowMs,
-          'timestamp': nowMs,
-        }, SetOptions(merge: true));
-      } catch (_) {}
-
-      // Push Notification
-      try {
-        await firestore.collection('notifications').doc().set({
-          'uid': req.uid,
-          'userId': req.uid,
-          'title': 'Withdrawal Completed! ₱${req.amount.toStringAsFixed(2)} Sent',
-          'message': 'Your cashout of ₱${req.amount.toStringAsFixed(2)} via ${req.paymentMethod} (Ref #$refNum) is verified and completed.',
-          'body': 'Your ₱${req.amount.toStringAsFixed(2)} withdrawal has been completed.',
-          'type': 'WITHDRAWAL_COMPLETED',
-          'category': 'wallet',
-          'amount': req.amount,
-          'referenceNumber': refNum,
-          'withdrawalRequestId': req.id,
-          'isRead': false,
-          'read': false,
-          'createdAt': nowMs,
-          'timestamp': nowMs,
-        });
-      } catch (_) {}
-
-      // Admin Audit Log
-      try {
-        await firestore.collection('admin_audit_logs').doc().set({
-          'withdrawalRequestId': req.id,
-          'userId': req.uid,
-          'userName': req.userName,
-          'userEmail': req.userEmail,
-          'amount': req.amount,
-          'paymentMethod': req.paymentMethod,
-          'referenceNumber': refNum,
-          'action': 'APPROVED',
-          'reviewedByAdminId': adminUid,
-          'reviewedByAdminName': adminName,
-          'reviewedAt': nowMs,
-          'timestamp': nowMs,
-          'type': 'WITHDRAWAL_APPROVAL',
-        });
-      } catch (_) {}
-
-      _triggerToast('Cashout finalized & marked as COMPLETED.');
-      _closeInspector();
-    } catch (e) {
-      _triggerToast('Finalization failed: $e');
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
+    _triggerToast(missingStaffOpMessage(MissingStaffOp.approveCashout));
+    if (mounted) setState(() => _isProcessing = false);
   }
 
   /// Step 4: Reject Cashout & 100% Refund User Balance
@@ -1032,7 +780,12 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
       // The 100% refund, the REJECTED status, the ledger rows, the notification and the audit entry are all applied
       // by staffOps in one transaction; it refunds at most once, so a double click or retry cannot refund twice.
       final app = await context.read(firebaseAppProvider.future);
-      final res = await callStaffOps(app, 'rejectWithdrawal', {'withdrawalId': req.id, 'reason': finalReason});
+      final res = await withStableStaffOpsKey(
+        _staffOpsKeys,
+        'rejectWithdrawal',
+        req.id,
+        (key) => callStaffOps(app, 'rejectWithdrawal', {'withdrawalId': req.id, 'reason': finalReason}, idempotencyKey: key),
+      );
       final refunded = (res['refunded'] as num?)?.toDouble() ?? 0.0;
       _triggerToast(refunded > 0
           ? 'Cashout rejected. ₱${refunded.toStringAsFixed(2)} refunded 100% to ${req.userName}.'
@@ -1054,7 +807,12 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
 
     try {
       final app = await context.read(firebaseAppProvider.future);
-      await callStaffOps(app, 'releaseClaim', {'withdrawalId': req.id});
+      await withStableStaffOpsKey(
+        _staffOpsKeys,
+        'releaseClaim',
+        req.id,
+        (key) => callStaffOps(app, 'releaseClaim', {'withdrawalId': req.id}, idempotencyKey: key),
+      );
       _triggerToast('Order released back to public queue.');
       _closeInspector();
     } on StaffOpsException catch (e) {
@@ -1066,7 +824,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
     }
   }
 
-  /// Step 6: Create Manual / Ad-hoc P2P Cashout
+  /// Step 6: Manual cashout. A portal-created request would skip the server balance debit.
   Future<void> _executeCreateCashout(fb.User? adminUser) async {
     final amount = double.tryParse(_createAmountStr.replaceAll(RegExp(r'[^\d.]'), '')) ?? 0.0;
     if (amount <= 0) {
@@ -1081,122 +839,10 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
       _triggerToast('Please provide recipient mobile / account number.');
       return;
     }
-
-    final fee = double.tryParse(_createFeeStr.replaceAll(RegExp(r'[^\d.]'), '')) ?? 0.0;
-    final netAmount = (amount - fee) > 0 ? (amount - fee) : amount;
-
+    if (_isProcessing) return;
     setState(() => _isProcessing = true);
-    final firestore = context.read(firestoreProvider);
-    final effectiveUser = adminUser ?? context.read(adminAuthProvider).currentUser;
-    final adminUid = effectiveUser?.uid ?? 'admin';
-    final adminEmail = effectiveUser?.email ?? 'admin@tranyx.com';
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final docId = 'with_${nowMs}_${math.Random().nextInt(9000) + 1000}';
-
-    try {
-      final finalUid = _createUserId.trim().isNotEmpty ? _createUserId.trim() : 'manual_user_$nowMs';
-      final finalUserName = _createUserName.trim().isNotEmpty ? _createUserName.trim() : _createAccountName.trim();
-      final finalUserEmail = _createUserEmail.trim().isNotEmpty ? _createUserEmail.trim() : 'user@tranyx.com';
-
-      // 1. Create withdrawal_requests doc
-      await firestore.collection('withdrawal_requests').doc(docId).set({
-        'id': docId,
-        'uid': finalUid,
-        'userName': finalUserName,
-        'userEmail': finalUserEmail,
-        'amount': amount,
-        'feeAmount': fee,
-        'netAmount': netAmount,
-        'paymentMethod': _createPaymentMethod,
-        'userAccountName': _createAccountName.trim(),
-        'userAccountNumber': _createAccountNumber.trim(),
-        'userQrUrl': _createUserQrUrl.trim(),
-        'status': 'WAITING_FOR_AGENT',
-        'notes': _createReasonNote.trim().isNotEmpty ? _createReasonNote.trim() : _createReasonCategory,
-        'category': _createReasonCategory,
-        'originRail': 'manual_admin_p2p',
-        'createdAt': nowMs,
-        'createdByAdminId': adminUid,
-        'createdByAdminEmail': adminEmail,
-      });
-
-      // 2. Create platform transaction
-      try {
-        await firestore.collection('transactions').doc('p2p_with_$docId').set({
-          'id': 'p2p_with_$docId',
-          'uid': finalUid,
-          'type': 'withdrawal',
-          'amount': amount,
-          'netAmount': netAmount,
-          'feeAmount': fee,
-          'status': 'WAITING_FOR_AGENT',
-          'title': 'P2P Cashout ($_createPaymentMethod)',
-          'desc': 'Manual Cashout: $_createReasonCategory to ${_createAccountNumber.trim()} (${_createAccountName.trim()})',
-          'method': _createPaymentMethod,
-          'originRail': 'manual_p2p',
-          'userAccountName': _createAccountName.trim(),
-          'userAccountNumber': _createAccountNumber.trim(),
-          'userQrUrl': _createUserQrUrl.trim(),
-          'createdAt': nowMs,
-          'createdByAdmin': adminEmail,
-        });
-      } catch (_) {}
-
-      // 3. User subcollection transaction
-      try {
-        if (_createUserId.trim().isNotEmpty) {
-          await firestore.collection('users').doc(_createUserId.trim()).collection('transactions').doc('p2p_with_$docId').set({
-            'id': 'p2p_with_$docId',
-            'amount': amount,
-            'netAmount': netAmount,
-            'feeAmount': fee,
-            'type': 'withdrawal',
-            'category': 'p2p_withdrawal',
-            'status': 'WAITING_FOR_AGENT',
-            'title': 'P2P Cashout via $_createPaymentMethod',
-            'description': 'Manual P2P payout request created by admin support.',
-            'timestamp': nowMs,
-            'createdAt': nowMs,
-          });
-        }
-      } catch (_) {}
-
-      // 4. Admin audit log
-      try {
-        await firestore.collection('admin_audit_logs').doc().set({
-          'withdrawalRequestId': docId,
-          'userId': finalUid,
-          'userName': finalUserName,
-          'amount': amount,
-          'paymentMethod': _createPaymentMethod,
-          'action': 'MANUAL_CASHOUT_CREATED',
-          'reviewedByAdminId': adminUid,
-          'reviewedByAdminName': adminEmail,
-          'timestamp': nowMs,
-          'type': 'MANUAL_WITHDRAWAL',
-        });
-      } catch (_) {}
-
-      _triggerToast('Manual P2P Cashout created for $finalUserName (₱${amount.toStringAsFixed(2)})!');
-      setState(() {
-        _showCreateCashoutModal = false;
-        _createUserId = '';
-        _createUserName = '';
-        _createUserEmail = '';
-        _createAccountName = '';
-        _createAccountNumber = '';
-        _createAmountStr = '';
-        _createFeeStr = '0';
-        _createReasonNote = '';
-        _createUserQrUrl = '';
-        _userSearchQuery = '';
-        _isUserDropdownOpen = false;
-      });
-    } catch (e) {
-      _triggerToast('Failed to create manual cashout: $e');
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
+    _triggerToast(missingStaffOpMessage(MissingStaffOp.createManualCashout));
+    if (mounted) setState(() => _isProcessing = false);
   }
 
   /// Batch claim selected waiting cashouts
@@ -1206,19 +852,29 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
       _triggerToast('No "Waiting for Agent" requests selected to claim.');
       return;
     }
+    if (_isProcessing) return;
     setState(() => _isProcessing = true);
-    int claimedCount = 0;
-    for (final it in waitingItems) {
-      try {
-        await _executeClaimCashout(it, adminUser);
-        claimedCount++;
-      } catch (_) {}
+    try {
+      final app = await context.read(firebaseAppProvider.future);
+      final report = await executeBatchClaims(
+        withdrawalIds: waitingItems.map((item) => item.id).toList(),
+        keys: _staffOpsKeys,
+        claim: (id, key) async {
+          await callStaffOps(app, 'claimWithdrawal', {'withdrawalId': id}, idempotencyKey: key);
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        for (final item in report.items) {
+          if (item.claimed) _selectedWithdrawalIds.remove(item.withdrawalId);
+        }
+      });
+      _triggerToast(report.summary);
+    } catch (e) {
+      _triggerToast('Batch claim failed: $e');
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
     }
-    setState(() {
-      _isProcessing = false;
-      _selectedWithdrawalIds.clear();
-    });
-    _triggerToast('Successfully claimed $claimedCount cashout request(s)!');
   }
 
   /// Client-side CSV export
@@ -2382,26 +2038,28 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
                     ),
                   ]),
 
-                  // TRAD-12: the destination wallet recorded on the withdrawal when it was requested (never inferred
-                  // or substituted from the user's current wallet).
+                  // TRAD-12: show the address stored on the withdrawal. Compared with the profile wallet
+                  // for display only. A base58 check or a field match is not a payout authorization.
                   if (_isSolanaPayout(req))
                     () {
-                      final wallet = _recipientSolanaWallet(req);
-                      return div(classes: 'flex items-center justify-between border-t border-zinc-100 pt-2', [
-                        div(classes: 'flex flex-col min-w-0', [
-                          span(classes: 'text-[10px] text-zinc-400 uppercase font-black', [Component.text('Recipient Solana Wallet Address')]),
-                          if (wallet.isNotEmpty)
-                            span(classes: 'font-mono font-bold text-[11px] text-zinc-900 break-all', [Component.text(wallet)])
-                          else
-                            span(classes: 'font-bold text-xs text-rose-600', [
-                              Component.text('Missing: no wallet address is recorded on this withdrawal. Do not send funds; ask the user to reconnect their wallet.'),
-                            ]),
-                        ]),
-                        if (wallet.isNotEmpty)
+                      final wallet = _recipientWallet(req, matchedUser);
+                      final tone = wallet.trust == RecipientWalletTrust.matchesLinkedProfile ? 'text-zinc-700' : 'text-rose-700';
+                      return div(classes: 'flex flex-col gap-1.5 border-t border-zinc-100 pt-2', [
+                        span(classes: 'text-[10px] text-zinc-400 uppercase font-black', [Component.text('Recipient Solana Wallet')]),
+                        span(classes: 'text-[11px] font-semibold leading-relaxed $tone', [Component.text(wallet.message)]),
+                        if (wallet.recordedAddress != null)
+                          span(classes: 'font-mono font-bold text-[11px] text-zinc-900 break-all', [
+                            Component.text('On withdrawal: ${wallet.recordedAddress}'),
+                          ]),
+                        if (wallet.linkedProfileWallet != null)
+                          span(classes: 'font-mono text-[11px] text-zinc-600 break-all', [
+                            Component.text('On profile: ${wallet.linkedProfileWallet}'),
+                          ]),
+                        if (wallet.copyableAddress != null)
                           button(
-                            onClick: () => _copyToClipboard('insp_wallet_${req.id}', wallet),
-                            classes: 'ml-2 px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-xs font-bold text-indigo-700 border-0 cursor-pointer',
-                            [Component.text(_copiedFields['insp_wallet_${req.id}'] == true ? 'Copied ✓' : 'Copy Address')],
+                            onClick: () => _copyToClipboard('insp_wallet_${req.id}', wallet.copyableAddress!),
+                            classes: 'self-start px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-xs font-bold text-indigo-700 border-0 cursor-pointer',
+                            [Component.text(_copiedFields['insp_wallet_${req.id}'] == true ? 'Copied ✓' : 'Copy matching address')],
                           ),
                       ]);
                     }(),
@@ -2558,6 +2216,9 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
                 classes: 'w-7 h-7 rounded-full bg-zinc-100 text-zinc-500 flex items-center justify-center font-bold text-xs border-0 cursor-pointer',
                 [Component.text('✕')],
               ),
+            ]),
+            p(classes: 'text-[11px] leading-relaxed text-amber-800 bg-amber-50 border border-amber-200 rounded-2xl p-3', [
+              Component.text(missingStaffOpMessage(MissingStaffOp.submitCashoutProof)),
             ]),
 
             // Payout Summary
@@ -2717,9 +2378,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
             ]),
             h3(classes: 'text-base font-black text-zinc-900 text-center', [Component.text('Finalize Cashout Payout?')]),
             p(classes: 'text-xs text-zinc-500 text-center leading-relaxed', [
-              Component.text(
-                'Are you sure you want to mark ₱${req.amount.toStringAsFixed(2)} to ${req.userAccountName} (${req.userAccountNumber}) as COMPLETED? User will receive a completion push notification.',
-              ),
+              Component.text(missingStaffOpMessage(MissingStaffOp.approveCashout)),
             ]),
             div(classes: 'flex items-center gap-3 pt-3', [
               button(
@@ -2969,7 +2628,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
                 div([
                   h2(classes: 'text-base font-black text-zinc-900', [Component.text('Create Manual P2P Cashout')]),
                   p(classes: 'text-xs text-zinc-400 font-medium', [
-                    Component.text('Initiate an ad-hoc withdrawal / payout order on behalf of a user.'),
+                    Component.text(missingStaffOpMessage(MissingStaffOp.createManualCashout)),
                   ]),
                 ]),
               ]),
