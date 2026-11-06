@@ -458,16 +458,97 @@ void main() async {
     );
   }
 
+  {
+    final proof = submitWithdrawalProofData(
+      withdrawalId: 'with_1',
+      referenceNumber: ' REF-9 ',
+      proofImageUrl: 'https://i.ibb.co/receipt.png',
+    );
+    check(
+      'proof body is the staffOps contract and nothing else',
+      proof.length == 3 &&
+          proof['withdrawalId'] == 'with_1' &&
+          proof['referenceNumber'] == 'REF-9' &&
+          proof['proofImageUrl'] == 'https://i.ibb.co/receipt.png',
+    );
+    StaffOpsException? httpProof;
+    try {
+      submitWithdrawalProofData(
+        withdrawalId: 'with_1',
+        referenceNumber: 'REF',
+        proofImageUrl: 'http://example.com/a.png',
+      );
+    } on StaffOpsException catch (e) {
+      httpProof = e;
+    }
+    check(
+      'a non-https receipt is refused before a request',
+      httpProof != null && httpProof.message == 'Payment receipt URL must be https.',
+    );
+    final recorded = proofSubmittedSummary({'status': 'PENDING_CONFIRMATION', 'verifiedPayment': false});
+    check(
+      'proof success does not announce a payment',
+      recorded.contains('verifiedPayment is false') &&
+          !recorded.toLowerCase().contains('paid') &&
+          !recorded.toLowerCase().contains('sent'),
+    );
+
+    final solana = createManualSolanaWithdrawalData(targetUserId: ' user_2 ', amount: 150.5, coin: 'USDT');
+    check(
+      'manual Solana body matches createManualWithdrawal',
+      solana.length == 4 &&
+          solana['targetUserId'] == 'user_2' &&
+          solana['method'] == 'solana' &&
+          solana['amount'] == 150.5 &&
+          solana['coin'] == 'USDT' &&
+          !solana.containsKey('uid') &&
+          !solana.containsKey('accountNumber'),
+    );
+    StaffOpsException? p2pCoin;
+    try {
+      createManualSolanaWithdrawalData(targetUserId: 'user_2', amount: 10, coin: 'GCash');
+    } on StaffOpsException catch (e) {
+      p2pCoin = e;
+    }
+    check('a non-Solana coin is not sent', p2pCoin != null && p2pCoin.message.contains("coin must be 'SOL' or 'USDT'"));
+    check(
+      'manual P2P stays unavailable without an invented account',
+      manualP2pUnavailableMessage.contains('P2P cashouts are requested by the account owner') &&
+          missingStaffOpMessage(MissingStaffOp.manualP2p).contains('No account name or number was sent'),
+    );
+    check(
+      'staff cannot settle P2P or call owner confirm',
+      !supportedStaffOpsActions.contains('updateP2pWithdrawal') &&
+          !supportedStaffOpsActions.contains('approveWithdrawal') &&
+          staffCannotSettleP2pMessage.contains('updateP2pWithdrawal') &&
+          supportedStaffOpsActions.contains('submitWithdrawalProof') &&
+          supportedStaffOpsActions.contains('createManualWithdrawal'),
+    );
+    final uuid = newStaffOpsUuid();
+    check(
+      'manual withdrawal keys are UUIDs and ordinary keys are not',
+      isStaffOpsUuid(uuid) && !isStaffOpsUuid('so_1_abcdefghij'),
+    );
+    final store = keys();
+    final firstUuid = store.obtain(
+      'createManualWithdrawal',
+      'user_2|USDT|150.5',
+      mint: () => 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+    );
+    final retryUuid = store.obtain(
+      'createManualWithdrawal',
+      'user_2|USDT|150.5',
+      mint: () => 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+    );
+    check('a manual Solana retry keeps the same UUID', firstUuid == retryUuid && isStaffOpsUuid(firstUuid));
+  }
+
   for (final op in MissingStaffOp.values) {
     final message = missingStaffOpMessage(op);
-    final ok =
-        message.contains(knownStaffOpsActionsLabel) &&
-        message.contains('Server dependency') &&
-        !message.toLowerCase().contains('successfully') &&
-        !supportedStaffOpsActions.contains('approveWithdrawal') &&
-        !supportedStaffOpsActions.contains('submitCashoutProof') &&
-        !supportedStaffOpsActions.contains('createWithdrawal');
-    check('missing ${op.name} fails closed on the known contract', ok);
+    check(
+      'missing ${op.name} does not claim a payout was sent',
+      message.isNotEmpty && !message.toLowerCase().contains('successfully'),
+    );
   }
 
   if (failed > 0) {

@@ -5,50 +5,113 @@ import 'staff_ops_errors.dart';
 
 /// Client contract for the workspace `staffOps` callable.
 ///
-/// Supported actions are the ones this portal already calls. Cashout proof, cashout
-/// finalization, and manual cashout creation are not among them. Those flows fail closed
-/// instead of writing balances from the browser.
+/// Actions from workspace `staffOps` at commit 23d4360 (PR 99). That backend is not
+/// deployed. Proof records a receipt only (`verifiedPayment: false`). There is no staff
+/// action that marks a P2P cashout paid. Manual creation is Solana-only.
 ///
-/// Server defects in the separate `tranyx` repo are not fixed here: caller role trusts
-/// writable user-doc flags, agents can self-approve deposits or claim their own cashout,
-/// audit agents can read, and a cross-action idempotency replay can return the prior
-/// action's result. Keys minted here differ per action and target so this client does not
-/// reuse one key across actions. That does not change how the server scopes keys.
+/// Keys differ per action and target. `createManualWithdrawal` additionally requires a UUID.
 const Set<String> supportedStaffOpsActions = {
   'claimWithdrawal',
   'releaseClaim',
   'rejectWithdrawal',
+  'submitWithdrawalProof',
+  'createManualWithdrawal',
   'approveDeposit',
   'resolveDispute',
 };
 
 const String knownStaffOpsActionsLabel =
-    'claimWithdrawal, releaseClaim, rejectWithdrawal, approveDeposit, resolveDispute';
+    'claimWithdrawal, releaseClaim, rejectWithdrawal, submitWithdrawalProof, createManualWithdrawal, approveDeposit, resolveDispute';
 
-/// Portal operations that still have no staffOps action. [missingStaffOpMessage] is the
-/// operator-facing reason; nothing in these flows writes Firestore.
-enum MissingStaffOp { submitCashoutProof, approveCashout, createManualCashout }
+/// Operations this portal must not perform. Nothing here writes Firestore.
+enum MissingStaffOp { settleP2pAsStaff, manualP2p }
+
+/// Server text for a non-Solana staff create (`staff_ops.ts`).
+const String manualP2pUnavailableMessage =
+    'Staff can only create a Solana withdrawal to the recipient\'s verified wallet. P2P cashouts are requested by the account owner.';
+
+const String staffCannotSettleP2pMessage =
+    'No staff action marks a P2P cashout paid. Owner confirmation on updateP2pWithdrawal is the only P2P settlement. This portal does not call that as staff, and a receipt image is not a payment.';
 
 String missingStaffOpMessage(MissingStaffOp op) {
   switch (op) {
-    case MissingStaffOp.submitCashoutProof:
-      return 'Proof was not submitted. staffOps has no action for cashout proof '
-          '(known actions: $knownStaffOpsActionsLabel). '
-          'A portal write of withdrawal status, proof, or balances would skip the server claim check, so no Firestore write was made. '
-          'Server dependency: a staffOps action that checks the caller holds the claim and stores the reference and proof in that same transaction.';
-    case MissingStaffOp.approveCashout:
-      return 'Cashout was not finalized. staffOps has no approve-cashout action '
-          '(known actions: $knownStaffOpsActionsLabel). approveWithdrawal was not called. '
-          'No status, ledger, wallet, notification, or balance write was made. '
-          'Server dependency: a staffOps action that checks the claim and completes the cashout without a client-side balance write. '
-          'A client-side check that this browser holds the claim is not money authorization.';
-    case MissingStaffOp.createManualCashout:
-      return 'Manual cashout was not created. staffOps cannot create a withdrawal '
-          '(known actions: $knownStaffOpsActionsLabel). '
-          'requestWithdrawal is the user debit function and was not called, because it is not a staff authorization to debit another user. '
-          'No withdrawal_requests, transactions, ledger, or balance document was written. '
-          'Server dependency: a staff callable that creates the request and debits the recipient in one transaction.';
+    case MissingStaffOp.settleP2pAsStaff:
+      return '$staffCannotSettleP2pMessage No status, ledger, or balance write was made.';
+    case MissingStaffOp.manualP2p:
+      return '$manualP2pUnavailableMessage No account name or number was sent. There is no verified recipient-account contract for P2P.';
   }
+}
+
+/// Body for `submitWithdrawalProof`. Rejects a non-https receipt before any request.
+Map<String, dynamic> submitWithdrawalProofData({
+  required String withdrawalId,
+  required String referenceNumber,
+  required String proofImageUrl,
+}) {
+  final id = withdrawalId.trim();
+  final reference = referenceNumber.trim();
+  final proof = proofImageUrl.trim();
+  if (id.isEmpty || id.contains('/')) {
+    throw const StaffOpsException('invalid-argument', 'withdrawalId is invalid.', detailCode: 'invalid-argument');
+  }
+  if (reference.isEmpty) {
+    throw const StaffOpsException('invalid-argument', 'Reference number is required.', detailCode: 'invalid-argument');
+  }
+  if (!proof.startsWith('https://')) {
+    throw const StaffOpsException(
+      'invalid-argument',
+      'Payment receipt URL must be https.',
+      detailCode: 'invalid-argument',
+    );
+  }
+  return {'withdrawalId': id, 'referenceNumber': reference, 'proofImageUrl': proof};
+}
+
+String proofSubmittedSummary(Map<String, dynamic> result) {
+  final status = result['status']?.toString() ?? 'PENDING_CONFIRMATION';
+  if (result['verifiedPayment'] == true) {
+    return 'Server returned verifiedPayment true with status $status. This portal does not treat that as a completed payout.';
+  }
+  return 'Proof recorded. Status $status. verifiedPayment is false. This is not a payment. The account owner must confirm receipt.';
+}
+
+/// Body for `createManualWithdrawal`. Solana only. No owner aliases and no payout account.
+Map<String, dynamic> createManualSolanaWithdrawalData({
+  required String targetUserId,
+  required double amount,
+  required String coin,
+}) {
+  final target = targetUserId.trim();
+  if (target.isEmpty || target.contains('/') || target.length > 128) {
+    throw const StaffOpsException('invalid-argument', 'targetUserId is invalid.', detailCode: 'invalid-argument');
+  }
+  if (coin != 'SOL' && coin != 'USDT') {
+    throw const StaffOpsException('invalid-argument', "coin must be 'SOL' or 'USDT'.", detailCode: 'invalid-argument');
+  }
+  final cents = (amount * 100).round();
+  if (!(amount > 0) || (amount * 100 - cents).abs() > 1e-6) {
+    throw const StaffOpsException(
+      'invalid-argument',
+      'amount must be a positive number with at most 2 decimal places.',
+      detailCode: 'invalid-argument',
+    );
+  }
+  return {'targetUserId': target, 'method': 'solana', 'amount': cents / 100, 'coin': coin};
+}
+
+final RegExp _staffOpsUuid = RegExp(
+  r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+  caseSensitive: false,
+);
+
+bool isStaffOpsUuid(String key) => _staffOpsUuid.hasMatch(key);
+
+/// UUID required by `createManualWithdrawal` and `processWithdrawal`.
+String newStaffOpsUuid() {
+  final r = math.Random.secure();
+  String hex(int n) => List.generate(n, (_) => r.nextInt(16).toRadixString(16)).join();
+  const variants = ['8', '9', 'a', 'b'];
+  return '${hex(8)}-${hex(4)}-4${hex(3)}-${variants[r.nextInt(4)]}${hex(3)}-${hex(12)}';
 }
 
 void ensureSupportedStaffOpsAction(String action) {
@@ -379,7 +442,8 @@ class StaffOpsIdempotencyKeys {
 
   static String _sig(String action, String target) => '$action\n$target';
 
-  String obtain(String action, String target) => _keys.putIfAbsent(_sig(action, target), _newKey);
+  String obtain(String action, String target, {String Function()? mint}) =>
+      _keys.putIfAbsent(_sig(action, target), mint ?? _newKey);
 
   void onSettled(String action, String target) {
     _keys.remove(_sig(action, target));
@@ -394,9 +458,10 @@ Future<T> withStableStaffOpsKey<T>(
   StaffOpsIdempotencyKeys keys,
   String action,
   String target,
-  Future<T> Function(String idempotencyKey) run,
-) async {
-  final key = keys.obtain(action, target);
+  Future<T> Function(String idempotencyKey) run, {
+  String Function()? mint,
+}) async {
+  final key = keys.obtain(action, target, mint: mint);
   try {
     final value = await run(key);
     keys.onSettled(action, target);

@@ -496,6 +496,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
   // ignore: unused_field
   String _createUserEmail = '';
   String _createPaymentMethod = 'GCash';
+  String _createSolanaCoin = 'SOL';
   String _createAccountName = '';
   String _createAccountNumber = '';
   String _createAmountStr = '';
@@ -735,28 +736,51 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
     });
   }
 
-  /// Step 2: Record payout proof. staffOps has no proof action, so this does not write.
+  /// Records the claim holder's receipt. Does not pay or settle the cashout.
   Future<void> _executeSubmitProof(WithdrawalRequest req, fb.User? adminUser) async {
-    final refNum = _proofReferenceNumber.trim().toUpperCase();
-    if (refNum.isEmpty) {
-      _triggerToast('Please provide the transaction reference number from your receipt.');
-      return;
-    }
-    if (_proofImageUrlInput.trim().isEmpty) {
-      _triggerToast('Please select or upload a transfer proof screenshot file.');
+    Map<String, dynamic> data;
+    try {
+      data = submitWithdrawalProofData(
+        withdrawalId: req.id,
+        referenceNumber: _proofReferenceNumber,
+        proofImageUrl: _proofImageUrlInput,
+      );
+    } on StaffOpsException catch (e) {
+      _triggerToast(e.message);
       return;
     }
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
-    _triggerToast(missingStaffOpMessage(MissingStaffOp.submitCashoutProof));
-    if (mounted) setState(() => _isProcessing = false);
+    try {
+      final app = await context.read(firebaseAppProvider.future);
+      final res = await withStableStaffOpsKey(
+        _staffOpsKeys,
+        'submitWithdrawalProof',
+        req.id,
+        (key) => callStaffOps(app, 'submitWithdrawalProof', data, idempotencyKey: key),
+      );
+      _triggerToast(proofSubmittedSummary(res));
+      if (mounted) {
+        setState(() {
+          _showSubmitProofModal = false;
+          _proofReferenceNumber = '';
+          _proofImageUrlInput = '';
+        });
+      }
+    } on StaffOpsException catch (e) {
+      _triggerToast('Proof was not recorded: ${e.message}');
+    } catch (e) {
+      _triggerToast('Proof was not recorded: $e');
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
   }
 
-  /// Step 3: Finalize a cashout. There is no staffOps approve-cashout action, so this does not write.
+  /// Staff cannot mark a P2P cashout paid. Owner confirm is the only settlement.
   Future<void> _executeApproveWithdrawal(WithdrawalRequest req, fb.User? adminUser) async {
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
-    _triggerToast(missingStaffOpMessage(MissingStaffOp.approveCashout));
+    _triggerToast(missingStaffOpMessage(MissingStaffOp.settleP2pAsStaff));
     if (mounted) setState(() => _isProcessing = false);
   }
 
@@ -824,25 +848,49 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
     }
   }
 
-  /// Step 6: Manual cashout. A portal-created request would skip the server balance debit.
+  /// Manual P2P is refused by the server. Solana uses createManualWithdrawal.
   Future<void> _executeCreateCashout(fb.User? adminUser) async {
+    if (_createPaymentMethod != 'Solana') {
+      _triggerToast(missingStaffOpMessage(MissingStaffOp.manualP2p));
+      return;
+    }
     final amount = double.tryParse(_createAmountStr.replaceAll(RegExp(r'[^\d.]'), '')) ?? 0.0;
-    if (amount <= 0) {
-      _triggerToast('Please enter a valid cashout amount greater than 0.');
-      return;
-    }
-    if (_createAccountName.trim().isEmpty) {
-      _triggerToast('Please provide recipient account name.');
-      return;
-    }
-    if (_createAccountNumber.trim().isEmpty) {
-      _triggerToast('Please provide recipient mobile / account number.');
+    Map<String, dynamic> data;
+    try {
+      data = createManualSolanaWithdrawalData(
+        targetUserId: _createUserId,
+        amount: amount,
+        coin: _createSolanaCoin,
+      );
+    } on StaffOpsException catch (e) {
+      _triggerToast(e.message);
       return;
     }
     if (_isProcessing) return;
     setState(() => _isProcessing = true);
-    _triggerToast(missingStaffOpMessage(MissingStaffOp.createManualCashout));
-    if (mounted) setState(() => _isProcessing = false);
+    final targetKey = '${data['targetUserId']}|${data['coin']}|${data['amount']}';
+    try {
+      final app = await context.read(firebaseAppProvider.future);
+      final res = await withStableStaffOpsKey(
+        _staffOpsKeys,
+        'createManualWithdrawal',
+        targetKey,
+        (key) => callStaffOps(app, 'createManualWithdrawal', data, idempotencyKey: key),
+        mint: newStaffOpsUuid,
+      );
+      final id = res['id']?.toString() ?? '';
+      final state = res['payoutState']?.toString() ?? '';
+      _triggerToast(
+        'Solana withdrawal requested${id.isEmpty ? '' : ' ($id)'}. payoutState ${state.isEmpty ? 'pending server result' : state}. Fee and wallet come from the server. This is not a P2P cashout.',
+      );
+      if (mounted) setState(() => _showCreateCashoutModal = false);
+    } on StaffOpsException catch (e) {
+      _triggerToast('Manual Solana withdrawal was not created: ${e.message}');
+    } catch (e) {
+      _triggerToast('Manual Solana withdrawal was not created: $e');
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
   }
 
   /// Batch claim selected waiting cashouts
@@ -2191,7 +2239,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
                     onClick: () => setState(() => _showApproveConfirmModal = true),
                     classes:
                         'px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs cursor-pointer shadow-md shadow-emerald-500/20 transition-all',
-                    [Component.text('✓ Confirm & Finalize Payout')],
+                    [Component.text('Owner must confirm')],
                   ),
               ]),
             ]),
@@ -2218,7 +2266,9 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
               ),
             ]),
             p(classes: 'text-[11px] leading-relaxed text-amber-800 bg-amber-50 border border-amber-200 rounded-2xl p-3', [
-              Component.text(missingStaffOpMessage(MissingStaffOp.submitCashoutProof)),
+              Component.text(
+                'submitWithdrawalProof stores the reference and an https receipt and sets PENDING_CONFIRMATION. verifiedPayment stays false. This does not pay the user. The account owner confirms receipt.',
+              ),
             ]),
 
             // Payout Summary
@@ -2355,7 +2405,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
                   if (_isProcessing)
                     span(classes: 'animate-spin', [Component.text('⏳')])
                   else
-                    Component.text('Confirm & Send Proof ✓'),
+                    Component.text('Record proof (not a payment)'),
                 ],
               ),
             ]),
@@ -2378,7 +2428,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
             ]),
             h3(classes: 'text-base font-black text-zinc-900 text-center', [Component.text('Finalize Cashout Payout?')]),
             p(classes: 'text-xs text-zinc-500 text-center leading-relaxed', [
-              Component.text(missingStaffOpMessage(MissingStaffOp.approveCashout)),
+              Component.text(missingStaffOpMessage(MissingStaffOp.settleP2pAsStaff)),
             ]),
             div(classes: 'flex items-center gap-3 pt-3', [
               button(
@@ -2394,7 +2444,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
                   if (_isProcessing)
                     span(classes: 'animate-spin', [Component.text('⏳')])
                   else
-                    Component.text('Yes, Finalize Payout ✓'),
+                    Component.text('Staff cannot mark this paid'),
                 ],
               ),
             ]),
@@ -2628,7 +2678,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
                 div([
                   h2(classes: 'text-base font-black text-zinc-900', [Component.text('Create Manual P2P Cashout')]),
                   p(classes: 'text-xs text-zinc-400 font-medium', [
-                    Component.text(missingStaffOpMessage(MissingStaffOp.createManualCashout)),
+                    Component.text(missingStaffOpMessage(MissingStaffOp.manualP2p)),
                   ]),
                 ]),
               ]),
@@ -2721,6 +2771,7 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
                     classes:
                         'w-full px-3.5 py-2.5 rounded-2xl text-xs bg-zinc-50 border border-zinc-200 text-zinc-800 focus:outline-none focus:border-zinc-500 focus:bg-white cursor-pointer font-bold',
                     [
+                      option(value: 'Solana', selected: _createPaymentMethod == 'Solana', [Component.text('◎ Solana (verified wallet)')]),
                       option(value: 'GCash', selected: _createPaymentMethod == 'GCash', [Component.text('🔵 GCash (e-Wallet)')]),
                       option(value: 'Maya', selected: _createPaymentMethod == 'Maya', [Component.text('🟢 Maya (e-Wallet)')]),
                       option(value: 'GrabPay', selected: _createPaymentMethod == 'GrabPay', [Component.text('🟢 GrabPay (e-Wallet)')]),
@@ -2733,6 +2784,26 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
                     ],
                   ),
                 ]),
+
+                if (_createPaymentMethod == 'Solana')
+                  div(classes: 'flex flex-col gap-1.5', [
+                    label(classes: 'text-xs font-bold text-zinc-700', [
+                      Component.text('Coin (server uses the verified wallet)'),
+                    ]),
+                    select(
+                      onChange: (dynamic val) {
+                        final selectedList = val is List<String> ? val : <String>[];
+                        final opt = selectedList.isNotEmpty ? selectedList.first : 'SOL';
+                        setState(() => _createSolanaCoin = opt);
+                      },
+                      classes:
+                          'w-full px-3.5 py-2.5 rounded-2xl text-xs bg-zinc-50 border border-zinc-200 text-zinc-800 focus:outline-none focus:border-zinc-500 focus:bg-white cursor-pointer font-bold',
+                      [
+                        option(value: 'SOL', selected: _createSolanaCoin == 'SOL', [Component.text('SOL')]),
+                        option(value: 'USDT', selected: _createSolanaCoin == 'USDT', [Component.text('USDT')]),
+                      ],
+                    ),
+                  ]),
 
                 div(classes: 'flex flex-col gap-1.5', [
                   label(classes: 'text-xs font-bold text-zinc-700', [Component.text('Payout Purpose / Category')]),
@@ -2851,7 +2922,11 @@ class _WithdrawalsPageState extends State<WithdrawalsPage> {
                 [
                   if (_isProcessing)
                     span(classes: 'w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin', []),
-                  Component.text(_isProcessing ? 'Creating Cashout...' : 'Submit & Enqueue Cashout ⚡'),
+                  Component.text(
+                    _isProcessing
+                        ? 'Sending...'
+                        : (_createPaymentMethod == 'Solana' ? 'Request Solana withdrawal' : 'P2P create is unavailable'),
+                  ),
                 ],
               ),
             ]),
