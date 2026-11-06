@@ -14,10 +14,16 @@ final Map<String, Future<void>> _appCheckActivation = {};
 
 /// Calls the workspace `staffOps` Cloud Function.
 ///
-/// Sends the staff ID token and an App Check token (`X-Firebase-AppCheck`). App Check is
-/// activated per environment app with the reCAPTCHA v3 site key from
-/// `APP_CHECK_RECAPTCHA_SITE_KEY_DEV`, `_UAT`, or `_PROD`. Those defines are empty in this
-/// repo; a build must supply the site key registered for that Firebase web app.
+/// Sends the staff ID token and an App Check token (`X-Firebase-AppCheck`) from [app].
+/// [app] is the selected workspace app (`development`, `staging`, or `production`), and the
+/// callable URL is that same project's `staffOps`. The default `tranyx-admin-portal` app is
+/// not used here: its App Check token would not verify on the workspace function.
+///
+/// The provider is Fraud Defense (reCAPTCHA Enterprise): [ReCaptchaEnterpriseProvider].
+/// Among the workspace projects, only `tranyx-app` is reported App Check-registered, and its
+/// public site key is not in this repo. `tranyx-dev` and `tranyx-uat` are not assumed registered.
+/// The separate `tranyx-admin-portal` Fraud Defense registration is not used for these calls.
+/// Classic reCAPTCHA v3 is not constructed.
 ///
 /// `APP_CHECK_DEBUG_TOKEN` is used only when `FUNCTIONS_BASE_URL` is set (emulator). It is
 /// exchanged by the App Check debug provider; the raw UUID is not copied into the header.
@@ -130,7 +136,7 @@ Future<String> _appCheckToken(FirebaseApp app, {required bool limitedUse}) async
   } on FirebaseException catch (e) {
     throw StaffOpsException(
       'failed-precondition',
-      'App Check token request failed (${e.code}) for ${app.options.projectId}. Confirm the reCAPTCHA v3 site key registered in Firebase App Check matches the dart-define for this project, and that this portal origin is allowed. No staffOps request was sent and enforcement was not disabled.',
+      'App Check token request failed (${e.code}) for ${app.options.projectId}. Confirm the Fraud Defense (reCAPTCHA Enterprise) site key registered in Firebase App Check for this project matches the dart-define, and that this portal origin is allowed. No staffOps request was sent and enforcement was not disabled.',
       detailCode: 'APP_CHECK_TOKEN_MISSING',
     );
   }
@@ -155,9 +161,19 @@ Future<void> _ensureActivated(FirebaseApp app, AppCheckClientConfig config) asyn
 }
 
 Future<void> _activateAppCheck(FirebaseApp app, AppCheckClientConfig config) async {
-  final WebProvider provider = config.useDebugToken
+  final attestation = config.attestation;
+  if (attestation == null) {
+    throw StaffOpsException(
+      'failed-precondition',
+      config.blockingReason ??
+          'App Check provider is not selected for ${app.options.projectId}. No staffOps request was sent and enforcement was not disabled.',
+      detailCode: 'APP_CHECK_NOT_CONFIGURED',
+    );
+  }
+  // Fraud Defense only. There is no reCAPTCHA v3 branch.
+  final WebProvider provider = attestation == AppCheckWebAttestation.debug
       ? WebDebugProvider(debugToken: config.debugToken)
-      : ReCaptchaV3Provider(config.siteKey!);
+      : ReCaptchaEnterpriseProvider(config.siteKey!);
   try {
     final check = FirebaseAppCheck.instanceFor(app: app);
     await check.activate(providerWeb: provider);

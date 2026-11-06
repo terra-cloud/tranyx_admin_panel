@@ -61,12 +61,81 @@ void ensureSupportedStaffOpsAction(String action) {
   }
 }
 
-/// Compile-time site-key defines. Values are public reCAPTCHA site keys, never secret tokens.
-/// Empty unless the build passes the matching `--dart-define`.
+/// Web attestation actually constructed for App Check. Fraud Defense is reCAPTCHA Enterprise.
+/// Classic reCAPTCHA v3 is not a value here.
+enum AppCheckWebAttestation { recaptchaEnterprise, debug }
+
+/// One of the four Firebase apps this portal already initializes.
+///
+/// [mintsStaffOpsTokens] is true only for the workspace app. `staffOps` is invoked with that
+/// named app, and that same project verifies the ID token and the App Check token.
+/// `tranyx-admin-portal` is portal sign-in and Hosting. Its token is not reused for workspace
+/// functions.
+class PortalFirebaseApp {
+  final String alias;
+  final String firebaseAppName;
+  final String projectId;
+  final String appId;
+  final bool mintsStaffOpsTokens;
+
+  /// Console registration that was actually reported. This is not a site key.
+  /// Only `tranyx-app` is reported registered among the workspace projects.
+  /// `tranyx-admin-portal` is a separate Fraud Defense registration and does not mint staffOps tokens.
+  final bool appCheckRegistrationReported;
+
+  const PortalFirebaseApp({
+    required this.alias,
+    required this.firebaseAppName,
+    required this.projectId,
+    required this.appId,
+    required this.mintsStaffOpsTokens,
+    required this.appCheckRegistrationReported,
+  });
+}
+
+const List<PortalFirebaseApp> portalFirebaseApps = [
+  PortalFirebaseApp(
+    alias: 'admin',
+    firebaseAppName: '[DEFAULT]',
+    projectId: 'tranyx-admin-portal',
+    appId: '1:998364264423:web:f32052956a463360996f42',
+    mintsStaffOpsTokens: false,
+    appCheckRegistrationReported: true,
+  ),
+  PortalFirebaseApp(
+    alias: 'dev',
+    firebaseAppName: 'development',
+    projectId: 'tranyx-dev',
+    appId: '1:709467070093:web:4d38bcfda904b0d5df4cc4',
+    mintsStaffOpsTokens: true,
+    appCheckRegistrationReported: false,
+  ),
+  PortalFirebaseApp(
+    alias: 'uat',
+    firebaseAppName: 'staging',
+    projectId: 'tranyx-uat',
+    appId: '1:108125328804:web:f7ada108909ef0a5881d31',
+    mintsStaffOpsTokens: true,
+    appCheckRegistrationReported: false,
+  ),
+  PortalFirebaseApp(
+    alias: 'prod',
+    firebaseAppName: 'production',
+    projectId: 'tranyx-app',
+    appId: '1:174332525079:web:4ad05af27a88c4ba8f7a52',
+    mintsStaffOpsTokens: true,
+    appCheckRegistrationReported: true,
+  ),
+];
+
+const String portalAuthProjectId = 'tranyx-admin-portal';
+
+/// Public Fraud Defense site-key defines. Empty unless the build passes them.
+/// These are reCAPTCHA Enterprise site keys, never classic reCAPTCHA keys and never secrets.
 const Map<String, String> appCheckSiteKeyDefines = {
-  'tranyx-dev': 'APP_CHECK_RECAPTCHA_SITE_KEY_DEV',
-  'tranyx-uat': 'APP_CHECK_RECAPTCHA_SITE_KEY_UAT',
-  'tranyx-app': 'APP_CHECK_RECAPTCHA_SITE_KEY_PROD',
+  'tranyx-dev': 'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_DEV',
+  'tranyx-uat': 'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_UAT',
+  'tranyx-app': 'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD',
 };
 
 /// Resolved App Check setup for one Firebase project. [ready] is false when the client must
@@ -78,6 +147,7 @@ class AppCheckClientConfig {
   final bool emulator;
   final bool useDebugToken;
   final String? debugToken;
+  final AppCheckWebAttestation? attestation;
   final String? blockingReason;
 
   const AppCheckClientConfig({
@@ -87,6 +157,7 @@ class AppCheckClientConfig {
     required this.emulator,
     required this.useDebugToken,
     required this.debugToken,
+    required this.attestation,
     required this.blockingReason,
   });
 
@@ -98,9 +169,15 @@ class AppCheckClientConfig {
       projectId: projectId,
       functionsBaseUrl: const String.fromEnvironment('FUNCTIONS_BASE_URL'),
       siteKeysByDefine: const {
-        'APP_CHECK_RECAPTCHA_SITE_KEY_DEV': String.fromEnvironment('APP_CHECK_RECAPTCHA_SITE_KEY_DEV'),
-        'APP_CHECK_RECAPTCHA_SITE_KEY_UAT': String.fromEnvironment('APP_CHECK_RECAPTCHA_SITE_KEY_UAT'),
-        'APP_CHECK_RECAPTCHA_SITE_KEY_PROD': String.fromEnvironment('APP_CHECK_RECAPTCHA_SITE_KEY_PROD'),
+        'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_DEV': String.fromEnvironment(
+          'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_DEV',
+        ),
+        'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_UAT': String.fromEnvironment(
+          'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_UAT',
+        ),
+        'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD': String.fromEnvironment(
+          'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD',
+        ),
       },
       debugToken: const String.fromEnvironment('APP_CHECK_DEBUG_TOKEN'),
     );
@@ -135,6 +212,7 @@ AppCheckClientConfig resolveAppCheckConfig({
   final define = appCheckSiteKeyDefines[projectId];
   final debugOk = isUsableAppCheckDebugToken(debugToken);
   if (define == null) {
+    final portal = projectId == portalAuthProjectId;
     return AppCheckClientConfig(
       projectId: projectId,
       defineName: null,
@@ -142,11 +220,13 @@ AppCheckClientConfig resolveAppCheckConfig({
       emulator: emulator,
       useDebugToken: false,
       debugToken: null,
-      blockingReason:
-          'No App Check site-key setting is known for Firebase project "$projectId". '
-          'Known defines: APP_CHECK_RECAPTCHA_SITE_KEY_DEV (tranyx-dev), '
-          'APP_CHECK_RECAPTCHA_SITE_KEY_UAT (tranyx-uat), APP_CHECK_RECAPTCHA_SITE_KEY_PROD (tranyx-app). '
-          'No staffOps request was sent. App Check enforcement was not disabled.',
+      attestation: null,
+      blockingReason: portal
+          ? 'Project $portalAuthProjectId is portal sign-in and Hosting. staffOps runs on the selected workspace project (tranyx-dev, tranyx-uat, or tranyx-app) and verifies App Check there. A token from $portalAuthProjectId is not sent. No request was sent and enforcement was not disabled.'
+          : 'No Fraud Defense site-key setting is known for Firebase project "$projectId". '
+                'Workspace defines: APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_DEV (tranyx-dev), '
+                '_UAT (tranyx-uat), _PROD (tranyx-app). '
+                'No staffOps request was sent. App Check enforcement was not disabled.',
     );
   }
 
@@ -160,17 +240,27 @@ AppCheckClientConfig resolveAppCheckConfig({
       emulator: true,
       useDebugToken: true,
       debugToken: debugToken,
+      attestation: AppCheckWebAttestation.debug,
       blockingReason: null,
     );
   }
 
+  final app = _portalApp(projectId);
+  final appNote = app == null ? '' : ' Web app ${app.appId}.';
   if (!keyOk) {
-    final why = rawKey.trim().isEmpty ? '$define is empty.' : '$define is not a usable reCAPTCHA v3 site key.';
+    final why = rawKey.trim().isEmpty ? '$define is empty.' : '$define is not a usable reCAPTCHA Enterprise site key.';
     final debugNote = !emulator && debugToken.trim().isNotEmpty
         ? ' APP_CHECK_DEBUG_TOKEN is ignored unless FUNCTIONS_BASE_URL points at an emulator.'
         : emulator && debugToken.trim().isNotEmpty && !debugOk
         ? ' APP_CHECK_DEBUG_TOKEN is set but is not a UUID, so it was not used.'
         : '';
+    final registration = app == null
+        ? ''
+        : !app.mintsStaffOpsTokens
+        ? ''
+        : app.appCheckRegistrationReported
+        ? ' Among tranyx-dev, tranyx-uat, and tranyx-app, only tranyx-app is reported as App Check-registered. Its provider and public site key were not verified for this build, so none is assumed.'
+        : ' $projectId is not reported as App Check-registered. No provider or site key is assumed for it.';
     return AppCheckClientConfig(
       projectId: projectId,
       defineName: define,
@@ -178,11 +268,18 @@ AppCheckClientConfig resolveAppCheckConfig({
       emulator: emulator,
       useDebugToken: false,
       debugToken: null,
+      attestation: null,
       blockingReason:
           'App Check is not configured for $projectId. staffOps enforces App Check '
-          '(ENFORCE_APP_CHECK defaults to true) and this portal has no validated site key. $why '
-          'Pass --dart-define=$define=<the site key registered for this web app in Firebase App Check>. '
-          'No staffOps request was sent and enforcement was not disabled.$debugNote',
+          '(ENFORCE_APP_CHECK defaults to true) and this client does not change that. '
+          'ReCaptchaEnterpriseProvider is used only when this project\'s public Enterprise site key is supplied. '
+          'Classic reCAPTCHA v3 is not used. '
+          '$why Pass --dart-define=$define=<the public Enterprise site key for this project>. '
+          'Copy that non-secret key from Google Cloud Fraud Defense for project $projectId '
+          '(score-based Web key whose domains include this admin origin), the same key registered on that project\'s web app in Firebase App Check. '
+          'Do not use a classic reCAPTCHA key, a secret key, or the tranyx-admin-portal Fraud Defense registration. '
+          'Docs: https://firebase.google.com/docs/app-check/flutter/recaptcha-enterprise-provider. '
+          'No staffOps request was sent.$registration$debugNote$appNote',
     );
   }
 
@@ -193,8 +290,16 @@ AppCheckClientConfig resolveAppCheckConfig({
     emulator: emulator,
     useDebugToken: false,
     debugToken: null,
+    attestation: AppCheckWebAttestation.recaptchaEnterprise,
     blockingReason: null,
   );
+}
+
+PortalFirebaseApp? _portalApp(String projectId) {
+  for (final app in portalFirebaseApps) {
+    if (app.projectId == projectId) return app;
+  }
+  return null;
 }
 
 String staffOpsUrl({required String projectId, required String functionsBaseUrl}) {

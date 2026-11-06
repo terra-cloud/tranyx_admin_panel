@@ -220,36 +220,87 @@ void main() async {
       debugToken: '00112233-4455-6677-8899-aabbccddeeff',
     );
     check(
-      'production without a site key fails closed and ignores a debug token',
+      'production without an Enterprise site key fails closed and ignores a debug token',
       !blocked.ready &&
-          blocked.blockingReason!.contains('APP_CHECK_RECAPTCHA_SITE_KEY_PROD') &&
-          blocked.blockingReason!.contains('not disabled') &&
+          blocked.attestation == null &&
+          blocked.blockingReason!.contains('APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD') &&
+          blocked.blockingReason!.contains('ReCaptchaEnterpriseProvider') &&
+          blocked.blockingReason!.contains('does not change that') &&
+          blocked.blockingReason!.contains('only tranyx-app is reported as App Check-registered') &&
           blocked.blockingReason!.contains('APP_CHECK_DEBUG_TOKEN is ignored') &&
+          blocked.blockingReason!.contains('1:174332525079:web:4ad05af27a88c4ba8f7a52') &&
+          !blocked.blockingReason!.contains('6LfRzBIuAAAAAG0WSzlXuPZDi2aJPgUoZ48lvlX5') &&
           !blocked.useDebugToken &&
           !blocked.blockingReason!.contains('00112233'),
+    );
+
+    final devUnregistered = resolveAppCheckConfig(
+      projectId: 'tranyx-dev',
+      functionsBaseUrl: '',
+      siteKeysByDefine: const {},
+      debugToken: '',
+    );
+    final uatUnregistered = resolveAppCheckConfig(
+      projectId: 'tranyx-uat',
+      functionsBaseUrl: '',
+      siteKeysByDefine: const {},
+      debugToken: '',
+    );
+    check(
+      'dev and uat are not assumed to be App Check-registered',
+      !devUnregistered.ready &&
+          !uatUnregistered.ready &&
+          devUnregistered.blockingReason!.contains('tranyx-dev is not reported as App Check-registered') &&
+          uatUnregistered.blockingReason!.contains('tranyx-uat is not reported as App Check-registered') &&
+          devUnregistered.attestation == null &&
+          uatUnregistered.attestation == null,
     );
 
     const badKey = 'not a valid key !!!';
     final invalid = resolveAppCheckConfig(
       projectId: 'tranyx-dev',
       functionsBaseUrl: '',
-      siteKeysByDefine: const {'APP_CHECK_RECAPTCHA_SITE_KEY_DEV': badKey},
+      siteKeysByDefine: const {'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_DEV': badKey},
       debugToken: '',
     );
     check(
-      'an invalid site key is refused without echoing it',
+      'an invalid Enterprise site key is refused without echoing it',
       !invalid.ready && !invalid.blockingReason!.contains(badKey) && invalid.blockingReason!.contains('not a usable'),
     );
 
     final ready = resolveAppCheckConfig(
-      projectId: 'tranyx-uat',
+      projectId: 'tranyx-app',
       functionsBaseUrl: '',
-      siteKeysByDefine: const {'APP_CHECK_RECAPTCHA_SITE_KEY_UAT': siteKey},
+      siteKeysByDefine: const {'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD': siteKey},
       debugToken: '00112233-4455-6677-8899-aabbccddeeff',
     );
     check(
-      'a validated site key activates production App Check without the debug token',
-      ready.ready && ready.siteKey == siteKey && !ready.useDebugToken,
+      'an explicit production Enterprise site key selects Fraud Defense and not the debug token',
+      ready.ready &&
+          ready.siteKey == siteKey &&
+          !ready.useDebugToken &&
+          ready.attestation == AppCheckWebAttestation.recaptchaEnterprise,
+    );
+
+    final prodOnly = resolveAppCheckConfig(
+      projectId: 'tranyx-dev',
+      functionsBaseUrl: '',
+      siteKeysByDefine: const {'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD': siteKey},
+      debugToken: '',
+    );
+    check('a tranyx-app Enterprise key does not configure tranyx-dev', !prodOnly.ready && prodOnly.attestation == null);
+
+    final adminProject = resolveAppCheckConfig(
+      projectId: 'tranyx-admin-portal',
+      functionsBaseUrl: '',
+      siteKeysByDefine: const {'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD': siteKey},
+      debugToken: '',
+    );
+    check(
+      'the portal project is not given a workspace App Check token',
+      !adminProject.ready &&
+          adminProject.blockingReason!.contains('token from tranyx-admin-portal is not sent') &&
+          !adminProject.blockingReason!.contains(siteKey),
     );
 
     final emulator = resolveAppCheckConfig(
@@ -260,7 +311,11 @@ void main() async {
     );
     check(
       'emulator debug token is exchanged only when FUNCTIONS_BASE_URL is set',
-      emulator.ready && emulator.useDebugToken && emulator.debugToken != null && emulator.siteKey == null,
+      emulator.ready &&
+          emulator.useDebugToken &&
+          emulator.attestation == AppCheckWebAttestation.debug &&
+          emulator.debugToken != null &&
+          emulator.siteKey == null,
     );
     check(
       'staffOps emulator URL stays on the configured base',
@@ -326,6 +381,73 @@ void main() async {
       'a non-address is not presented as a payout destination',
       invalid.trust == RecipientWalletTrust.invalidFormat && invalid.copyableAddress == null,
     );
+  }
+
+  // Four configured Firebase apps. staffOps tokens come from the workspace app, not the portal app.
+  {
+    check('the portal configures four Firebase apps', portalFirebaseApps.length == 4);
+    final projects = portalFirebaseApps.map((app) => app.projectId).toSet();
+    check(
+      'portal, dev, uat, and production workspace stay distinct',
+      projects.length == 4 && projects.contains(portalAuthProjectId) && projects.contains('tranyx-app'),
+    );
+    final staffOpsProjects = portalFirebaseApps
+        .where((app) => app.mintsStaffOpsTokens)
+        .map((app) => app.projectId)
+        .toSet();
+    check(
+      'staffOps is limited to the three workspace projects',
+      staffOpsProjects.length == 3 && !staffOpsProjects.contains(portalAuthProjectId),
+    );
+    final reportedWorkspace = portalFirebaseApps
+        .where((app) => app.mintsStaffOpsTokens && app.appCheckRegistrationReported)
+        .map((app) => app.projectId)
+        .toList();
+    check(
+      'only production is reported App Check-registered among workspace projects',
+      reportedWorkspace.length == 1 && reportedWorkspace.single == 'tranyx-app',
+    );
+    check(
+      'dev and uat registration flags stay off and the portal registration does not mint staffOps tokens',
+      portalFirebaseApps.any(
+            (app) => app.projectId == 'tranyx-dev' && !app.appCheckRegistrationReported && app.mintsStaffOpsTokens,
+          ) &&
+          portalFirebaseApps.any(
+            (app) => app.projectId == 'tranyx-uat' && !app.appCheckRegistrationReported && app.mintsStaffOpsTokens,
+          ) &&
+          portalFirebaseApps.any(
+            (app) =>
+                app.projectId == portalAuthProjectId && app.appCheckRegistrationReported && !app.mintsStaffOpsTokens,
+          ),
+    );
+    final prodUrl = staffOpsUrl(projectId: 'tranyx-app', functionsBaseUrl: '');
+    check(
+      'production staffOps is verified by tranyx-app, not the portal project',
+      prodUrl == 'https://us-central1-tranyx-app.cloudfunctions.net/staffOps' && !prodUrl.contains(portalAuthProjectId),
+    );
+
+    final envSource = File('lib/core/config/firebase_environments.dart').readAsStringSync();
+    final rc = File('.firebaserc').readAsStringSync();
+    final service = File('lib/core/services/staff_ops_service.dart').readAsStringSync();
+    var wiringOk = true;
+    for (final app in portalFirebaseApps) {
+      if (!envSource.contains('projectId: "${app.projectId}"') || !envSource.contains('appId: "${app.appId}"')) {
+        wiringOk = false;
+      }
+      if (!rc.contains('"${app.projectId}"')) wiringOk = false;
+    }
+    check('FirebaseEnv and .firebaserc match the four-project catalog', wiringOk);
+    check(
+      '.firebaserc default hosting project is the portal project',
+      rc.contains('"default": "tranyx-admin-portal"') && rc.contains('"admin": "tranyx-admin-portal"'),
+    );
+    check(
+      'the callable client constructs Enterprise App Check and not reCAPTCHA v3',
+      service.contains('ReCaptchaEnterpriseProvider') && !service.contains('ReCaptchaV3Provider'),
+    );
+    final lib = Directory('lib').listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.dart'));
+    final shippedClassic = lib.any((f) => f.readAsStringSync().contains('6LfRzBIuAAAAAG0WSzlXuPZDi2aJPgUoZ48lvlX5'));
+    check('the unverified classic tranyx.app site key is not compiled in', !shippedClassic);
   }
 
   for (final op in MissingStaffOp.values) {
