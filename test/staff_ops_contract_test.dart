@@ -529,6 +529,31 @@ void main() async {
       'manual withdrawal keys are UUIDs and ordinary keys are not',
       isStaffOpsUuid(uuid) && !isStaffOpsUuid('so_1_abcdefghij'),
     );
+    final refused = evaluateHostingRelease(prodEnterpriseSiteKey: '', debugToken: '', functionsBaseUrl: '');
+    final debugRefused = evaluateHostingRelease(
+      prodEnterpriseSiteKey: '6Labcdefghijklmnopqrstuvwxyz0123456789ab',
+      debugToken: '00112233-4455-6677-8899-aabbccddeeff',
+      functionsBaseUrl: '',
+    );
+    final allowed = evaluateHostingRelease(
+      prodEnterpriseSiteKey: '6Labcdefghijklmnopqrstuvwxyz0123456789ab',
+      debugToken: '',
+      functionsBaseUrl: '',
+    );
+    check(
+      'a release without a production Enterprise key does not produce Hosting',
+      !refused.allowed &&
+          refused.message.contains('No build/jaspr artifact was produced') &&
+          !refused.message.contains('6LfRz'),
+    );
+    check(
+      'a release with a debug token is refused',
+      !debugRefused.allowed && debugRefused.message.contains('APP_CHECK_DEBUG_TOKEN'),
+    );
+    check(
+      'a shaped production key allows compile but is not proof of registration',
+      allowed.allowed && allowed.message.contains('does not prove'),
+    );
     final store = keys();
     final firstUuid = store.obtain(
       'createManualWithdrawal',

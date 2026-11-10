@@ -247,6 +247,43 @@ class AppCheckClientConfig {
   }
 }
 
+/// Whether a Hosting release may compile the production App Check key.
+/// A fixture compile is never allowed through this gate. [message] does not include the key.
+class HostingReleaseGate {
+  final bool allowed;
+  final String message;
+  const HostingReleaseGate({required this.allowed, required this.message});
+}
+
+HostingReleaseGate evaluateHostingRelease({
+  required String prodEnterpriseSiteKey,
+  required String debugToken,
+  required String functionsBaseUrl,
+}) {
+  if (functionsBaseUrl.trim().isNotEmpty) {
+    return const HostingReleaseGate(
+      allowed: false,
+      message: 'Release Hosting refused: FUNCTIONS_BASE_URL is set. An emulator base is not a production build. No build/jaspr artifact was produced.',
+    );
+  }
+  if (debugToken.trim().isNotEmpty) {
+    return const HostingReleaseGate(
+      allowed: false,
+      message: 'Release Hosting refused: APP_CHECK_DEBUG_TOKEN is set. Debug tokens are emulator-only and must not be compiled into Hosting. No build/jaspr artifact was produced.',
+    );
+  }
+  if (!isUsableRecaptchaSiteKey(prodEnterpriseSiteKey)) {
+    return const HostingReleaseGate(
+      allowed: false,
+      message: 'Release Hosting refused: APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD is missing or not a usable reCAPTCHA Enterprise site key for tranyx-app web app 1:174332525079:web:4ad05af27a88c4ba8f7a52. No build/jaspr artifact was produced. A fixture compile is not a Hosting release.',
+    );
+  }
+  return const HostingReleaseGate(
+    allowed: true,
+    message: 'Release App Check site key is present and shaped like a public Enterprise key. This does not prove it is the key registered for tranyx-app.',
+  );
+}
+
 bool isUsableRecaptchaSiteKey(String raw) {
   if (raw.isEmpty || raw != raw.trim()) return false;
   if (raw.length < 20 || raw.length > 200) return false;
