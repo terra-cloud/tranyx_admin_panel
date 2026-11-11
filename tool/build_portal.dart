@@ -12,8 +12,9 @@ import 'package:tranyx_admin_portal/core/services/staff_ops_contract.dart';
 /// imports are expected. This script does not copy `build/web` onto `build/jaspr`.
 ///
 /// `--release` writes `build/jaspr` only when the production Enterprise site key is
-/// usable and no debug or emulator setting is present. The key is read from the
-/// environment and is not printed.
+/// usable and no debug or emulator setting is present. The key is the committed
+/// [prodEnterpriseSiteKey] unless `APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD` is
+/// set. The key is not printed.
 /// `--fixture` compiles with a non-registered key and moves the output to
 /// `build/jaspr-fixture`. That directory is not the Hosting public path.
 ///
@@ -32,8 +33,9 @@ Future<void> main(List<String> args) async {
   final extra = separator >= 0 ? args.sublist(separator + 1) : const <String>[];
 
   if (release) {
+    final key = _releaseProdKey();
     final gate = evaluateHostingRelease(
-      prodEnterpriseSiteKey: Platform.environment['APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD'] ?? '',
+      prodEnterpriseSiteKey: key,
       debugToken: Platform.environment['APP_CHECK_DEBUG_TOKEN'] ?? '',
       functionsBaseUrl: Platform.environment['FUNCTIONS_BASE_URL'] ?? '',
     );
@@ -43,7 +45,6 @@ Future<void> main(List<String> args) async {
     }
     stdout.writeln(gate.message);
     stdout.writeln('Release compile with locked jaspr_cli 0.23.4. Output directory: build/jaspr.');
-    final key = Platform.environment['APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD'] ?? '';
     exit(await _jaspr(['--dart-define=APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD=$key', ...extra]));
   }
 
@@ -65,6 +66,11 @@ Future<void> main(List<String> args) async {
   src.renameSync(dest.path);
   stdout.writeln('Moved fixture output to build/jaspr-fixture. build/jaspr was not left in place.');
   exit(0);
+}
+
+String _releaseProdKey() {
+  final fromEnv = (Platform.environment['APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD'] ?? '').trim();
+  return fromEnv.isEmpty ? prodEnterpriseSiteKey : fromEnv;
 }
 
 Future<int> _jaspr(List<String> args) async {

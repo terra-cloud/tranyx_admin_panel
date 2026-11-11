@@ -448,6 +448,12 @@ void main() async {
     final lib = Directory('lib').listSync(recursive: true).whereType<File>().where((f) => f.path.endsWith('.dart'));
     final shippedClassic = lib.any((f) => f.readAsStringSync().contains('6LfRzBIuAAAAAG0WSzlXuPZDi2aJPgUoZ48lvlX5'));
     check('the unverified classic tranyx.app site key is not compiled in', !shippedClassic);
+    check(
+      'the verified tranyx-app Enterprise site key is the committed public prod key',
+      prodEnterpriseSiteKey == '6LcSphouAAAAAHFEBkUyC0F8wK01xo3FGyrVCjtM' &&
+          isUsableRecaptchaSiteKey(prodEnterpriseSiteKey) &&
+          !prodEnterpriseSiteKey.startsWith('6LfRz'),
+    );
     final envAuth = File('lib/core/providers/environment_provider.dart').readAsStringSync();
     check(
       'workspace sign-in does not write user-doc staff flags',

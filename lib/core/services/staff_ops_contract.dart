@@ -193,7 +193,12 @@ const List<PortalFirebaseApp> portalFirebaseApps = [
 
 const String portalAuthProjectId = 'tranyx-admin-portal';
 
-/// Public Fraud Defense site-key defines. Empty unless the build passes them.
+/// Public Fraud Defense site key for the tranyx-app web app
+/// `1:174332525079:web:4ad05af27a88c4ba8f7a52`. Not a secret. Dev and UAT have no key.
+const String prodEnterpriseSiteKey = '6LcSphouAAAAAHFEBkUyC0F8wK01xo3FGyrVCjtM';
+
+/// Public Fraud Defense site-key defines. Dev and UAT stay empty. Production defaults to
+/// [prodEnterpriseSiteKey] unless a build overrides the dart-define.
 /// These are reCAPTCHA Enterprise site keys, never classic reCAPTCHA keys and never secrets.
 const Map<String, String> appCheckSiteKeyDefines = {
   'tranyx-dev': 'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_DEV',
@@ -240,6 +245,7 @@ class AppCheckClientConfig {
         ),
         'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD': String.fromEnvironment(
           'APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD',
+          defaultValue: prodEnterpriseSiteKey,
         ),
       },
       debugToken: const String.fromEnvironment('APP_CHECK_DEBUG_TOKEN'),
