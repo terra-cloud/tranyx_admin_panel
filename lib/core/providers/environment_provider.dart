@@ -68,9 +68,15 @@ Future<User?> syncEnvAuth(FirebaseApp app, User? adminUser, {String? explicitPas
   if (adminUser == null) return null;
   try {
     final envAuth = FirebaseAuth.instanceFor(app: app);
-
-    if (envAuth.currentUser != null) {
-      return envAuth.currentUser;
+    final portalEmail = (adminUser.email ?? '').trim().toLowerCase();
+    final signedIn = envAuth.currentUser;
+    if (signedIn != null && (signedIn.email ?? '').trim().toLowerCase() == portalEmail && portalEmail.isNotEmpty) {
+      // Claims added after this session started are invisible until the ID token is refreshed.
+      await signedIn.getIdToken(true);
+      return signedIn;
+    }
+    if (signedIn != null) {
+      await envAuth.signOut();
     }
 
     final savedEmail = web.window.localStorage.getItem('tranyx_staff_email') ?? adminUser.email;
@@ -173,7 +179,7 @@ final activeEnvAuthUserProvider = StreamProvider<User?>((ref) {
       return controller.stream;
     },
     loading: () => Stream.value(null),
-    error: (_, __) => Stream.value(null),
+    error: (_, _) => Stream.value(null),
   );
 });
 
@@ -269,7 +275,6 @@ String _formatHumanStaffName(String? raw, String email) {
 final currentAdminProfileProvider = StreamProvider<AdminStaffProfileModel>((ref) {
   final auth = ref.watch(adminAuthProvider);
   final adminFirestore = ref.watch(adminFirestoreProvider);
-  final firestore = ref.watch(firestoreProvider);
 
   return auth.userChanges().asyncExpand((user) {
     if (user == null) {
@@ -286,25 +291,14 @@ final currentAdminProfileProvider = StreamProvider<AdminStaffProfileModel>((ref)
 
     final email = user.email ?? '';
     final defaultName = _formatHumanStaffName(user.displayName, email);
-    final isExplicitAdmin = email == 'admin@tranyx.app' || email == 'admin@tranyx.com';
-    final defaultRole = isExplicitAdmin ? 'Admin' : 'Staff';
+    const defaultRole = 'guest';
 
     return adminFirestore
         .collection('users')
         .doc(user.uid)
         .snapshots()
         .asyncMap((doc) async {
-          Map<String, dynamic> d = {};
-          if (doc.exists && doc.data() != null) {
-            d = doc.data()!;
-          } else {
-            try {
-              final userDoc = await firestore.collection('users').doc(user.uid).get();
-              if (userDoc.exists && userDoc.data() != null) {
-                d = userDoc.data()!;
-              }
-            } catch (_) {}
-          }
+          final Map<String, dynamic> d = (doc.exists && doc.data() != null) ? doc.data()! : {};
 
           if (d.isNotEmpty) {
             final docName = d['name'] ?? d['displayName'] ?? d['agentName'];

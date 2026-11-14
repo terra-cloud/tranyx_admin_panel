@@ -7,6 +7,7 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:jaspr_router/jaspr_router.dart';
 
 import '../app.dart';
+import '../core/access/portal_role.dart';
 import '../core/providers/environment_provider.dart';
 import 'listings.dart';
 import 'bookings.dart';
@@ -1647,9 +1648,8 @@ class _DashboardState extends State<Dashboard> {
   Component build(BuildContext context) {
     final profile = context.watch(currentAdminProfileProvider).value;
     final user = context.watch(adminCurrentUserProvider).value;
-    final userEmail = (profile?.email.isNotEmpty == true ? profile!.email : user?.email) ?? '';
     final userRole = profile?.role.toLowerCase() ?? '';
-    final isAdmin = userRole.contains('admin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(userRole);
     if (!isAdmin) {
       _revenueTimeframe = '24h';
     }

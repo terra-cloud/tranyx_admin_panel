@@ -10,6 +10,7 @@ import 'package:riverpod/legacy.dart';
 import 'package:web/web.dart' as web;
 
 import '../app.dart';
+import '../core/access/portal_role.dart';
 import '../core/providers/environment_provider.dart';
 import '../core/services/presence_service.dart';
 import '../core/services/request_lock_service.dart';
@@ -168,9 +169,8 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
         : (currentUser.email?.split('@').first ?? 'Agent');
 
     final profile = context.read(currentAdminProfileProvider).value;
-    final currentUserEmail = currentUser.email ?? '';
     final role = profile?.role.toLowerCase() ?? '';
-    final isAdmin = role.contains('admin') || currentUserEmail == 'admin@tranyx.app' || currentUserEmail == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(role);
     final firestore = context.read(firestoreProvider);
 
     try {
@@ -257,9 +257,8 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
         : (currentUser.email?.split('@').first ?? 'Agent');
 
     final profile = context.read(currentAdminProfileProvider).value;
-    final currentUserEmail = currentUser.email ?? '';
     final role = profile?.role.toLowerCase() ?? '';
-    final isAdmin = role.contains('admin') || currentUserEmail == 'admin@tranyx.app' || currentUserEmail == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(role);
     final firestore = context.read(firestoreProvider);
 
     try {
@@ -327,9 +326,8 @@ class _GlobalP2PAlertManagerState extends State<GlobalP2PAlertManager> {
     final currentUser = context.watch(adminCurrentUserProvider).value;
     final profile = context.watch(currentAdminProfileProvider).value;
     final currentUid = currentUser?.uid ?? '';
-    final currentUserEmail = currentUser?.email ?? '';
     final role = profile?.role.toLowerCase() ?? '';
-    final isAdmin = role.contains('admin') || currentUserEmail == 'admin@tranyx.app' || currentUserEmail == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(role);
 
     final pendingSubs = subscriptionsAsync.value ?? [];
     final deposits = depositsAsync.value ?? [];

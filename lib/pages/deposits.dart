@@ -10,6 +10,7 @@ import 'package:jaspr_router/jaspr_router.dart';
 import 'package:web/web.dart' as web;
 
 import '../app.dart';
+import '../core/access/portal_role.dart';
 import '../core/providers/environment_provider.dart';
 import 'users.dart';
 import 'withdrawals.dart';
@@ -534,6 +535,7 @@ final depositRequestsStreamProvider = StreamProvider<List<DepositRequest>>((ref)
     emitMerged();
   }, onError: (err) {
     print('[Deposits] deposit_requests stream notice: $err');
+    if (!controller.isClosed) controller.addError(err);
   });
 
   final sub2 = firestore.collection('deposits').snapshots().listen((snap) {
@@ -1284,9 +1286,8 @@ class _DepositsPageState extends State<DepositsPage> {
     final usersAsync = context.watch(usersStreamProvider);
     final adminUser = context.watch(adminCurrentUserProvider).value;
     final profile = context.watch(currentAdminProfileProvider).value;
-    final userEmail = (profile?.email.isNotEmpty == true ? profile!.email : adminUser?.email) ?? '';
     final userRole = profile?.role.toLowerCase() ?? '';
-    final isAdmin = userRole.contains('admin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(userRole);
 
     final pendingSubscriptionsCount = context.watch(pendingSubscriptionsCountProvider);
     final allDeposits = depositsAsync.value ?? [];

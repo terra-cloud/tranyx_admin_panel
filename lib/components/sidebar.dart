@@ -5,6 +5,7 @@ import 'package:jaspr_router/jaspr_router.dart';
 
 import 'package:web/web.dart' as web;
 import '../app.dart';
+import '../core/access/portal_role.dart';
 import '../core/providers/environment_provider.dart';
 import '../core/services/presence_service.dart';
 import '../pages/kyc.dart';
@@ -48,9 +49,7 @@ class _SidebarState extends State<Sidebar> {
           email: 'agent@tranyx.com',
           role: 'staff',
         );
-    final isAdmin = profile.role.toLowerCase().contains('admin') ||
-        profile.email == 'admin@tranyx.app' ||
-        profile.email == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(profile.role);
     final currentPath = Router.of(context).matchList.uri.path;
 
     final pendingKycCount = context
