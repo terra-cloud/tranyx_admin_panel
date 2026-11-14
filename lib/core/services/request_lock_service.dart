@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 
+import '../access/portal_role.dart';
 import '../providers/environment_provider.dart';
 import 'presence_service.dart';
 
@@ -353,10 +354,9 @@ class RequestLockService {
 
       final d = uDoc.data();
       final role = (d['role'] as String? ?? '').toLowerCase();
-      final email = (d['email'] as String? ?? '').toLowerCase();
       final lastSeen = (d['lastSeenAt'] as num?)?.toInt() ?? 0;
       final isOnline = d['isOnline'] == true || (d['presenceStatus'] != 'offline' && lastSeen > 0 && (now - lastSeen) < 180000);
-      final isStaff = role == 'staff' || role == 'agent' || role == 'admin' || role == 'superadmin' || email.contains('admin') || email.contains('@tranyx') || isOnline;
+      final isStaff = portalRoleMayUsePortal(role);
 
       if (isStaff && (isOnline || (lastSeen > 0 && (now - lastSeen) < 180000))) {
         allOtherOnlineAgents.add({
@@ -459,10 +459,9 @@ class RequestLockService {
       for (final doc in usersSnap.docs) {
         final d = doc.data();
         final role = (d['role'] as String? ?? '').toLowerCase();
-        final email = (d['email'] as String? ?? '').toLowerCase();
         final isOnline = d['isOnline'] == true || (d['presenceStatus'] != 'offline');
         final lastSeen = (d['lastSeenAt'] as num?)?.toInt() ?? 0;
-        final isStaff = role == 'staff' || role == 'agent' || role == 'admin' || role == 'superadmin' || email.contains('admin') || email.contains('@tranyx') || isOnline;
+        final isStaff = portalRoleMayUsePortal(role);
 
         if (isStaff && isOnline && (lastSeen == 0 || (now - lastSeen) < 180000)) {
           onlineAgents.add({

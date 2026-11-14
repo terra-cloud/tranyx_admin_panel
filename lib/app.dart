@@ -7,6 +7,7 @@ import 'package:web/web.dart' as web;
 
 import 'components/global_p2p_alert_manager.dart';
 import 'components/sidebar.dart';
+import 'core/access/portal_role.dart';
 import 'core/config/firebase_environments.dart';
 import 'core/providers/environment_provider.dart';
 import 'core/services/presence_service.dart';
@@ -134,10 +135,8 @@ class AdminGuard extends StatelessComponent {
   @override
   Component build(BuildContext context) {
     final profile = context.watch(currentAdminProfileProvider).value;
-    final user = context.watch(adminCurrentUserProvider).value;
-    final email = (profile?.email.isNotEmpty == true ? profile!.email : user?.email) ?? '';
     final role = profile?.role.toLowerCase() ?? '';
-    final isAdmin = role.contains('admin') || email == 'admin@tranyx.app' || email == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(role);
 
     if (!isAdmin) {
       return div(classes: 'flex-1 p-8 flex flex-col items-center justify-center text-center gap-4 min-h-[60vh]', [
@@ -189,9 +188,8 @@ class _HeaderPanelState extends State<HeaderPanel> {
     final onlineAgents = context.watch(onlineAgentsStreamProvider).value ?? [];
     final isEnvAuthPending = envUser == null && adminUser != null;
 
-    final userEmail = profile.email.isNotEmpty ? profile.email : (adminUser?.email ?? '');
     final role = profile.role.toLowerCase();
-    final isAdmin = role.contains('admin') || role.contains('superadmin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(role);
 
     // Staff and Agents are locked to Production only
     if (!isAdmin && currentEnv != Environment.production) {

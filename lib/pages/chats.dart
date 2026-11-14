@@ -8,6 +8,7 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:riverpod/legacy.dart';
 
 import '../app.dart';
+import '../core/access/portal_role.dart';
 import '../core/providers/environment_provider.dart';
 import '../core/services/presence_service.dart';
 import '../core/services/request_lock_service.dart';
@@ -347,9 +348,8 @@ class _ChatsPageState extends State<ChatsPage> {
         : currentUser.email?.split('@').first ?? 'Agent';
 
     final profile = context.read(currentAdminProfileProvider).value;
-    final currentUserEmail = currentUser.email ?? '';
     final role = profile?.role.toLowerCase() ?? '';
-    final isAdmin = role.contains('admin') || currentUserEmail == 'admin@tranyx.app' || currentUserEmail == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(role);
 
     try {
       final firestore = context.read(firestoreProvider);
@@ -477,9 +477,8 @@ class _ChatsPageState extends State<ChatsPage> {
     final profile = context.watch(currentAdminProfileProvider).value;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
 
-    final userEmail = currentUser?.email ?? '';
     final role = profile?.role.toLowerCase() ?? '';
-    final isAdmin = role.contains('admin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(role);
     final currentUserId = currentUser?.uid ?? '';
 
     // Helper to resolve customer name

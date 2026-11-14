@@ -4,6 +4,7 @@ import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:web/web.dart' as web;
 
+import '../core/access/portal_role.dart';
 import '../core/providers/environment_provider.dart';
 
 class LoginPage extends StatefulComponent {
@@ -47,10 +48,8 @@ class _LoginPageState extends State<LoginPage> {
       // Verify the user exists in tranyx-admin-portal staff directory or is an admin
       final adminFirestore = context.read(adminFirestoreProvider);
       final userDoc = await adminFirestore.collection('users').doc(user.uid).get();
-      final email = user.email?.toLowerCase().trim() ?? '';
-      final isKnownAdmin = email.contains('admin') || email == 'admin@tranyx.app';
-
-      if (!userDoc.exists && !isKnownAdmin) {
+      final role = userDoc.exists ? (userDoc.data()?['role'] ?? '').toString() : '';
+      if (!portalRoleMayUsePortal(role)) {
         await auth.signOut();
         try {
           web.window.localStorage.removeItem('tranyx_staff_email');

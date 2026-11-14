@@ -9,6 +9,9 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:jaspr_riverpod/legacy.dart';
 
 import '../app.dart';
+import '../core/access/portal_role.dart';
+import '../core/access/staff_access_sync.dart';
+import '../core/services/staff_ops_service.dart';
 import '../core/providers/environment_provider.dart';
 import '../core/config/firebase_environments.dart';
 
@@ -695,6 +698,21 @@ class _UsersPageState extends State<UsersPage> {
     }
   }
 
+  Future<void> _syncStaffAccess(BuildContext context, String email, String role) async {
+    final caller = context.read(adminAuthProvider).currentUser?.email ?? '';
+    try {
+      final data = buildSyncStaffAccessData(callerEmail: caller, staffEmail: email, portalRole: role);
+      final app = await context.read(firebaseAppProvider.future);
+      await callWorkspaceCallable(app, 'syncStaffAccess', data);
+      final env = context.read(activeEnvironmentProvider);
+      _showToast('Access sync requested for $email on ${env.name}. Claims are set by the workspace function, not by this browser.');
+    } on StaffOpsException catch (e) {
+      _showToast('Sync access failed: ${e.message}');
+    } catch (e) {
+      _showToast('Sync access failed: $e');
+    }
+  }
+
   void _showToast(String msg) {
     context.read(toastMessageProvider.notifier).state = msg;
     Future.delayed(const Duration(seconds: 4), () {
@@ -781,9 +799,8 @@ class _UsersPageState extends State<UsersPage> {
     final user = context.watch(adminCurrentUserProvider).value;
     final toast = context.watch(toastMessageProvider);
 
-    final userEmail = (profile?.email.isNotEmpty == true ? profile!.email : user?.email) ?? '';
     final userRole = profile?.role.toLowerCase() ?? '';
-    final isAdmin = userRole.contains('admin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(userRole);
 
     if (!isAdmin && (activeTab == 'support' || activeTab == 'admin')) {
       Future.microtask(() => context.read(usersTabProvider.notifier).state = 'platform');
@@ -1564,7 +1581,38 @@ class _UsersPageState extends State<UsersPage> {
                 ],
               ]),
               // Add Agent / Admin button (on support and admin tabs)
-              if ((activeTab == 'support' || activeTab == 'admin') && isAdmin)
+              if ((activeTab == 'support' || activeTab == 'admin') && isAdmin) ...[
+                button(
+                  onClick: () async {
+                    final people = context.read(adminUsersStreamProvider).value ?? [];
+                    final targets = people.where((person) {
+                      final r = person.role?.toLowerCase().trim() ?? '';
+                      if (activeTab == 'admin') return r == 'admin' || r == 'superadmin' || r == 'super_admin';
+                      return r.isNotEmpty && r != 'admin' && r != 'superadmin' && r != 'super_admin' && r != 'user';
+                    }).toList();
+                    var failed = 0;
+                    for (final person in targets) {
+                      final caller = context.read(adminAuthProvider).currentUser?.email ?? '';
+                      try {
+                        final data = buildSyncStaffAccessData(
+                          callerEmail: caller,
+                          staffEmail: person.email,
+                          portalRole: person.role ?? '',
+                        );
+                        final app = await context.read(firebaseAppProvider.future);
+                        await callWorkspaceCallable(app, 'syncStaffAccess', data);
+                      } catch (_) {
+                        failed++;
+                      }
+                    }
+                    final env = context.read(activeEnvironmentProvider);
+                    _showToast(
+                      'Sync all on ${env.name}: ${targets.length - failed} requested, $failed failed. Claims are set only by the workspace syncStaffAccess function.',
+                    );
+                  },
+                  classes: 'px-4 py-2.5 border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800 text-xs font-extrabold rounded-full',
+                  [Component.text('Sync all access')],
+                ),
                 button(
                   onClick: () => setState(() => _showAddAgentForm = !_showAddAgentForm),
                   classes:
@@ -1575,6 +1623,7 @@ class _UsersPageState extends State<UsersPage> {
                     Component.text(_showAddAgentForm ? 'Cancel' : (activeTab == 'admin' ? 'Add Admin' : 'Add Agent')),
                   ],
                 ),
+              ],
             ]),
           ],
         ),
@@ -1789,8 +1838,14 @@ class _UsersPageState extends State<UsersPage> {
                                     Component.text('Photo'),
                                   ],
                                 ),
-                              if (u.email.toLowerCase() == 'admin@tranyx.app')
-                                span(classes: 'text-[10px] font-bold text-zinc-400 px-3 py-1.5', [Component.text('Protected Root')])
+                              if (isAdmin)
+                                button(
+                                  onClick: () => _syncStaffAccess(context, u.email, u.role ?? ''),
+                                  classes: 'px-3 py-1.5 border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 text-[10px] font-extrabold rounded-full transition-all cursor-pointer',
+                                  [Component.text('Sync access')],
+                                ),
+                              if (u.uid == user?.uid)
+                                span(classes: 'text-[10px] font-bold text-zinc-400 px-3 py-1.5', [Component.text('You')])
                               else if (isAdmin)
                                 button(
                                   onClick: () async {

@@ -7,6 +7,7 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:web/web.dart' as web;
 
 import '../app.dart';
+import '../core/access/portal_role.dart';
 import '../core/config/firebase_environments.dart';
 import '../core/providers/environment_provider.dart';
 import '../core/services/mailtrap_email_service.dart';
@@ -493,9 +494,8 @@ class _SettingsPageState extends State<SettingsPage> {
         );
     final systemConfigAsync = context.watch(systemConfigStreamProvider);
 
-    final userEmail = profile.email.isNotEmpty ? profile.email : (user?.email ?? '');
     final role = profile.role.toLowerCase();
-    final isAdmin = role.contains('admin') || userEmail == 'admin@tranyx.app' || userEmail == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(role);
 
     // Populate initial system config values once loaded
     if (!_configInitialized && systemConfigAsync.hasValue) {

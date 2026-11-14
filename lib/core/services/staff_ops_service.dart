@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:http/http.dart' as http;
 import 'package:web/web.dart' as web;
 
+import '../access/staff_access_sync.dart';
 import 'staff_ops_contract.dart';
 import 'staff_ops_errors.dart';
 
@@ -187,6 +190,69 @@ Future<void> _activateAppCheck(FirebaseApp app, AppCheckClientConfig config) asy
       detailCode: 'APP_CHECK_NOT_CONFIGURED',
     );
   }
+}
+
+/// Calls a workspace HTTPS callable other than `staffOps` (for example `syncStaffAccess`).
+/// Uses the selected workspace app's ID token and App Check token. The body is sent as the
+/// callable `data` object and is not treated as a staffOps action.
+Future<Map<String, dynamic>> callWorkspaceCallable(
+  FirebaseApp app,
+  String functionName,
+  Map<String, dynamic> data, {
+  Duration timeout = const Duration(seconds: 70),
+}) async {
+  final user = FirebaseAuth.instanceFor(app: app).currentUser;
+  if (user == null) {
+    throw const StaffOpsException(
+      'unauthenticated',
+      'You are not signed in to this environment. Sign out and in again.',
+    );
+  }
+  const functionsBaseUrl = String.fromEnvironment('FUNCTIONS_BASE_URL');
+  final url = callableUrl(
+    projectId: app.options.projectId,
+    functionsBaseUrl: functionsBaseUrl,
+    functionName: functionName,
+  );
+
+  Future<http.Response> post(String idToken, String appCheckToken) {
+    return http
+        .post(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $idToken',
+            'X-Firebase-AppCheck': appCheckToken,
+          },
+          body: jsonEncode({'data': data}),
+        )
+        .timeout(timeout);
+  }
+
+  http.Response res;
+  try {
+    final idToken = await user.getIdToken();
+    if (idToken == null || idToken.isEmpty) {
+      throw const StaffOpsException('unauthenticated', 'You are not signed in to this environment. Sign out and in again.');
+    }
+    final appCheck = await _appCheckToken(app, limitedUse: false);
+    res = await post(idToken, appCheck);
+    if (res.statusCode == 401) {
+      final refreshed = await user.getIdToken(true);
+      if (refreshed == null || refreshed.isEmpty) {
+        throw const StaffOpsException('unauthenticated', 'You are not signed in to this environment. Sign out and in again.');
+      }
+      res = await post(refreshed, await _appCheckToken(app, limitedUse: true));
+    }
+  } on StaffOpsException {
+    rethrow;
+  } catch (_) {
+    throw const StaffOpsException(
+      'network',
+      'The workspace function could not be reached. It may not be deployed for this environment yet.',
+    );
+  }
+  return parseStaffOpsResponse(res.statusCode, res.body, presentedAppCheckToken: true);
 }
 
 /// Drops a debug provider left in web storage by an emulator session so a later

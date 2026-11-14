@@ -413,6 +413,7 @@ final withdrawalRequestsStreamProvider = StreamProvider<List<WithdrawalRequest>>
     emitMerged();
   }, onError: (err) {
     print('[Withdrawals] withdrawal_requests stream notice: $err');
+    if (!controller.isClosed) controller.addError(err);
   });
 
   final sub2 = firestore.collection('withdrawals').snapshots().listen((snap) {

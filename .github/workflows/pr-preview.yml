@@ -5,6 +5,13 @@ on:
     branches:
       - main
 
+# The hosting action opens a "Deploy Preview" check and comments the preview URL.
+# The repo token is read-only unless the workflow asks for these scopes.
+permissions:
+  checks: write
+  contents: read
+  pull-requests: write
+
 jobs:
   build_and_preview:
     name: Test and Build Preview

@@ -7,6 +7,7 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 import 'package:riverpod/legacy.dart';
 
 import '../app.dart';
+import '../core/access/portal_role.dart';
 import '../core/providers/environment_provider.dart';
 import '../core/services/presence_service.dart';
 import '../core/services/request_lock_service.dart';
@@ -297,10 +298,8 @@ class _TicketsPageState extends State<TicketsPage> {
         : (currentUser.email?.split('@').first ?? 'Agent');
 
     final profile = context.read(currentAdminProfileProvider).value;
-    final currentUserEmail = currentUser.email ?? 'admin@tranyx.app';
     final role = profile?.role.toLowerCase() ?? '';
-    final isAdmin =
-        role.contains('admin') || currentUserEmail == 'admin@tranyx.app' || currentUserEmail == 'admin@tranyx.com';
+    final isAdmin = portalRoleIsAdmin(role);
 
     final firestore = context.read(firestoreProvider);
 
@@ -529,8 +528,7 @@ class _TicketsPageState extends State<TicketsPage> {
     final ticketsAsync = context.watch(ticketsStreamProvider);
     final users = context.watch(usersStreamProvider).value ?? [];
     final currentUser = context.watch(adminCurrentUserProvider).value;
-    final currentUserEmail = currentUser?.email ?? '';
-    final isAdmin = currentUserEmail.toLowerCase().contains('admin') || currentUserEmail == 'admin@tranyx.app';
+    final isAdmin = portalRoleIsAdmin(context.watch(currentAdminProfileProvider).value?.role);
     final currentUserId = currentUser?.uid ?? '';
     final config = context.watch(systemConfigStreamProvider).value ?? const SystemConfigModel();
     final onlineAgents = context.watch(onlineAgentsStreamProvider).value ?? [];
