@@ -61,44 +61,16 @@ final adminAuthUserProvider = StreamProvider<User?>((ref) {
   return auth.userChanges();
 });
 
-/// Synchronizes admin authentication into the selected environment so that
-/// security rules recognizing `isAdminOrStaff()` succeed without 403 PERMISSION_DENIED.
+/// Signs the staff member into the selected workspace Firebase app so `staffOps` can send
+/// that project's ID token. Does not write `users` or `p2p_agents` role flags. Those
+/// documents are not authorization. Staff claims have to be set on the server.
 Future<User?> syncEnvAuth(FirebaseApp app, User? adminUser, {String? explicitPassword}) async {
   if (adminUser == null) return null;
   try {
     final envAuth = FirebaseAuth.instanceFor(app: app);
 
-    // If already authenticated on this environment app, bootstrap records and return immediately
     if (envAuth.currentUser != null) {
-      final currentUser = envAuth.currentUser;
-      final envUid = currentUser?.uid;
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      final firestore = FirebaseFirestore.instanceFor(app: app);
-
-      if (envUid != null) {
-        final staffEmail = currentUser?.email ?? adminUser.email ?? 'admin@tranyx.app';
-        try {
-          await firestore.collection('p2p_agents').doc(envUid).set({
-            'uid': envUid,
-            'email': staffEmail,
-            'role': 'agent',
-            'isActive': true,
-            'updatedAt': nowMs,
-          }, SetOptions(merge: true));
-          await firestore.collection('users').doc(envUid).set({
-            'uid': envUid,
-            'email': staffEmail,
-            'role': 'admin',
-            'isAdmin': true,
-            'isP2pAgent': true,
-            'name': adminUser.displayName ?? 'Staff Admin',
-            'updatedAt': nowMs,
-          }, SetOptions(merge: true));
-        } catch (docErr) {
-          print('[EnvAuthSync] Document bootstrap notice on ${app.name}: $docErr');
-        }
-      }
-      return currentUser;
+      return envAuth.currentUser;
     }
 
     final savedEmail = web.window.localStorage.getItem('tranyx_staff_email') ?? adminUser.email;
@@ -150,36 +122,7 @@ Future<User?> syncEnvAuth(FirebaseApp app, User? adminUser, {String? explicitPas
       print('[EnvAuthSync] Staff password not in local session on ${app.name}. User: ${adminUser.email}.');
     }
 
-    final currentUser = envAuth.currentUser;
-    final envUid = currentUser?.uid;
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    final firestore = FirebaseFirestore.instanceFor(app: app);
-
-    if (envUid != null) {
-      final staffEmail = currentUser?.email ?? adminUser.email ?? 'admin@tranyx.app';
-      try {
-        await firestore.collection('p2p_agents').doc(envUid).set({
-          'uid': envUid,
-          'email': staffEmail,
-          'role': 'agent',
-          'isActive': true,
-          'updatedAt': nowMs,
-        }, SetOptions(merge: true));
-        await firestore.collection('users').doc(envUid).set({
-          'uid': envUid,
-          'email': staffEmail,
-          'role': 'admin',
-          'isAdmin': true,
-          'isP2pAgent': true,
-          'name': adminUser.displayName ?? 'Staff Admin',
-          'updatedAt': nowMs,
-        }, SetOptions(merge: true));
-      } catch (docErr) {
-        print('[EnvAuthSync] Document bootstrap notice on ${app.name}: $docErr');
-      }
-    }
-
-    return currentUser;
+    return envAuth.currentUser;
   } catch (e) {
     print('[EnvAuthSync] Sync notice on ${app.name}: $e');
     return null;

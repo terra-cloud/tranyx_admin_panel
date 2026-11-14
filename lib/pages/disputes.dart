@@ -6,6 +6,7 @@ import 'package:jaspr_riverpod/jaspr_riverpod.dart';
 
 import '../app.dart';
 import '../core/providers/environment_provider.dart';
+import '../core/services/staff_ops_service.dart';
 
 /// Represents a customer gig dispute submitted for admin arbitration.
 class DisputeItem {
@@ -123,6 +124,7 @@ class _DisputesPageState extends State<DisputesPage> {
   double _nyxianPercent = 50.0;
   bool _isExecuting = false;
   String? _executionError;
+  final StaffOpsIdempotencyKeys _staffOpsKeys = StaffOpsIdempotencyKeys();
 
   void _openArbitrationModal(DisputeItem dispute) {
     setState(() {
@@ -149,9 +151,6 @@ class _DisputesPageState extends State<DisputesPage> {
     final dispute = _selectedDispute;
     if (dispute == null) return;
 
-    final user = context.read(adminCurrentUserProvider).value;
-    final adminUid = user?.uid ?? 'admin';
-
     if (_notes.trim().length < 10) {
       setState(() => _executionError = 'Please enter at least 10 characters explaining your arbitration rationale.');
       return;
@@ -163,136 +162,44 @@ class _DisputesPageState extends State<DisputesPage> {
     });
 
     try {
-      final activeFirestore = context.read(firestoreProvider);
-      final adminFirestore = context.read(adminFirestoreProvider);
-      final nowMillis = DateTime.now().millisecondsSinceEpoch;
-
-      final jobId = dispute.jobId;
-      final employerId = dispute.employerId;
-      final nyxianId = dispute.acceptedNyxianId;
-      final escrowAmount = dispute.escrowAmount;
-
-      double refundToEmployer = 0.0;
-      double payoutToNyxian = 0.0;
-
-      if (_resolutionType == 'REFUND_EMPLOYER') {
-        refundToEmployer = escrowAmount;
-        payoutToNyxian = 0.0;
-      } else if (_resolutionType == 'PAY_NYXIAN') {
-        refundToEmployer = 0.0;
-        payoutToNyxian = escrowAmount;
-      } else {
-        refundToEmployer = (escrowAmount * (_employerPercent / 100.0));
-        payoutToNyxian = (escrowAmount * (_nyxianPercent / 100.0));
-      }
-
-      // 1. Credit Employer Wallet if refund > 0
-      if (refundToEmployer > 0 && employerId.isNotEmpty) {
-        final empDoc = await activeFirestore.collection('users').doc(employerId).get();
-        final currentBal = (empDoc.data()?['tyxBalance'] as num?)?.toDouble() ?? 0.0;
-        await activeFirestore.collection('users').doc(employerId).set({
-          'tyxBalance': currentBal + refundToEmployer,
-        }, SetOptions(merge: true));
-
-        // Transaction log for employer
-        await activeFirestore.collection('transactions').doc('refund_dispute_${dispute.id}').set({
-          'id': 'refund_dispute_${dispute.id}',
-          'uid': employerId,
-          'jobId': jobId,
-          'disputeId': dispute.id,
-          'type': 'refund',
-          'category': 'refund',
-          'amount': refundToEmployer,
-          'title': 'Dispute Arbitration Refund',
-          'desc': 'Escrow refund of ₱${refundToEmployer.toStringAsFixed(2)} for gig "${dispute.jobTitle}" via admin arbitration.',
-          'status': 'Completed',
-          'method': 'Tranyx Escrow',
-          'originRail': 'internal_balance',
-          'createdAt': nowMillis,
-        });
-      }
-
-      // 2. Credit Nyxian Wallet if payout > 0
-      if (payoutToNyxian > 0 && nyxianId.isNotEmpty && nyxianId != 'None') {
-        final nyxDoc = await activeFirestore.collection('users').doc(nyxianId).get();
-        final currentBal = (nyxDoc.data()?['tyxBalance'] as num?)?.toDouble() ?? 0.0;
-        await activeFirestore.collection('users').doc(nyxianId).set({
-          'tyxBalance': currentBal + payoutToNyxian,
-        }, SetOptions(merge: true));
-
-        // Transaction log for Nyxian
-        await activeFirestore.collection('transactions').doc('payout_dispute_${dispute.id}').set({
-          'id': 'payout_dispute_${dispute.id}',
-          'uid': nyxianId,
-          'jobId': jobId,
-          'disputeId': dispute.id,
-          'type': 'payout',
-          'category': 'earnings',
-          'amount': payoutToNyxian,
-          'title': 'Dispute Arbitration Payout',
-          'desc': 'Escrow payout of ₱${payoutToNyxian.toStringAsFixed(2)} for gig "${dispute.jobTitle}" via admin arbitration.',
-          'status': 'Completed',
-          'method': 'Tranyx Escrow',
-          'originRail': 'internal_balance',
-          'createdAt': nowMillis,
-        });
-      }
-
-      // 3. Update Escrow Document
-      final escrowStatus = _resolutionType == 'REFUND_EMPLOYER'
-          ? 'refunded'
-          : (_resolutionType == 'PAY_NYXIAN' ? 'released' : 'split_resolved');
-      await activeFirestore.collection('escrow').doc(jobId).set({
-        'status': escrowStatus,
-        'resolvedViaDispute': true,
-        'disputeId': dispute.id,
-        'employerRefund': refundToEmployer,
-        'nyxianPayout': payoutToNyxian,
-        'resolvedAt': nowMillis,
-        'resolvedBy': adminUid,
-      }, SetOptions(merge: true));
-
-      // 4. Update Job Document Status
-      final jobStatus = _resolutionType == 'REFUND_EMPLOYER' ? 'Cancelled' : 'Completed';
-      await activeFirestore.collection('jobs').doc(jobId).set({
-        'status': jobStatus,
-        'resolvedDisputeId': dispute.id,
-        'updatedAt': nowMillis,
-      }, SetOptions(merge: true));
-
-      // 5. In-chat system resolution notice
-      try {
-        final msgId = 'msg_res_$nowMillis';
-        await activeFirestore.collection('chats').doc(jobId).collection('messages').doc(msgId).set({
-          'senderId': 'system',
-          'senderName': 'Tranyx Arbitration',
-          'type': 'dispute_resolved',
+      // The server derives the parties and the escrow amount from the job + escrow docs (the dispute doc is
+      // user-created) and settles the wallets, escrow, job, dispute and chat notice in one transaction, once.
+      final app = await context.read(firebaseAppProvider.future);
+      final res = await withStableStaffOpsKey(
+        _staffOpsKeys,
+        'resolveDispute',
+        dispute.id,
+        (key) => callStaffOps(app, 'resolveDispute', {
           'disputeId': dispute.id,
           'resolutionType': _resolutionType,
-          'text': 'Dispute resolved by Admin. Ruling: ${_resolutionType.replaceAll('_', ' ')}. Refund: ₱${refundToEmployer.toStringAsFixed(2)}, Payout: ₱${payoutToNyxian.toStringAsFixed(2)}. Notes: "${_notes.trim()}"',
-          'createdAt': nowMillis,
-        });
-        await activeFirestore.collection('chats').doc(jobId).set({
-          'updatedAt': nowMillis,
+          'employerPercent': _employerPercent,
+          'nyxianPercent': _nyxianPercent,
+          'notes': _notes.trim(),
+        }, idempotencyKey: key),
+      );
+
+      // Mirror the ruling into the admin-portal project's dispute record (non-money bookkeeping).
+      try {
+        final adminFirestore = context.read(adminFirestoreProvider);
+        final adminUid = context.read(adminCurrentUserProvider).value?.uid ?? 'admin';
+        await adminFirestore.collection('disputes').doc(dispute.id).set({
+          'status': 'RESOLVED',
+          'resolvedAt': DateTime.now().millisecondsSinceEpoch,
+          'resolvedBy': adminUid,
+          'resolutionType': _resolutionType,
+          'resolutionNotes': _notes.trim(),
+          'employerRefund': res['employerRefund'],
+          'nyxianPayout': res['nyxianPayout'],
+          'updatedAt': DateTime.now().millisecondsSinceEpoch,
         }, SetOptions(merge: true));
       } catch (_) {}
 
-      // 6. Update Dispute Document itself in both firestores
-      final disputeUpdate = {
-        'status': 'RESOLVED',
-        'resolvedAt': nowMillis,
-        'resolvedBy': adminUid,
-        'resolutionType': _resolutionType,
-        'resolutionNotes': _notes.trim(),
-        'employerRefund': refundToEmployer,
-        'nyxianPayout': payoutToNyxian,
-        'updatedAt': nowMillis,
-      };
-
-      await activeFirestore.collection('disputes').doc(dispute.id).set(disputeUpdate, SetOptions(merge: true));
-      await adminFirestore.collection('disputes').doc(dispute.id).set(disputeUpdate, SetOptions(merge: true)).catchError((_) {});
-
       _closeArbitrationModal();
+    } on StaffOpsException catch (e) {
+      setState(() {
+        _isExecuting = false;
+        _executionError = 'Arbitration failed: ${e.message}';
+      });
     } catch (e) {
       print('[Disputes] Error resolving dispute: $e');
       setState(() {

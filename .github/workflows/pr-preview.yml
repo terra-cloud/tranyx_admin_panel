@@ -35,11 +35,6 @@ jobs:
           tailwindcss -i web/styles.tw.css -o web/styles.css --minify
           cp web/styles.css web/main.css
 
-      - name: Install Jaspr CLI
-        run: |
-          flutter pub global activate jaspr_cli
-          echo "$HOME/.pub-cache/bin" >> $GITHUB_PATH
-
       - name: Inject Environment Secrets
         run: |
           if [ -n "${{ secrets.IMGBB_API_KEY }}" ]; then
@@ -63,9 +58,9 @@ jobs:
           MAIL_TRAP_TOKEN: ${{ secrets.MAIL_TRAP_TOKEN || secrets.MAILTRAP_TOKEN }}
           MAIL_TRAP_PROXY_URL: ${{ secrets.MAIL_TRAP_PROXY_URL }}
           MAIL_TRAP_INBOX_ID: ${{ secrets.MAIL_TRAP_INBOX_ID }}
+          APP_CHECK_RECAPTCHA_ENTERPRISE_SITE_KEY_PROD: 6LcSphouAAAAAHFEBkUyC0F8wK01xo3FGyrVCjtM
         run: |
-          jaspr clean
-          jaspr build \
+          dart run tool/build_portal.dart --release -- \
             --dart-define=IMGBB_API_KEY="${{ secrets.IMGBB_API_KEY }}" \
             --dart-define=MAIL_TRAP_TOKEN="${{ secrets.MAIL_TRAP_TOKEN || secrets.MAILTRAP_TOKEN }}" \
             --dart-define=MAIL_TRAP_PROXY_URL="${{ secrets.MAIL_TRAP_PROXY_URL }}" \
