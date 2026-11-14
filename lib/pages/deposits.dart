@@ -622,6 +622,7 @@ class _DepositsPageState extends State<DepositsPage> {
   // Dialog workflow states
   bool _showRejectModal = false;
   bool _isProcessing = false;
+  final StaffOpsIdempotencyKeys _staffOpsKeys = StaffOpsIdempotencyKeys();
   String? _toastMessage;
 
   // Rejection form states
@@ -1143,7 +1144,12 @@ class _DepositsPageState extends State<DepositsPage> {
       // The credit amount and the depositor come from the deposit request on the server (not from this page); the
       // reference registry check, the one-time credit, ledger, notification and audit entry run in one transaction.
       final app = await context.read(firebaseAppProvider.future);
-      final res = await callStaffOps(app, 'approveDeposit', {'depositId': deposit.id});
+      final res = await withStableStaffOpsKey(
+        _staffOpsKeys,
+        'approveDeposit',
+        deposit.id,
+        (key) => callStaffOps(app, 'approveDeposit', {'depositId': deposit.id}, idempotencyKey: key),
+      );
       final credited = (res['credited'] as num?)?.toDouble() ?? deposit.amount;
       _triggerToast('Deposit approved! ₱${credited.toStringAsFixed(2)} credited to ${deposit.userName}.');
       setState(() {
