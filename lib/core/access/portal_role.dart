@@ -1,5 +1,9 @@
+/// City partner desk. Not an admin, staff, or agent role.
+///
 /// Roles stored on the admin-portal staff directory (`tranyx-admin-portal` `users/{uid}.role`).
 /// Email text is not a role and does not grant access.
+bool portalRoleIsPartner(String? role) => (role ?? '').toLowerCase().trim() == 'partner';
+
 bool portalRoleIsAdmin(String? role) {
   switch ((role ?? '').toLowerCase().trim()) {
     case 'admin':
@@ -21,6 +25,7 @@ bool portalRoleMayUsePortal(String? role) {
     case 'support':
     case 'agent':
     case 'p2p_agent':
+    case 'partner':
       return true;
     default:
       return false;

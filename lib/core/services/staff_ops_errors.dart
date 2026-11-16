@@ -16,6 +16,26 @@ class StaffOpsException implements Exception {
   String toString() => message;
 }
 
+/// Firebase callable `error.details` is either `{code}` or a list of maps with `code` / `reason`.
+String? _callableDetailCode(dynamic details) {
+  String? fromMap(Map map) {
+    final code = map['code'] ?? map['reason'];
+    final text = code?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
+  }
+
+  if (details is Map) return fromMap(details);
+  if (details is List) {
+    for (final item in details) {
+      if (item is Map) {
+        final code = fromMap(item);
+        if (code != null) return code;
+      }
+    }
+  }
+  return null;
+}
+
 /// Turns the callable HTTP response into the function's `result` map, or throws a [StaffOpsException].
 ///
 /// When [presentedAppCheckToken] is true, HTTP 401 is explained as an auth or App Check
@@ -38,8 +58,7 @@ Map<String, dynamic> parseStaffOpsResponse(
   if (statusCode >= 400 || error is Map) {
     final e = error is Map ? error.cast<String, dynamic>() : <String, dynamic>{};
     final status = (e['status'] ?? 'INTERNAL').toString().toLowerCase().replaceAll('_', '-');
-    final details = e['details'];
-    var detailCode = details is Map ? details['code']?.toString() : null;
+    var detailCode = _callableDetailCode(e['details']);
     final message = (e['message'] ?? 'The request failed.').toString();
     final lower = message.toLowerCase();
     if (detailCode == null && (lower.contains('app check') || lower.contains('appcheck'))) {
