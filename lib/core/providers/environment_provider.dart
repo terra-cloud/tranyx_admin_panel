@@ -230,6 +230,7 @@ class AdminStaffProfileModel {
     if (r == 'admin' || r == 'superadmin') return 'Administrator';
     if (r == 'support' || r == 'support_agent') return 'Support Agent';
     if (r == 'agent' || r == 'p2p_agent') return 'P2P Agent';
+    if (r == 'partner') return 'City Partner';
     if (r == 'staff') return 'Staff Member';
     if (r.isNotEmpty) return role.toUpperCase();
     return 'Staff';

@@ -50,6 +50,7 @@ class _SidebarState extends State<Sidebar> {
           role: 'staff',
         );
     final isAdmin = portalRoleIsAdmin(profile.role);
+    final isPartner = portalRoleIsPartner(profile.role);
     final currentPath = Router.of(context).matchList.uri.path;
 
     final pendingKycCount = context
@@ -216,6 +217,13 @@ class _SidebarState extends State<Sidebar> {
             // Main Nav Items (Grouped)
             nav(classes: 'w-full overflow-y-auto max-h-[calc(100vh-230px)] no-scrollbar pr-0.5', [
               ul(classes: 'flex flex-col gap-1.5 list-none p-0 m-0 w-full', [
+                if (isPartner) ...[
+                  if (!_isCollapsed)
+                    li(classes: 'px-3 pt-2 pb-1 text-[9px] font-black tracking-wider text-zinc-400 uppercase', [
+                      Component.text('City partner'),
+                    ]),
+                  buildMenuItem('City Partner', '/partners', '🏙️'),
+                ] else ...[
                 // SECTION: Operations & Core
                 if (!_isCollapsed)
                   li(classes: 'px-3 pt-2 pb-1 text-[9px] font-black tracking-wider text-zinc-400 uppercase', [
@@ -248,6 +256,7 @@ class _SidebarState extends State<Sidebar> {
                   buildMenuItem('Promotions', '/promos', '/images/icon_promos.png'),
                   buildMenuItem('News & Banners', '/news', '📰'),
                   buildMenuItem('Abuse Reports', '/reports', '🚩', badgeCount: pendingReportsCount),
+                  buildMenuItem('City Partners', '/partners', '🏙️'),
                   buildMenuItem('System Console', '/settings', '/images/icon_settings.png'),
                 ] else ...[
                   if (!_isCollapsed)
@@ -255,6 +264,7 @@ class _SidebarState extends State<Sidebar> {
                       Component.text('Compliance'),
                     ]),
                   buildMenuItem('Abuse Reports', '/reports', '🚩', badgeCount: pendingReportsCount),
+                ],
                 ],
               ]),
             ]),
@@ -390,6 +400,9 @@ class _SidebarState extends State<Sidebar> {
               'md:hidden fixed inset-x-0 top-[53px] bg-white border-b border-zinc-200 z-40 p-5 flex flex-col gap-5 shadow-2xl transition-all duration-300',
           [
             ul(classes: 'flex flex-col gap-2.5 list-none p-0 m-0', [
+              if (isPartner)
+                buildMobileMenuItem('City Partner', '/partners', '🏙️')
+              else ...[
               buildMobileMenuItem('Dashboard', '/', '/images/icon_dashboard.png'),
               buildMobileMenuItem('P2P Deposits', '/deposits', '💳', badgeCount: pendingDepositsCount),
               buildMobileMenuItem('P2P Cashouts', '/withdrawals', '💸', badgeCount: pendingWithdrawalsCount),
@@ -409,7 +422,9 @@ class _SidebarState extends State<Sidebar> {
               if (isAdmin) ...[
                 buildMobileMenuItem('Promotions', '/promos', '/images/icon_promos.png'),
                 buildMobileMenuItem('News & Banners', '/news', '📰'),
+                buildMobileMenuItem('City Partners', '/partners', '🏙️'),
                 buildMobileMenuItem('System Console', '/settings', '/images/icon_settings.png'),
+              ],
               ],
             ]),
             div(classes: 'border-t border-zinc-200 pt-4 flex justify-between items-center', [

@@ -27,6 +27,7 @@ import 'pages/deposits.dart';
 import 'pages/withdrawals.dart';
 import 'pages/subscriptions.dart';
 import 'pages/disputes.dart';
+import 'pages/partners.dart';
 
 /// Provider that streams the currently logged-in Admin staff member.
 final adminCurrentUserProvider = StreamProvider<User?>((ref) {
@@ -70,29 +71,39 @@ class AppShell extends StatelessComponent {
               : (user.displayName ?? (user.email?.split('@').first ?? 'Staff'));
           final photo = profile?.photoUrl ?? user.photoURL;
 
-          PresenceService.startPresenceHeartbeat(
-            firestore: firestore,
-            adminFirestore: adminFirestore,
-            agentUid: user.uid,
-            agentName: name,
-            email: user.email,
-            role: role,
-            photoUrl: photo,
-          );
+          if (!portalRoleIsPartner(role)) {
+            PresenceService.startPresenceHeartbeat(
+              firestore: firestore,
+              adminFirestore: adminFirestore,
+              agentUid: user.uid,
+              agentName: name,
+              email: user.email,
+              role: role,
+              photoUrl: photo,
+            );
+          }
 
           return Router(
             routes: [
               ShellRoute(
                 builder: (context, state, child) {
+                  final shellRole = context.watch(currentAdminProfileProvider).value?.role;
+                  final partnerOnly = portalRoleIsPartner(shellRole);
+                  if (partnerOnly && state.location != '/partners') {
+                    Future.microtask(() {
+                      Router.of(context).push('/partners');
+                    });
+                  }
                   return div(classes: 'relative flex flex-col md:flex-row min-h-screen w-full bg-[#eff2f0]', [
                     const Sidebar(),
                     div(classes: 'flex-1 flex flex-col min-h-screen min-w-0 w-full', [
                       const HeaderPanel(),
-                      div(classes: 'flex-1 page-transition w-full min-w-0', key: ValueKey(state.location), [child]),
+                      div(classes: 'flex-1 page-transition w-full min-w-0', key: ValueKey(state.location), [
+                        partnerOnly ? const PartnersPage() : child,
+                      ]),
                     ]),
 
-                    // Global Real-Time P2P Alert & Sound Interrupt Manager (Topmost DOM layer)
-                    const GlobalP2PAlertManager(),
+                    if (!partnerOnly) const GlobalP2PAlertManager(),
                   ]);
                 },
                 routes: [
@@ -111,6 +122,7 @@ class AppShell extends StatelessComponent {
                   Route(path: '/disputes', builder: (context, state) => const AdminGuard(child: DisputesPage())),
                   Route(path: '/users', builder: (context, state) => const UsersPage()),
                   Route(path: '/settings', builder: (context, state) => const AdminGuard(child: SettingsPage())),
+                  Route(path: '/partners', builder: (context, state) => const PartnersPage()),
                 ],
               ),
             ],
