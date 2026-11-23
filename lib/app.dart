@@ -88,7 +88,11 @@ class AppShell extends StatelessComponent {
               ShellRoute(
                 builder: (context, state, child) {
                   final shellRole = context.watch(currentAdminProfileProvider).value?.role;
+                  final portalUser = context.watch(adminCurrentUserProvider).value;
                   final partnerOnly = portalRoleIsPartner(shellRole);
+                  if (partnerOnly && portalUser?.emailVerified != true) {
+                    return const VerifyEmailPage();
+                  }
                   if (partnerOnly && state.location != '/partners') {
                     Future.microtask(() {
                       Router.of(context).push('/partners');

@@ -66,9 +66,19 @@ List<Map<String, dynamic>> partnerAreas(List<Map<String, String>> rows) {
   return areas;
 }
 
+/// Same rule as the callable. The password is sent once and must not be logged or stored.
+bool partnerPasswordIsStrong(String password) {
+  return password.length >= 8 &&
+      password.length <= 128 &&
+      password.contains(RegExp(r'[a-z]')) &&
+      password.contains(RegExp(r'[A-Z]')) &&
+      password.contains(RegExp(r'[0-9]'));
+}
+
 Map<String, dynamic> partnerCreateData({
   required String callerEmail,
   required String email,
+  required String password,
   required List<Map<String, String>> areas,
   int? licenseStart,
   int termMonths = 36,
@@ -77,6 +87,12 @@ Map<String, dynamic> partnerCreateData({
   final staff = email.trim().toLowerCase();
   if (!staff.contains('@') || staff.startsWith('@') || staff.endsWith('@')) {
     throw const StaffOpsException('invalid-argument', 'A partner email is required.');
+  }
+  if (!partnerPasswordIsStrong(password)) {
+    throw const StaffOpsException(
+      'invalid-argument',
+      'Password must be 8 to 128 characters and include a lowercase letter, an uppercase letter, and a digit.',
+    );
   }
   if (callerEmail.trim().toLowerCase() == staff) {
     throw const StaffOpsException(
@@ -94,6 +110,7 @@ Map<String, dynamic> partnerCreateData({
   return {
     'action': 'create',
     'email': staff,
+    'password': password,
     'areas': partnerAreas(areas),
     'licenseStart': ?licenseStart,
     'termMonths': termMonths,
@@ -139,17 +156,27 @@ Map<String, dynamic> partnerStatusData({required String action, required String 
 
 Map<String, dynamic> partnerAccountsData() => {'action': 'accounts'};
 
-Map<String, dynamic> partnerPasswordSetupData({required String email, String? portalOrigin}) {
+Map<String, dynamic> partnerResendVerificationData({required String email}) {
   final staff = email.trim().toLowerCase();
-  if (!staff.contains('@')) {
-    throw const StaffOpsException('invalid-argument', 'A partner email is required.');
-  }
-  return {
-    'action': 'passwordSetupLink',
-    'email': staff,
-    if (portalOrigin != null && portalOrigin.isNotEmpty) 'portalOrigin': portalOrigin,
-  };
+  if (!staff.contains('@')) throw const StaffOpsException('invalid-argument', 'A partner email is required.');
+  return {'action': 'resendVerification', 'email': staff};
 }
+
+Map<String, dynamic> partnerSetPasswordData({required String email, required String password}) {
+  final staff = email.trim().toLowerCase();
+  if (!staff.contains('@')) throw const StaffOpsException('invalid-argument', 'A partner email is required.');
+  if (!partnerPasswordIsStrong(password)) {
+    throw const StaffOpsException(
+      'invalid-argument',
+      'Password must be 8 to 128 characters and include a lowercase letter, an uppercase letter, and a digit.',
+    );
+  }
+  return {'action': 'setPartnerPassword', 'email': staff, 'password': password};
+}
+
+Map<String, dynamic> partnerRevenueData() => {'action': 'revenue'};
+
+Map<String, dynamic> partnerSyncVerificationData() => {'action': 'syncEmailVerified'};
 
 Map<String, dynamic> partnerProfileData() => {'action': 'profile'};
 

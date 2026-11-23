@@ -1,9 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
-import 'package:web/web.dart' as web;
 
 import '../core/access/partner_contract.dart';
+import '../core/services/mailtrap_email_service.dart';
 import '../core/access/portal_role.dart';
 import '../core/providers/environment_provider.dart';
 import '../core/services/staff_ops_service.dart';
@@ -37,11 +38,14 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
   String? _error;
   String? _notice;
   String? _editingId;
-  String? _setupEmail;
-  String? _setupLink;
+  String? _resetEmail;
   List<Map<String, dynamic>> _partners = [];
 
   String _email = '';
+  String _password = '';
+  String _confirm = '';
+  String _resetPassword = '';
+  String _resetConfirm = '';
   String _licenseStart = '';
   String _termMonths = '36';
   String _fee = '0';
@@ -61,7 +65,7 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
           h1(classes: 'text-lg font-black text-zinc-900', [Component.text('City partners')]),
           p(classes: 'text-xs text-zinc-500 max-w-xl', [
             Component.text(
-              'Create a license, assign areas, and suspend or deactivate the account. An area with an active partner cannot be assigned again. No password is created here.',
+              'Create a license and an initial password. The password is sent once to create the sign-in and is not stored or shown again. The partner must verify their email before the desk opens.',
             ),
           ]),
         ]),
@@ -69,7 +73,6 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
       ]),
       if (_error != null) _banner(_error!, danger: true),
       if (_notice != null) _banner(_notice!, danger: false),
-      if (_setupLink != null && _setupLink!.isNotEmpty) _setupPanel(),
       if (_loading)
         p(classes: 'text-xs font-semibold text-zinc-400', [Component.text('Loading city partners...')])
       else ...[
@@ -85,6 +88,8 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
   void _openCreate() {
     _editingId = null;
     _email = '';
+    _password = '';
+    _confirm = '';
     _licenseStart = '';
     _termMonths = '36';
     _fee = '0';
@@ -116,7 +121,11 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
     final editing = _editingId != null;
     return div(classes: 'bg-white border border-zinc-200 rounded-2xl p-4 flex flex-col gap-3', [
       h2(classes: 'text-sm font-black', [Component.text(editing ? 'Edit ${_editingId!}' : 'New partner')]),
-      if (!editing) _field('Email', _email, (value) => setState(() => _email = value), type: 'email'),
+      if (!editing) ...[
+        _field('Email', _email, (value) => setState(() => _email = value), type: 'email'),
+        _field('Initial password', _password, (value) => setState(() => _password = value), type: 'password'),
+        _field('Confirm password', _confirm, (value) => setState(() => _confirm = value), type: 'password'),
+      ],
       _field('License start', _licenseStart, (value) => setState(() => _licenseStart = value), type: 'date'),
       div(classes: 'grid gap-3 sm:grid-cols-2', [
         _field('Term months', _termMonths, (value) => setState(() => _termMonths = value), type: 'number'),
@@ -160,6 +169,9 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
             Component.text('$id · ${row['status'] ?? 'unknown'} · ${_areaText(row['areas'])}'),
           ]),
         ]),
+        span(classes: 'text-[11px] font-bold ${row['emailVerified'] == true ? 'text-emerald-700' : 'text-amber-700'}', [
+          Component.text(row['emailVerified'] == true ? 'Verified' : 'Unverified'),
+        ]),
         span(classes: 'text-[11px] text-zinc-500', [
           Component.text('Starts ${_when(row['licenseStart'])} · ${row['termMonths'] ?? 36} months · renews ${_when(row['renewalDate'])} · fee ${_money(row['licenseFeePaid'])}'),
         ]),
@@ -169,7 +181,15 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
         button(classes: _secondary, onClick: _busy ? null : () => _status('suspend', id), [Component.text('Suspend')]),
         button(classes: _secondary, onClick: _busy ? null : () => _status('deactivate', id), [Component.text('Deactivate')]),
         button(classes: _secondary, onClick: _busy ? null : () => _status('reinstate', id), [Component.text('Reinstate')]),
+        button(classes: _secondary, onClick: _busy ? null : () => _resendVerification('${row['email'] ?? ''}'), [Component.text('Resend verification email')]),
+        button(classes: _secondary, onClick: () => setState(() => _resetEmail = _resetEmail == id ? null : id), [Component.text('Reset password')]),
       ]),
+      if (_resetEmail == id)
+        div(classes: 'grid gap-2 sm:grid-cols-2', [
+          _field('New password', _resetPassword, (value) => setState(() => _resetPassword = value), type: 'password'),
+          _field('Confirm new password', _resetConfirm, (value) => setState(() => _resetConfirm = value), type: 'password'),
+          button(classes: _primary, onClick: _busy ? null : () => _resetPartnerPassword('${row['email'] ?? ''}'), [Component.text('Save password')]),
+        ]),
     ]);
   }
 
@@ -182,10 +202,14 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
   Future<void> _save() => _run(() async {
         final caller = context.read(adminAuthProvider).currentUser?.email ?? '';
         final start = _licenseStart.trim().isEmpty ? null : DateTime.tryParse(_licenseStart)?.millisecondsSinceEpoch;
+        if (_editingId == null && _password != _confirm) {
+          throw const StaffOpsException('invalid-argument', 'The password and confirmation do not match.');
+        }
         final data = _editingId == null
             ? partnerCreateData(
                 callerEmail: caller,
                 email: _email,
+                password: _password,
                 areas: _areas,
                 licenseStart: start,
                 termMonths: int.tryParse(_termMonths) ?? 36,
@@ -198,60 +222,44 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
                 termMonths: int.tryParse(_termMonths),
                 licenseFeePaid: num.tryParse(_fee),
               );
-        if (_editingId == null) data['portalOrigin'] = web.window.location.origin;
         final saved = await _call(partnerAdminCallable, data);
+        _password = '';
+        _confirm = '';
         _showForm = false;
-        if (_editingId == null) {
-          _setupEmail = '${saved['email'] ?? _email}';
-          _setupLink = saved['passwordSetupLink']?.toString();
-          _notice = _setupLink == null || _setupLink!.isEmpty
-              ? 'Partner requested, but no set-password link came back. Use Resend after portal provisioning is configured.'
-              : 'The portal role is partner. Copy the set-password link. No password was created or shown.';
-        } else {
-          _notice = 'License update requested.';
-        }
+        _notice = _editingId == null
+            ? 'Partner ${saved['email'] ?? ''} can sign in and must verify their email. The password was not stored.'
+            : 'License update requested.';
         final result = await _call(partnerAdminCallable, partnerAccountsData());
         _partners = _rows(result['partners']);
         _loading = false;
       });
 
-  Component _setupPanel() {
-    return div(classes: 'bg-white border border-zinc-200 rounded-2xl p-4 flex flex-col gap-2', [
-      h2(classes: 'text-sm font-black', [Component.text('Set-password link')]),
-      p(classes: 'text-[11px] text-zinc-500', [
-        Component.text('Give this link to ${_setupEmail ?? 'the partner'}. It opens the portal sign-in page so they can choose a password. It is not a password.'),
-      ]),
-      input(
-        value: _setupLink ?? '',
-        classes: 'bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-[11px] text-zinc-800',
-        attributes: {'readonly': 'true'},
-      ),
-      div(classes: 'flex flex-wrap gap-2', [
-        button(classes: _secondary, onClick: _copySetupLink, [Component.text('Copy link')]),
-        button(classes: _secondary, onClick: _busy ? null : _resendSetupLink, [Component.text('Resend link')]),
-      ]),
-    ]);
-  }
+  Future<void> _resendVerification(String email) => _run(() async {
+        final result = await _call(partnerAdminCallable, partnerResendVerificationData(email: email));
+        final link = result['verificationLink']?.toString() ?? '';
+        var sent = false;
+        if (link.isNotEmpty) {
+          sent = await MailtrapEmailService.sendEmail(
+            recipientEmail: email,
+            subject: 'Verify your Tranyx admin email',
+            textContent: 'Open this link to verify your email, then sign in: $link',
+            htmlContent: '<p>Verify your email to open the city partner desk.</p><p><a href="$link">Verify email</a></p>',
+          );
+        }
+        _notice = sent
+            ? 'Verification email sent to $email.'
+            : 'The portal mailer is not configured. After signing in, the partner can resend from the verify screen.';
+      });
 
-  Future<void> _copySetupLink() async {
-    final link = _setupLink ?? '';
-    if (link.isEmpty) return;
-    try {
-      web.window.navigator.clipboard.writeText(link);
-      if (mounted) setState(() => _notice = 'Set-password link copied.');
-    } catch (_) {
-      if (mounted) setState(() => _notice = 'Select the link and copy it.');
-    }
-  }
-
-  Future<void> _resendSetupLink() => _run(() async {
-        final email = _setupEmail ?? '';
-        final result = await _call(
-          partnerAdminCallable,
-          partnerPasswordSetupData(email: email, portalOrigin: web.window.location.origin),
-        );
-        _setupLink = result['passwordSetupLink']?.toString();
-        _notice = 'A new set-password link is ready. No password was created.';
+  Future<void> _resetPartnerPassword(String email) => _run(() async {
+        if (_resetPassword != _resetConfirm) {
+          throw const StaffOpsException('invalid-argument', 'The password and confirmation do not match.');
+        }
+        await _call(partnerAdminCallable, partnerSetPasswordData(email: email, password: _resetPassword));
+        _resetPassword = '';
+        _resetConfirm = '';
+        _resetEmail = null;
+        _notice = 'Password updated for $email. It was not stored or shown.';
       });
 
   Future<void> _status(String action, String partnerId) => _run(() async {
@@ -312,8 +320,10 @@ class _PartnerDeskPageState extends State<PartnerDeskPage> {
   String _flagReason = '';
   Map<String, dynamic> _profile = {};
   List<Map<String, dynamic>> _records = [];
+  String _shareTotal = '';
 
   static const _lists = {
+    'revenue': 'Your share',
     'hosts': 'Hosts',
     'renters': 'Renters',
     'rentals': 'Vehicle listings',
@@ -358,7 +368,7 @@ class _PartnerDeskPageState extends State<PartnerDeskPage> {
         _tab('Overview', 'overview'),
         for (final entry in _lists.entries) _tab(entry.value, entry.key),
       ]),
-      if (areas.isNotEmpty && _kind != 'overview')
+      if (areas.isNotEmpty && _kind != 'overview' && _kind != 'revenue')
         div(classes: 'flex flex-wrap gap-2', [
           for (final key in areas)
             button(
@@ -370,6 +380,8 @@ class _PartnerDeskPageState extends State<PartnerDeskPage> {
         ]),
       if (reviewKindForDirectory(_kind).isNotEmpty)
         _field('Flag reason', _flagReason, (value) => setState(() => _flagReason = value), placeholder: 'Required to flag'),
+      if (_kind == 'revenue' && _shareTotal.isNotEmpty)
+        p(classes: 'text-sm font-black text-zinc-900', [Component.text('Your share $_shareTotal')]),
       if (_kind != 'overview' && _records.isEmpty && !_loading)
         p(classes: 'text-xs text-zinc-500', [Component.text('No rows in this area.')])
       else if (_kind != 'overview')
@@ -422,6 +434,12 @@ class _PartnerDeskPageState extends State<PartnerDeskPage> {
       });
 
   Future<void> _loadList() => _run(() async {
+        if (_kind == 'revenue') {
+          final result = await _call(partnerDeskCallable, partnerRevenueData());
+          _shareTotal = _money(result['partnerShare']);
+          _records = _rows(result['lines']);
+          return;
+        }
         final result = await _call(partnerDeskCallable, partnerDirectoryData(areaKey: _areaKey, kind: _kind));
         _records = _rows(result['records']);
       });
@@ -519,6 +537,91 @@ String _areaText(dynamic areas) {
     if (area is Map) return '${area['municipality'] ?? area['city'] ?? area['areaKey'] ?? ''}'.trim();
     return '$area';
   }).where((text) => text.isNotEmpty).join(', ');
+}
+
+class VerifyEmailPage extends StatefulComponent {
+  const VerifyEmailPage({super.key});
+
+  @override
+  State<VerifyEmailPage> createState() => _VerifyEmailPageState();
+}
+
+class _VerifyEmailPageState extends State<VerifyEmailPage> {
+  bool _started = false;
+  bool _busy = false;
+  String? _message;
+  String? _error;
+
+  @override
+  Component build(BuildContext context) {
+    if (!_started) {
+      _started = true;
+      Future.microtask(() => _send(automatic: true));
+    }
+    return div(classes: 'min-h-screen flex items-center justify-center p-6 bg-[#eff2f0]', [
+      div(classes: 'max-w-md w-full bg-white border border-zinc-200 rounded-3xl p-6 flex flex-col gap-3', [
+        h1(classes: 'text-lg font-black text-zinc-900', [Component.text('Verify your email')]),
+        p(classes: 'text-xs text-zinc-600', [
+          Component.text('The city partner desk stays closed until this sign-in email is verified. No other admin pages are available.'),
+        ]),
+        if (_error != null) p(classes: 'text-xs font-semibold text-rose-600', [Component.text(_error!)]),
+        if (_message != null) p(classes: 'text-xs font-semibold text-emerald-700', [Component.text(_message!)]),
+        button(classes: _primary, onClick: _busy ? null : () => _send(), [Component.text('Resend verification email')]),
+        button(classes: _secondary, onClick: _busy ? null : _refresh, [Component.text("I've verified, refresh")]),
+        button(
+          classes: _secondary,
+          onClick: () => context.read(adminAuthProvider).signOut(),
+          [Component.text('Sign out')],
+        ),
+      ]),
+    ]);
+  }
+
+  Future<void> _send({bool automatic = false}) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await context.read(adminAuthProvider).currentUser?.sendEmailVerification();
+      if (mounted) {
+        setState(() => _message = automatic ? 'A verification email is on its way.' : 'Verification email sent.');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not send the verification email.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final user = context.read(adminAuthProvider).currentUser;
+      await user?.reload();
+      await user?.getIdToken(true);
+      if (user?.emailVerified == true) {
+        final app = await context.read(firebaseAppProvider.future);
+        final envUser = FirebaseAuth.instanceFor(app: app).currentUser;
+        if (envUser != null) {
+          try {
+            await callWorkspaceCallable(app, partnerDeskCallable, partnerSyncVerificationData());
+            await envUser.getIdToken(true);
+          } catch (_) {}
+        }
+        if (mounted) setState(() => _message = 'Email verified.');
+      } else if (mounted) {
+        setState(() => _error = 'This sign-in is still unverified.');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not refresh the sign-in.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 }
 
 const String _primary = 'px-3 py-2 rounded-full bg-black text-white text-[11px] font-extrabold cursor-pointer border-0 disabled:opacity-40';

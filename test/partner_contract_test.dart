@@ -29,6 +29,7 @@ void main() {
   final created = partnerCreateData(
     callerEmail: 'admin@tranyx.app',
     email: 'partner@example.com',
+    password: 'Calbayog1',
     areas: [
       {'city': 'Calbayog', 'municipality': '', 'province': 'Samar', 'region': 'Eastern Visayas'},
     ],
@@ -36,16 +37,26 @@ void main() {
     licenseFeePaid: 50000,
   );
   check(
-    'create stores the license and areas and omits revenue fields',
+    'create stores the license and sends the password only in the callable body',
     created['action'] == 'create' &&
         created['email'] == 'partner@example.com' &&
+        created['password'] == 'Calbayog1' &&
         created['termMonths'] == 36 &&
         created['licenseFeePaid'] == 50000 &&
-        !created.containsKey('password') &&
         !created.containsKey('partnerShareBps') &&
         !created.containsKey('targets') &&
+        !created.containsKey('passwordSetupLink') &&
         partnerAccountsData()['action'] == 'accounts',
   );
+  StaffOpsException? weak;
+  try {
+    partnerCreateData(callerEmail: 'admin@tranyx.app', email: 'p@example.com', password: 'short', areas: [
+      {'city': 'Calbayog', 'municipality': '', 'province': '', 'region': ''},
+    ]);
+  } on StaffOpsException catch (error) {
+    weak = error;
+  }
+  check('a weak password is refused before it is sent', weak != null && !weak.message.contains('short'));
 
   final directory = partnerDirectoryData(areaKey: 'Calbayog', kind: 'hosts');
   check('directory sends the area slug', directory['areaKey'] == 'calbayog' && directory['kind'] == 'hosts');
@@ -88,8 +99,11 @@ void main() {
   check('list-shaped callable details keep OUTSIDE_AREA', listed != null && listed.detailCode == 'OUTSIDE_AREA');
   check('partner is a portal role and not an admin or a staff claim', portalRoleIsPartner('partner') && portalRoleMayUsePortal('partner') && !portalRoleIsAdmin('partner') && workspaceClaimRole('partner') == null);
   check('phase 1 does not build a statement body', !partnerDirectoryKinds.contains('statement') && partnerProfileData()['action'] == 'profile');
-  final setup = partnerPasswordSetupData(email: 'Partner@Example.com');
-  check('password setup asks for a link and never a password', setup['action'] == 'passwordSetupLink' && setup['email'] == 'partner@example.com' && !setup.containsKey('password'));
+  final resend = partnerResendVerificationData(email: 'Partner@Example.com');
+  check(
+    'resend verification names the email and does not carry a password',
+    resend['action'] == 'resendVerification' && resend['email'] == 'partner@example.com' && !resend.containsKey('password') && partnerRevenueData()['action'] == 'revenue',
+  );
 
   if (failed > 0) {
     print('$failed failed');
