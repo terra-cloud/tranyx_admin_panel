@@ -139,6 +139,18 @@ Map<String, dynamic> partnerStatusData({required String action, required String 
 
 Map<String, dynamic> partnerAccountsData() => {'action': 'accounts'};
 
+Map<String, dynamic> partnerPasswordSetupData({required String email, String? portalOrigin}) {
+  final staff = email.trim().toLowerCase();
+  if (!staff.contains('@')) {
+    throw const StaffOpsException('invalid-argument', 'A partner email is required.');
+  }
+  return {
+    'action': 'passwordSetupLink',
+    'email': staff,
+    if (portalOrigin != null && portalOrigin.isNotEmpty) 'portalOrigin': portalOrigin,
+  };
+}
+
 Map<String, dynamic> partnerProfileData() => {'action': 'profile'};
 
 Map<String, dynamic> partnerDirectoryData({required String areaKey, required String kind}) {

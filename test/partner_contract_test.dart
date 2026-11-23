@@ -88,6 +88,8 @@ void main() {
   check('list-shaped callable details keep OUTSIDE_AREA', listed != null && listed.detailCode == 'OUTSIDE_AREA');
   check('partner is a portal role and not an admin or a staff claim', portalRoleIsPartner('partner') && portalRoleMayUsePortal('partner') && !portalRoleIsAdmin('partner') && workspaceClaimRole('partner') == null);
   check('phase 1 does not build a statement body', !partnerDirectoryKinds.contains('statement') && partnerProfileData()['action'] == 'profile');
+  final setup = partnerPasswordSetupData(email: 'Partner@Example.com');
+  check('password setup asks for a link and never a password', setup['action'] == 'passwordSetupLink' && setup['email'] == 'partner@example.com' && !setup.containsKey('password'));
 
   if (failed > 0) {
     print('$failed failed');

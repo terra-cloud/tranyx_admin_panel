@@ -1,6 +1,7 @@
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
+import 'package:web/web.dart' as web;
 
 import '../core/access/partner_contract.dart';
 import '../core/access/portal_role.dart';
@@ -36,6 +37,8 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
   String? _error;
   String? _notice;
   String? _editingId;
+  String? _setupEmail;
+  String? _setupLink;
   List<Map<String, dynamic>> _partners = [];
 
   String _email = '';
@@ -66,6 +69,7 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
       ]),
       if (_error != null) _banner(_error!, danger: true),
       if (_notice != null) _banner(_notice!, danger: false),
+      if (_setupLink != null && _setupLink!.isNotEmpty) _setupPanel(),
       if (_loading)
         p(classes: 'text-xs font-semibold text-zinc-400', [Component.text('Loading city partners...')])
       else ...[
@@ -194,14 +198,60 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
                 termMonths: int.tryParse(_termMonths),
                 licenseFeePaid: num.tryParse(_fee),
               );
-        await _call(partnerAdminCallable, data);
+        if (_editingId == null) data['portalOrigin'] = web.window.location.origin;
+        final saved = await _call(partnerAdminCallable, data);
         _showForm = false;
-        _notice = _editingId == null
-            ? 'Partner requested. No password was created. Set this person\'s portal role to partner, then enroll TOTP or phone before turning enforcement on.'
-            : 'License update requested.';
+        if (_editingId == null) {
+          _setupEmail = '${saved['email'] ?? _email}';
+          _setupLink = saved['passwordSetupLink']?.toString();
+          _notice = _setupLink == null || _setupLink!.isEmpty
+              ? 'Partner requested, but no set-password link came back. Use Resend after portal provisioning is configured.'
+              : 'The portal role is partner. Copy the set-password link. No password was created or shown.';
+        } else {
+          _notice = 'License update requested.';
+        }
         final result = await _call(partnerAdminCallable, partnerAccountsData());
         _partners = _rows(result['partners']);
         _loading = false;
+      });
+
+  Component _setupPanel() {
+    return div(classes: 'bg-white border border-zinc-200 rounded-2xl p-4 flex flex-col gap-2', [
+      h2(classes: 'text-sm font-black', [Component.text('Set-password link')]),
+      p(classes: 'text-[11px] text-zinc-500', [
+        Component.text('Give this link to ${_setupEmail ?? 'the partner'}. It opens the portal sign-in page so they can choose a password. It is not a password.'),
+      ]),
+      input(
+        value: _setupLink ?? '',
+        classes: 'bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2 text-[11px] text-zinc-800',
+        attributes: {'readonly': 'true'},
+      ),
+      div(classes: 'flex flex-wrap gap-2', [
+        button(classes: _secondary, onClick: _copySetupLink, [Component.text('Copy link')]),
+        button(classes: _secondary, onClick: _busy ? null : _resendSetupLink, [Component.text('Resend link')]),
+      ]),
+    ]);
+  }
+
+  Future<void> _copySetupLink() async {
+    final link = _setupLink ?? '';
+    if (link.isEmpty) return;
+    try {
+      web.window.navigator.clipboard.writeText(link);
+      if (mounted) setState(() => _notice = 'Set-password link copied.');
+    } catch (_) {
+      if (mounted) setState(() => _notice = 'Select the link and copy it.');
+    }
+  }
+
+  Future<void> _resendSetupLink() => _run(() async {
+        final email = _setupEmail ?? '';
+        final result = await _call(
+          partnerAdminCallable,
+          partnerPasswordSetupData(email: email, portalOrigin: web.window.location.origin),
+        );
+        _setupLink = result['passwordSetupLink']?.toString();
+        _notice = 'A new set-password link is ready. No password was created.';
       });
 
   Future<void> _status(String action, String partnerId) => _run(() async {
