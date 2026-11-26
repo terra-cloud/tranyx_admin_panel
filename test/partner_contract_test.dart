@@ -43,7 +43,9 @@ void main() {
         created['password'] == 'Calbayog1' &&
         created['termMonths'] == 36 &&
         created['licenseFeePaid'] == 50000 &&
-        !created.containsKey('partnerShareBps') &&
+        created['partnerShareBps'] == partnerShareDefaultBps &&
+        partnerShareDefaultBps == 3000 &&
+        tranyxShareDefaultBps == 7000 &&
         !created.containsKey('targets') &&
         !created.containsKey('passwordSetupLink') &&
         partnerAccountsData()['action'] == 'accounts',

@@ -5,6 +5,10 @@ import '../services/staff_ops_errors.dart';
 /// `partnerAdmin` creates and changes the license. `partnerDesk` `profile` and `directory`
 /// are the partner's area monitor. Revenue, statements, payouts, and earnings KPIs are not sent.
 
+/// Partner keeps 30% of platform revenue. Tranyx keeps the other 70%.
+const int partnerShareDefaultBps = 3000;
+const int tranyxShareDefaultBps = 7000;
+
 const String partnerAdminCallable = 'partnerAdmin';
 const String partnerDeskCallable = 'partnerDesk';
 
@@ -115,6 +119,7 @@ Map<String, dynamic> partnerCreateData({
     'licenseStart': ?licenseStart,
     'termMonths': termMonths,
     'licenseFeePaid': licenseFeePaid,
+    'partnerShareBps': partnerShareDefaultBps,
   };
 }
 

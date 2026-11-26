@@ -132,7 +132,7 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
         _field('License fee paid', _fee, (value) => setState(() => _fee = value), type: 'number'),
       ]),
       p(classes: 'text-[11px] text-zinc-500', [
-        Component.text('The area slug uses the municipality, otherwise the city. Province does not split the lock. Default term is 36 months.'),
+        Component.text('The area slug uses the municipality, otherwise the city. Province does not split the lock. Default term is 36 months. Revenue split is partner 30% (3000 bps) and Tranyx 70% (7000 bps).'),
       ]),
       ..._areas.asMap().entries.map((entry) => _areaRow(entry.key, entry.value)),
       div(classes: 'flex flex-wrap gap-2', [
@@ -323,7 +323,7 @@ class _PartnerDeskPageState extends State<PartnerDeskPage> {
   String _shareTotal = '';
 
   static const _lists = {
-    'revenue': 'Your share',
+    'revenue': 'Your share (30%)',
     'hosts': 'Hosts',
     'renters': 'Renters',
     'rentals': 'Vehicle listings',
