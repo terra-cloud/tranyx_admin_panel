@@ -1,14 +1,10 @@
-import 'dart:convert';
-import 'dart:js_interop';
-import 'dart:typed_data';
-
-import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:jaspr/dom.dart';
 import 'package:jaspr/jaspr.dart';
 import 'package:jaspr_riverpod/jaspr_riverpod.dart';
-import 'package:web/web.dart' as web;
 
 import '../core/access/partner_contract.dart';
+import '../core/services/mailtrap_email_service.dart';
 import '../core/access/portal_role.dart';
 import '../core/providers/environment_provider.dart';
 import '../core/services/staff_ops_service.dart';
@@ -41,17 +37,18 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
   bool _showForm = false;
   String? _error;
   String? _notice;
-  Map<String, dynamic>? _overview;
   String? _editingId;
+  String? _resetEmail;
+  List<Map<String, dynamic>> _partners = [];
 
   String _email = '';
+  String _password = '';
+  String _confirm = '';
+  String _resetPassword = '';
+  String _resetConfirm = '';
   String _licenseStart = '';
   String _termMonths = '36';
   String _fee = '0';
-  String _share = '7000';
-  String _targetListings = '30';
-  String _targetProviders = '30';
-  String _targetMonths = '6';
   List<Map<String, String>> _areas = [_blankArea()];
 
   static Map<String, String> _blankArea() => {'city': '', 'municipality': '', 'province': '', 'region': ''};
@@ -60,163 +57,91 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
   Component build(BuildContext context) {
     if (!_started) {
       _started = true;
-      Future.microtask(_loadOverview);
+      Future.microtask(_load);
     }
-    final partners = _partnerRows();
-    final behind = partners.where((row) => row['behindTarget'] == true).toList();
-    final expiring = partners.where((row) => row['licenseExpiring'] == true).toList();
-    final includeSubscriptions = _overview?['includeSubscriptions'] == true;
-
-    return div(classes: 'p-4 sm:p-8 flex flex-col gap-5 max-w-6xl', [
+    return div(classes: 'p-4 sm:p-8 flex flex-col gap-5 max-w-5xl', [
       div(classes: 'flex flex-wrap items-end justify-between gap-3', [
         div(classes: 'flex flex-col gap-1', [
           h1(classes: 'text-lg font-black text-zinc-900', [Component.text('City partners')]),
           p(classes: 'text-xs text-zinc-500 max-w-xl', [
             Component.text(
-              'Licenses, areas, and payouts go through partnerAdmin on the selected environment. This screen does not write those documents and does not create a password.',
+              'Create a license and an initial password. The password is sent once to create the sign-in and is not stored or shown again. The partner must verify their email before the desk opens.',
             ),
           ]),
         ]),
-        button(
-          onClick: _busy ? null : () => setState(() => _openCreate()),
-          classes: _primaryButton,
-          [Component.text('Create partner')],
-        ),
+        button(onClick: _busy ? null : () => setState(_openCreate), classes: _primary, [Component.text('Create partner')]),
       ]),
       if (_error != null) _banner(_error!, danger: true),
       if (_notice != null) _banner(_notice!, danger: false),
       if (_loading)
         p(classes: 'text-xs font-semibold text-zinc-400', [Component.text('Loading city partners...')])
       else ...[
-        if (behind.isNotEmpty || expiring.isNotEmpty)
-          div(classes: 'grid gap-3 md:grid-cols-2', [
-            _alertCard(
-              'Behind on targets',
-              behind.isEmpty
-                  ? 'No active partner is past the target month with listings or providers still short.'
-                  : behind.map((row) => '${row['partnerId']} · listings ${row['activeListings']}/${_targetOf(row, 'activeListings')}').join('\n'),
-            ),
-            _alertCard(
-              'Licenses expiring within 30 days',
-              expiring.isEmpty
-                  ? 'No license renewal date falls inside the next 30 days.'
-                  : expiring.map((row) => '${row['partnerId']} · renews ${_when(row['renewalDate'])}').join('\n'),
-            ),
-          ]),
-        div(classes: 'flex items-center justify-between gap-3 bg-white border border-zinc-200 rounded-2xl px-4 py-3', [
-          div(classes: 'flex flex-col', [
-            span(classes: 'text-xs font-black text-zinc-900', [Component.text('Subscription revenue')]),
-            span(classes: 'text-[11px] text-zinc-500', [
-              Component.text(includeSubscriptions
-                  ? 'Subscription settlements are included in partner revenue.'
-                  : 'Subscription settlements are off. Only rentals and jobs are tagged.'),
-            ]),
-          ]),
-          button(
-            onClick: _busy ? null : () => _setSubscriptions(!includeSubscriptions),
-            classes: _secondaryButton,
-            [Component.text(includeSubscriptions ? 'Turn subscriptions off' : 'Turn subscriptions on')],
-          ),
-        ]),
         if (_showForm) _form(),
-        if (partners.isEmpty)
+        if (_partners.isEmpty)
           p(classes: 'text-xs text-zinc-500', [Component.text('No partners on this environment yet.')])
         else
-          div(classes: 'flex flex-col gap-3', partners.map(_partnerCard).toList()),
+          div(classes: 'flex flex-col gap-3', _partners.map(_card).toList()),
       ],
     ]);
-  }
-
-  List<Map<String, dynamic>> _partnerRows() {
-    final raw = _overview?['partners'];
-    if (raw is! List) return [];
-    return raw.whereType<Map>().map((row) => row.cast<String, dynamic>()).toList();
   }
 
   void _openCreate() {
     _editingId = null;
     _email = '';
+    _password = '';
+    _confirm = '';
     _licenseStart = '';
     _termMonths = '36';
     _fee = '0';
-    _share = '7000';
-    _targetListings = '30';
-    _targetProviders = '30';
-    _targetMonths = '6';
     _areas = [_blankArea()];
     _showForm = true;
     _error = null;
   }
 
   void _openEdit(Map<String, dynamic> row) {
-    _editingId = row['partnerId']?.toString();
-    _share = '${row['partnerShareBps'] ?? 7000}';
-    final targets = row['targets'];
-    if (targets is Map) {
-      _targetListings = '${targets['activeListings'] ?? 30}';
-      _targetProviders = '${targets['activeProviders'] ?? 30}';
-      _targetMonths = '${targets['byMonth'] ?? 6}';
-    }
+    _editingId = '${row['partnerId'] ?? ''}';
+    _fee = '${row['licenseFeePaid'] ?? 0}';
+    _termMonths = '${row['termMonths'] ?? 36}';
+    final start = row['licenseStart'];
+    _licenseStart = start is num && start > 0 ? _dateInput(start.toInt()) : '';
     final areas = row['areas'];
-    if (areas is List && areas.isNotEmpty) {
-      _areas = areas.whereType<Map>().map((area) {
-        return {
-          'city': '${area['city'] ?? ''}',
-          'municipality': '${area['municipality'] ?? ''}',
-          'province': '${area['province'] ?? ''}',
-          'region': '${area['region'] ?? ''}',
-        };
-      }).toList();
-    } else {
-      _areas = [_blankArea()];
-    }
+    _areas = areas is List && areas.isNotEmpty
+        ? areas.whereType<Map>().map((area) => {
+            'city': '${area['city'] ?? ''}',
+            'municipality': '${area['municipality'] ?? ''}',
+            'province': '${area['province'] ?? ''}',
+            'region': '${area['region'] ?? ''}',
+          }).toList()
+        : [_blankArea()];
     _showForm = true;
     _error = null;
   }
 
   Component _form() {
     final editing = _editingId != null;
-    return div(
-      classes: 'bg-white border border-zinc-200 rounded-2xl p-4 flex flex-col gap-3',
-      [
-        h2(classes: 'text-sm font-black', [Component.text(editing ? 'Edit ${_editingId!}' : 'New partner')]),
-        if (!editing)
-          _field('Email', _email, (value) => setState(() => _email = value), type: 'email', placeholder: 'partner@example.com'),
-        _field('License start', _licenseStart, (value) => setState(() => _licenseStart = value), type: 'date'),
-        div(classes: 'grid gap-3 sm:grid-cols-3', [
-          _field('Term months', _termMonths, (value) => setState(() => _termMonths = value), type: 'number'),
-          _field('License fee paid', _fee, (value) => setState(() => _fee = value), type: 'number'),
-          _field('Partner share bps', _share, (value) => setState(() => _share = value), type: 'number'),
-        ]),
-        p(classes: 'text-[11px] text-zinc-500', [
-          Component.text('Tranyx share is ${10000 - (int.tryParse(_share) ?? 7000)} bps. The area slug uses municipality, otherwise city. Province does not split the lock.'),
-        ]),
-        div(classes: 'grid gap-3 sm:grid-cols-3', [
-          _field('Listing target', _targetListings, (value) => setState(() => _targetListings = value), type: 'number'),
-          _field('Provider target', _targetProviders, (value) => setState(() => _targetProviders = value), type: 'number'),
-          _field('Target by month', _targetMonths, (value) => setState(() => _targetMonths = value), type: 'number'),
-        ]),
-        ..._areas.asMap().entries.map((entry) => _areaRow(entry.key, entry.value)),
-        div(classes: 'flex flex-wrap gap-2', [
-          if (_areas.length < 10)
-            button(
-              classes: _secondaryButton,
-              onClick: () => setState(() => _areas = [..._areas, _blankArea()]),
-              [Component.text('Add area')],
-            ),
-          button(
-            classes: _primaryButton,
-            onClick: _busy ? null : _save,
-            [Component.text(_busy ? 'Saving...' : (editing ? 'Save partner' : 'Create partner'))],
-          ),
-          button(
-            classes: _secondaryButton,
-            onClick: () => setState(() => _showForm = false),
-            [Component.text('Close')],
-          ),
-        ]),
+    return div(classes: 'bg-white border border-zinc-200 rounded-2xl p-4 flex flex-col gap-3', [
+      h2(classes: 'text-sm font-black', [Component.text(editing ? 'Edit ${_editingId!}' : 'New partner')]),
+      if (!editing) ...[
+        _field('Email', _email, (value) => setState(() => _email = value), type: 'email'),
+        _field('Initial password', _password, (value) => setState(() => _password = value), type: 'password'),
+        _field('Confirm password', _confirm, (value) => setState(() => _confirm = value), type: 'password'),
       ],
-    );
+      _field('License start', _licenseStart, (value) => setState(() => _licenseStart = value), type: 'date'),
+      div(classes: 'grid gap-3 sm:grid-cols-2', [
+        _field('Term months', _termMonths, (value) => setState(() => _termMonths = value), type: 'number'),
+        _field('License fee paid', _fee, (value) => setState(() => _fee = value), type: 'number'),
+      ]),
+      p(classes: 'text-[11px] text-zinc-500', [
+        Component.text('The area slug uses the municipality, otherwise the city. Province does not split the lock. Default term is 36 months. Revenue split is partner 30% (3000 bps) and Tranyx 70% (7000 bps).'),
+      ]),
+      ..._areas.asMap().entries.map((entry) => _areaRow(entry.key, entry.value)),
+      div(classes: 'flex flex-wrap gap-2', [
+        if (_areas.length < 10)
+          button(classes: _secondary, onClick: () => setState(() => _areas = [..._areas, _blankArea()]), [Component.text('Add area')]),
+        button(classes: _primary, onClick: _busy ? null : _save, [Component.text(_busy ? 'Saving...' : 'Save license')]),
+        button(classes: _secondary, onClick: () => setState(() => _showForm = false), [Component.text('Close')]),
+      ]),
+    ]);
   }
 
   Component _areaRow(int index, Map<String, String> area) {
@@ -230,426 +155,120 @@ class _PartnerAdminPageState extends State<PartnerAdminPage> {
         Component.text(slug.isEmpty ? 'Slug appears when a city or municipality is entered.' : 'Slug $slug'),
       ]),
       if (_areas.length > 1)
-        button(
-          classes: _secondaryButton,
-          onClick: () => setState(() => _areas = [..._areas]..removeAt(index)),
-          [Component.text('Remove area')],
-        ),
+        button(classes: _secondary, onClick: () => setState(() => _areas = [..._areas]..removeAt(index)), [Component.text('Remove area')]),
     ]);
   }
 
-  Component _partnerCard(Map<String, dynamic> row) {
+  Component _card(Map<String, dynamic> row) {
     final id = '${row['partnerId'] ?? ''}';
-    final payouts = row['unpaidPayouts'];
-    final payoutList = payouts is List ? payouts.whereType<Map>().map((item) => item.cast<String, dynamic>()).toList() : <Map<String, dynamic>>[];
-    return article(classes: 'bg-white border border-zinc-200 rounded-2xl p-4 flex flex-col gap-3', [
-      div(classes: 'flex flex-wrap items-start justify-between gap-2', [
-        div(classes: 'flex flex-col', [
-          h3(classes: 'text-sm font-black', [Component.text(id)]),
-          span(classes: 'text-[11px] text-zinc-500', [
-            Component.text('${row['status'] ?? 'unknown'} · ${_areaText(row['areas'])} · renews ${_when(row['renewalDate'])}'),
-          ]),
-        ]),
-        div(classes: 'flex flex-wrap gap-2', [
-          if (row['behindTarget'] == true) _chip('Behind target'),
-          if (row['licenseExpiring'] == true) _chip('Expiring'),
-          if (row['licenseExpired'] == true) _chip('Expired'),
-        ]),
-      ]),
-      div(classes: 'grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]', [
-        _kpi('Listings', '${row['activeListings'] ?? 0}'),
-        _kpi('Providers', '${row['activeProviders'] ?? 0}'),
-        _kpi('Bookings', '${row['bookings'] ?? 0}'),
-        _kpi('Completed jobs', '${row['completedJobs'] ?? 0}'),
-        _kpi('Gross', _money(row['grossVolume'])),
-        _kpi('This month', _money(row['earningsThisMonth'])),
-        _kpi('Earnings', _money(row['earningsToDate'])),
-        _kpi('New users', '${row['newUsers'] ?? 0}'),
-      ]),
-      div(classes: 'flex flex-wrap gap-2', [
-        button(classes: _secondaryButton, onClick: _busy ? null : () => setState(() => _openEdit(row)), [Component.text('Edit')]),
-        button(classes: _secondaryButton, onClick: _busy ? null : () => _status('suspend', id), [Component.text('Suspend')]),
-        button(classes: _secondaryButton, onClick: _busy ? null : () => _status('deactivate', id), [Component.text('Deactivate')]),
-        button(classes: _secondaryButton, onClick: _busy ? null : () => _status('reinstate', id), [Component.text('Reinstate')]),
-      ]),
-      if (payoutList.isEmpty)
-        span(classes: 'text-[11px] text-zinc-400', [Component.text('No unpaid payouts.')])
-      else
-        div(classes: 'flex flex-col gap-2', [
-          for (final payout in payoutList)
-            div(classes: 'flex flex-wrap items-center justify-between gap-2 text-[11px]', [
-              span([
-                Component.text('${payout['id']} · ${payout['status']} · ${_money(payout['amount'])}'),
-              ]),
-              if (payout['status'] == 'pending')
-                button(
-                  classes: _secondaryButton,
-                  onClick: _busy ? null : () => _payout('approvePayout', '${payout['id']}'),
-                  [Component.text('Approve payout')],
-                ),
-              if (payout['status'] == 'approved')
-                button(
-                  classes: _secondaryButton,
-                  onClick: _busy ? null : () => _payout('markPayoutPaid', '${payout['id']}'),
-                  [Component.text('Mark paid')],
-                ),
-            ]),
-        ]),
-    ]);
-  }
-
-  Future<void> _loadOverview() async {
-    await _run(() async {
-      final result = await _call(partnerAdminCallable, partnerOverviewData());
-      _overview = result;
-      _loading = false;
-    }, keepLoading: true);
-  }
-
-  Future<void> _save() async {
-    await _run(() async {
-      final caller = context.read(adminAuthProvider).currentUser?.email ?? '';
-      final start = _licenseStart.trim().isEmpty ? null : DateTime.tryParse(_licenseStart)?.millisecondsSinceEpoch;
-      final data = _editingId == null
-          ? partnerCreateData(
-              callerEmail: caller,
-              email: _email,
-              areas: _areas,
-              licenseStart: start,
-              termMonths: int.tryParse(_termMonths) ?? 36,
-              licenseFeePaid: num.tryParse(_fee) ?? 0,
-              partnerShareBps: int.tryParse(_share) ?? partnerShareDefaultBps,
-              activeListings: int.tryParse(_targetListings) ?? 30,
-              activeProviders: int.tryParse(_targetProviders) ?? 30,
-              byMonth: int.tryParse(_targetMonths) ?? 6,
-            )
-          : partnerUpdateData(
-              partnerId: _editingId!,
-              areas: _areas,
-              partnerShareBps: int.tryParse(_share),
-              activeListings: int.tryParse(_targetListings),
-              activeProviders: int.tryParse(_targetProviders),
-              byMonth: int.tryParse(_targetMonths),
-              licenseFeePaid: num.tryParse(_fee),
-              licenseStart: start,
-              termMonths: int.tryParse(_termMonths),
-            );
-      await _call(partnerAdminCallable, data);
-      _showForm = false;
-      _notice = _editingId == null
-          ? 'Partner requested. No password was created. Enroll TOTP or phone in Identity Platform, and set the portal role to partner if this person should see only the desk.'
-          : 'Partner update requested.';
-      final result = await _call(partnerAdminCallable, partnerOverviewData());
-      _overview = result;
-      _loading = false;
-    });
-  }
-
-  Future<void> _status(String action, String partnerId) async {
-    await _run(() async {
-      await _call(partnerAdminCallable, partnerStatusData(action: action, partnerId: partnerId));
-      _notice = '$action requested for $partnerId.';
-      _overview = await _call(partnerAdminCallable, partnerOverviewData());
-      _loading = false;
-    });
-  }
-
-  Future<void> _payout(String action, String payoutId) async {
-    await _run(() async {
-      await _call(partnerAdminCallable, partnerPayoutData(action: action, payoutId: payoutId));
-      _notice = action == 'approvePayout' ? 'Payout approved.' : 'Payout marked paid.';
-      _overview = await _call(partnerAdminCallable, partnerOverviewData());
-      _loading = false;
-    });
-  }
-
-  Future<void> _setSubscriptions(bool include) async {
-    await _run(() async {
-      await _call(partnerAdminCallable, partnerRevenueConfigData(includeSubscriptions: include));
-      _notice = include ? 'Subscription revenue is on.' : 'Subscription revenue is off.';
-      _overview = await _call(partnerAdminCallable, partnerOverviewData());
-      _loading = false;
-    });
-  }
-
-  Future<void> _run(Future<void> Function() body, {bool keepLoading = false}) async {
-    if (_busy) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-      if (!keepLoading) _notice = null;
-    });
-    try {
-      await body();
-      if (mounted) setState(() => _busy = false);
-    } on StaffOpsException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _loading = false;
-        _error = partnerFacingError(error);
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _loading = false;
-        _error = '$error';
-      });
-    }
-  }
-
-  Future<Map<String, dynamic>> _call(String name, Map<String, dynamic> data) async {
-    final FirebaseApp app = await context.read(firebaseAppProvider.future);
-    return callWorkspaceCallable(app, name, data);
-  }
-}
-
-class PartnerDeskPage extends StatefulComponent {
-  const PartnerDeskPage({super.key});
-
-  @override
-  State<PartnerDeskPage> createState() => _PartnerDeskPageState();
-}
-
-class _PartnerDeskPageState extends State<PartnerDeskPage> {
-  bool _started = false;
-  bool _loading = true;
-  bool _busy = false;
-  bool _mfaRequired = false;
-  String? _error;
-  String _tab = 'dashboard';
-  Map<String, dynamic>? _dashboard;
-  Map<String, dynamic>? _statement;
-  String _period = manilaPeriod(DateTime.now().millisecondsSinceEpoch);
-  String _areaKey = '';
-  String _kind = 'users';
-  String _flagReason = '';
-  List<Map<String, dynamic>> _records = [];
-
-  @override
-  Component build(BuildContext context) {
-    if (!_started) {
-      _started = true;
-      Future.microtask(_loadDashboard);
-    }
-    if (_mfaRequired) {
-      return div(classes: 'p-8 max-w-xl flex flex-col gap-3', [
-        h1(classes: 'text-lg font-black', [Component.text('Enable 2FA')]),
-        p(classes: 'text-sm text-zinc-700', [
-          Component.text(
-            _error ??
-                'Enable 2FA. Partner sign-in requires a TOTP or phone second factor enrolled in Identity Platform. This portal cannot enroll it.',
-          ),
-        ]),
-      ]);
-    }
-    return div(classes: 'p-4 sm:p-8 flex flex-col gap-5 max-w-6xl', [
-      h1(classes: 'text-lg font-black text-zinc-900', [Component.text('City partner desk')]),
-      if (_error != null) _banner(_error!, danger: true),
-      div(classes: 'flex gap-2', [
-        _tabButton('Dashboard', 'dashboard'),
-        _tabButton('Statement', 'statement'),
-        _tabButton('Directory', 'directory'),
-      ]),
-      if (_loading)
-        p(classes: 'text-xs font-semibold text-zinc-400', [Component.text('Loading partner desk...')])
-      else if (_tab == 'dashboard')
-        _dashboardView()
-      else if (_tab == 'statement')
-        _statementView()
-      else
-        _directoryView(),
-    ]);
-  }
-
-  Component _dashboardView() {
-    final row = _dashboard ?? {};
-    return div(classes: 'flex flex-col gap-3', [
-      p(classes: 'text-xs text-zinc-500', [
-        Component.text('${row['status'] ?? ''} · ${_areaText(row['areas'])} · month ${row['monthsElapsed'] ?? 0} · renews ${_when(row['renewalDate'])}'),
-      ]),
-      if (row['behindTarget'] == true) _banner('Behind target. Listings or providers are still short of the exclusivity target.', danger: true),
-      if (row['licenseExpiring'] == true) _banner('This license expires within 30 days.', danger: true),
-      div(classes: 'grid grid-cols-2 md:grid-cols-4 gap-2', [
-        _kpi('Listings', '${row['activeListings'] ?? 0} / ${_targetOf(row, 'activeListings')}'),
-        _kpi('Providers', '${row['activeProviders'] ?? 0} / ${_targetOf(row, 'activeProviders')}'),
-        _kpi('Bookings', '${row['bookings'] ?? 0}'),
-        _kpi('Completed jobs', '${row['completedJobs'] ?? 0}'),
-        _kpi('Gross', _money(row['grossVolume'])),
-        _kpi('This month', _money(row['earningsThisMonth'])),
-        _kpi('Earnings', _money(row['earningsToDate'])),
-        _kpi('New users', '${row['newUsers'] ?? 0}'),
-      ]),
-    ]);
-  }
-
-  Component _statementView() {
-    return div(classes: 'flex flex-col gap-3', [
-      div(classes: 'flex flex-wrap gap-2 items-end', [
-        _field('Period', _period, (value) => setState(() => _period = value), placeholder: 'YYYY-MM'),
-        button(classes: _primaryButton, onClick: _busy ? null : _loadStatement, [Component.text('Load statement')]),
-        button(classes: _secondaryButton, onClick: _busy ? null : _downloadCsv, [Component.text('CSV')]),
-        button(classes: _secondaryButton, onClick: _busy ? null : _downloadPdf, [Component.text('PDF')]),
-      ]),
-      if (_statement != null) ...[
-        p(classes: 'text-xs text-zinc-600', [
-          Component.text(
-            'Gross ${_money(_statement!['grossBookings'])} · partner ${_money(_statement!['partnerShare'])} · Tranyx ${_money(_statement!['tranyxShare'])}',
-          ),
-        ]),
-        _lines(_statement!['lines']),
-      ],
-    ]);
-  }
-
-  Component _directoryView() {
-    final keys = _dashboard?['areaKeys'];
-    final known = keys is List ? keys.map((key) => '$key').where((key) => key.isNotEmpty).toList() : <String>[];
-    return div(classes: 'flex flex-col gap-3', [
-      div(classes: 'flex flex-wrap gap-2 items-end', [
-        if (known.isNotEmpty)
-          div(classes: 'flex flex-col gap-1', [
-            span(classes: 'text-[10px] font-bold uppercase text-zinc-400', [Component.text('Area')]),
-            div(classes: 'flex flex-wrap gap-1', [
-              for (final key in known)
-                button(
-                  classes: key == _areaKey ? _primaryButton : _secondaryButton,
-                  onClick: () => setState(() => _areaKey = key),
-                  [Component.text(key)],
-                ),
-            ]),
-          ])
-        else
-          _field('Area', _areaKey, (value) => setState(() => _areaKey = value)),
-        for (final kind in ['users', 'rentals', 'properties', 'jobs'])
-          button(
-            classes: _kind == kind ? _primaryButton : _secondaryButton,
-            onClick: () => setState(() => _kind = kind),
-            [Component.text(kind)],
-          ),
-        button(classes: _primaryButton, onClick: _busy ? null : _loadDirectory, [Component.text('Load directory')]),
-      ]),
-      _field('Flag reason', _flagReason, (value) => setState(() => _flagReason = value), placeholder: 'Required to flag'),
-      if (_records.isEmpty)
-        p(classes: 'text-xs text-zinc-500', [Component.text('No directory rows loaded.')])
-      else
-        div(classes: 'flex flex-col gap-2', _records.map(_recordCard).toList()),
-    ]);
-  }
-
-  Component _recordCard(Map<String, dynamic> row) {
-    final directoryKind = '${row['_kind'] ?? _kind}';
-    final id = '${row['uid'] ?? row['id'] ?? ''}';
-    final review = row['partnerReview'];
-    final reviewText = review is Map ? '${review['status'] ?? ''}' : '';
-    final title = directoryKind == 'users' ? '${row['displayName'] ?? 'Member'}' : '${row['title'] ?? id}';
-    return article(classes: 'bg-white border border-zinc-200 rounded-2xl p-3 flex flex-col gap-2', [
+    return article(classes: 'bg-white border border-zinc-200 rounded-2xl p-4 flex flex-col gap-2', [
       div(classes: 'flex flex-wrap justify-between gap-2', [
-        span(classes: 'text-xs font-black', [Component.text(title)]),
+        div(classes: 'flex flex-col', [
+          h3(classes: 'text-sm font-black', [Component.text('${row['email'] ?? id}')]),
+          span(classes: 'text-[11px] text-zinc-500', [
+            Component.text('$id · ${row['status'] ?? 'unknown'} · ${_areaText(row['areas'])}'),
+          ]),
+        ]),
+        span(classes: 'text-[11px] font-bold ${row['emailVerified'] == true ? 'text-emerald-700' : 'text-amber-700'}', [
+          Component.text(row['emailVerified'] == true ? 'Verified' : 'Unverified'),
+        ]),
         span(classes: 'text-[11px] text-zinc-500', [
-          Component.text('${row['city'] ?? row['areaKey'] ?? ''} ${row['status'] ?? ''} ${row['accountType'] ?? ''} $reviewText'),
+          Component.text('Starts ${_when(row['licenseStart'])} · ${row['termMonths'] ?? 36} months · renews ${_when(row['renewalDate'])} · fee ${_money(row['licenseFeePaid'])}'),
         ]),
       ]),
       div(classes: 'flex flex-wrap gap-2', [
-        button(classes: _secondaryButton, onClick: _busy ? null : () => _review(directoryKind, id, 'approved'), [Component.text('Approve')]),
-        button(classes: _secondaryButton, onClick: _busy ? null : () => _review(directoryKind, id, 'verified'), [Component.text('Verify')]),
-        button(classes: _secondaryButton, onClick: _busy ? null : () => _review(directoryKind, id, 'flagged'), [Component.text('Flag')]),
+        button(classes: _secondary, onClick: _busy ? null : () => setState(() => _openEdit(row)), [Component.text('Edit')]),
+        button(classes: _secondary, onClick: _busy ? null : () => _status('suspend', id), [Component.text('Suspend')]),
+        button(classes: _secondary, onClick: _busy ? null : () => _status('deactivate', id), [Component.text('Deactivate')]),
+        button(classes: _secondary, onClick: _busy ? null : () => _status('reinstate', id), [Component.text('Reinstate')]),
+        button(classes: _secondary, onClick: _busy ? null : () => _resendVerification('${row['email'] ?? ''}'), [Component.text('Resend verification email')]),
+        button(classes: _secondary, onClick: () => setState(() => _resetEmail = _resetEmail == id ? null : id), [Component.text('Reset password')]),
       ]),
+      if (_resetEmail == id)
+        div(classes: 'grid gap-2 sm:grid-cols-2', [
+          _field('New password', _resetPassword, (value) => setState(() => _resetPassword = value), type: 'password'),
+          _field('Confirm new password', _resetConfirm, (value) => setState(() => _resetConfirm = value), type: 'password'),
+          button(classes: _primary, onClick: _busy ? null : () => _resetPartnerPassword('${row['email'] ?? ''}'), [Component.text('Save password')]),
+        ]),
     ]);
   }
 
-  Component _lines(dynamic lines) {
-    if (lines is! List || lines.isEmpty) {
-      return p(classes: 'text-xs text-zinc-500', [Component.text('No revenue lines in this period.')]);
-    }
-    return div(classes: 'overflow-x-auto bg-white border border-zinc-200 rounded-2xl', [
-      table(classes: 'w-full text-[11px]', [
-        thead([
-          tr([
-            for (final heading in ['Source', 'Id', 'Area', 'Status', 'Gross', 'Partner'])
-              th(classes: 'text-left p-2', [Component.text(heading)]),
-          ]),
-        ]),
-        tbody([
-          for (final line in lines.whereType<Map>())
-            tr([
-              td(classes: 'p-2', [Component.text('${line['source'] ?? ''}')]),
-              td(classes: 'p-2', [Component.text('${line['sourceId'] ?? ''}')]),
-              td(classes: 'p-2', [Component.text('${line['areaKey'] ?? ''}')]),
-              td(classes: 'p-2', [Component.text('${line['status'] ?? ''}')]),
-              td(classes: 'p-2', [Component.text(_money(line['gross']))]),
-              td(classes: 'p-2', [Component.text(_money(line['partnerShare']))]),
-            ]),
-        ]),
-      ]),
-    ]);
-  }
+  Future<void> _load() => _run(() async {
+        final result = await _call(partnerAdminCallable, partnerAccountsData());
+        _partners = _rows(result['partners']);
+        _loading = false;
+      });
 
-  Future<void> _loadDashboard() async {
-    await _run(() async {
-      _dashboard = await _call(partnerDeskCallable, partnerDeskData(action: 'dashboard'));
-      final keys = _dashboard?['areaKeys'];
-      if (_areaKey.isEmpty && keys is List && keys.isNotEmpty) _areaKey = '${keys.first}';
-      _loading = false;
-    });
-  }
+  Future<void> _save() => _run(() async {
+        final caller = context.read(adminAuthProvider).currentUser?.email ?? '';
+        final start = _licenseStart.trim().isEmpty ? null : DateTime.tryParse(_licenseStart)?.millisecondsSinceEpoch;
+        if (_editingId == null && _password != _confirm) {
+          throw const StaffOpsException('invalid-argument', 'The password and confirmation do not match.');
+        }
+        final data = _editingId == null
+            ? partnerCreateData(
+                callerEmail: caller,
+                email: _email,
+                password: _password,
+                areas: _areas,
+                licenseStart: start,
+                termMonths: int.tryParse(_termMonths) ?? 36,
+                licenseFeePaid: num.tryParse(_fee) ?? 0,
+              )
+            : partnerUpdateData(
+                partnerId: _editingId!,
+                areas: _areas,
+                licenseStart: start,
+                termMonths: int.tryParse(_termMonths),
+                licenseFeePaid: num.tryParse(_fee),
+              );
+        final saved = await _call(partnerAdminCallable, data);
+        _password = '';
+        _confirm = '';
+        _showForm = false;
+        _notice = _editingId == null
+            ? 'Partner ${saved['email'] ?? ''} can sign in and must verify their email. The password was not stored.'
+            : 'License update requested.';
+        final result = await _call(partnerAdminCallable, partnerAccountsData());
+        _partners = _rows(result['partners']);
+        _loading = false;
+      });
 
-  Future<void> _loadStatement() async {
-    await _run(() async {
-      _statement = await _call(partnerDeskCallable, partnerDeskData(action: 'statement', period: _period));
-      _tab = 'statement';
-    });
-  }
+  Future<void> _resendVerification(String email) => _run(() async {
+        final result = await _call(partnerAdminCallable, partnerResendVerificationData(email: email));
+        final link = result['verificationLink']?.toString() ?? '';
+        var sent = false;
+        if (link.isNotEmpty) {
+          sent = await MailtrapEmailService.sendEmail(
+            recipientEmail: email,
+            subject: 'Verify your Tranyx admin email',
+            textContent: 'Open this link to verify your email, then sign in: $link',
+            htmlContent: '<p>Verify your email to open the city partner desk.</p><p><a href="$link">Verify email</a></p>',
+          );
+        }
+        _notice = sent
+            ? 'Verification email sent to $email.'
+            : 'The portal mailer is not configured. After signing in, the partner can resend from the verify screen.';
+      });
 
-  Future<void> _downloadCsv() async {
-    await _run(() async {
-      final result = await _call(partnerDeskCallable, partnerDeskData(action: 'statementCsv', period: _period));
-      final csv = result['csv']?.toString() ?? '';
-      if (!csv.startsWith(statementCsvHeader)) {
-        throw const StaffOpsException('internal', 'The statement CSV did not include the expected header.');
-      }
-      _saveFile('partner-$_period.csv', 'text/csv;charset=utf-8', utf8.encode(csv));
-    });
-  }
+  Future<void> _resetPartnerPassword(String email) => _run(() async {
+        if (_resetPassword != _resetConfirm) {
+          throw const StaffOpsException('invalid-argument', 'The password and confirmation do not match.');
+        }
+        await _call(partnerAdminCallable, partnerSetPasswordData(email: email, password: _resetPassword));
+        _resetPassword = '';
+        _resetConfirm = '';
+        _resetEmail = null;
+        _notice = 'Password updated for $email. It was not stored or shown.';
+      });
 
-  Future<void> _downloadPdf() async {
-    await _run(() async {
-      final statement = _statement ?? await _call(partnerDeskCallable, partnerDeskData(action: 'statement', period: _period));
-      _statement = statement;
-      _saveFile('partner-$_period.pdf', 'application/pdf', buildStatementPdf(statement));
-    });
-  }
-
-  Future<void> _loadDirectory() async {
-    await _run(() async {
-      final result = await _call(
-        partnerDeskCallable,
-        partnerDeskData(action: 'directory', areaKey: _areaKey, kind: _kind),
-      );
-      final records = result['records'];
-      _records = records is List
-          ? records.whereType<Map>().map((row) => {...row.cast<String, dynamic>(), '_kind': _kind}).toList()
-          : [];
-      _tab = 'directory';
-    });
-  }
-
-  Future<void> _review(String directoryKind, String id, String decision) async {
-    final kind = switch (directoryKind) {
-      'properties' => 'property',
-      'jobs' => 'job',
-      'users' => 'provider',
-      _ => 'rental',
-    };
-    await _run(() async {
-      await _call(
-        partnerDeskCallable,
-        partnerDeskData(action: 'review', kind: kind, id: id, decision: decision, reason: _flagReason),
-      );
-      await _loadDirectory();
-    });
-  }
+  Future<void> _status(String action, String partnerId) => _run(() async {
+        await _call(partnerAdminCallable, partnerStatusData(action: action, partnerId: partnerId));
+        _notice = '$action requested for $partnerId.';
+        final result = await _call(partnerAdminCallable, partnerAccountsData());
+        _partners = _rows(result['partners']);
+        _loading = false;
+      });
 
   Future<void> _run(Future<void> Function() body) async {
     if (_busy) return;
@@ -666,7 +285,6 @@ class _PartnerDeskPageState extends State<PartnerDeskPage> {
         _busy = false;
         _loading = false;
         _error = partnerFacingError(error);
-        _mfaRequired = error.detailCode == 'MFA_REQUIRED' || error.message.toLowerCase().contains('second factor');
       });
     } catch (error) {
       if (!mounted) return;
@@ -682,14 +300,195 @@ class _PartnerDeskPageState extends State<PartnerDeskPage> {
     final app = await context.read(firebaseAppProvider.future);
     return callWorkspaceCallable(app, name, data);
   }
+}
 
-  Component _tabButton(String label, String id) {
+class PartnerDeskPage extends StatefulComponent {
+  const PartnerDeskPage({super.key});
+
+  @override
+  State<PartnerDeskPage> createState() => _PartnerDeskPageState();
+}
+
+class _PartnerDeskPageState extends State<PartnerDeskPage> {
+  bool _started = false;
+  bool _loading = true;
+  bool _busy = false;
+  bool _mfaHardStop = false;
+  String? _error;
+  String _kind = 'overview';
+  String _areaKey = '';
+  String _flagReason = '';
+  Map<String, dynamic> _profile = {};
+  List<Map<String, dynamic>> _records = [];
+  String _shareTotal = '';
+
+  static const _lists = {
+    'revenue': 'Your share (30%)',
+    'hosts': 'Hosts',
+    'renters': 'Renters',
+    'rentals': 'Vehicle listings',
+    'properties': 'Property listings',
+    'providers': 'Service providers',
+    'gigs': 'Gig jobs',
+    'bookings': 'Bookings',
+    'tickets': 'Support tickets',
+  };
+
+  @override
+  Component build(BuildContext context) {
+    if (!_started) {
+      _started = true;
+      Future.microtask(_loadProfile);
+    }
+    if (_mfaHardStop) {
+      return div(classes: 'p-8 max-w-xl flex flex-col gap-3', [
+        h1(classes: 'text-lg font-black', [Component.text('Enable 2FA')]),
+        p(classes: 'text-sm text-zinc-700', [Component.text(_error ?? 'Enable 2FA before opening this area.')]),
+      ]);
+    }
+    final keys = _profile['areaKeys'];
+    final areas = keys is List ? keys.map((key) => '$key').where((key) => key.isNotEmpty).toList() : <String>[];
+    return div(classes: 'p-4 sm:p-8 flex flex-col gap-4 max-w-5xl', [
+      h1(classes: 'text-lg font-black text-zinc-900', [Component.text('Your area')]),
+      if (_profile['mfaEnrolled'] != true)
+        _banner(
+          'Enable 2FA. This desk is open before Identity Platform MFA is enforced. Zeus still needs to turn on TOTP or phone for this project and enroll this partner. Direct area reads stay denied until that second factor is on the token.',
+          danger: true,
+        ),
+      if (_error != null) _banner(_error!, danger: true),
+      if (_loading)
+        p(classes: 'text-xs font-semibold text-zinc-400', [Component.text('Loading your area...')])
+      else
+        div(classes: 'bg-white border border-zinc-200 rounded-2xl p-4 text-xs text-zinc-600', [
+          Component.text(
+            '${_profile['status'] ?? ''} · ${_areaText(_profile['areas'])} · renews ${_when(_profile['renewalDate'])} · fee ${_money(_profile['licenseFeePaid'])}',
+          ),
+        ]),
+      div(classes: 'flex flex-wrap gap-2', [
+        _tab('Overview', 'overview'),
+        for (final entry in _lists.entries) _tab(entry.value, entry.key),
+      ]),
+      if (areas.isNotEmpty && _kind != 'overview' && _kind != 'revenue')
+        div(classes: 'flex flex-wrap gap-2', [
+          for (final key in areas)
+            button(
+              classes: key == _areaKey ? _primary : _secondary,
+              onClick: () => setState(() => _areaKey = key),
+              [Component.text(key)],
+            ),
+          button(classes: _primary, onClick: _busy ? null : _loadList, [Component.text('Load')]),
+        ]),
+      if (reviewKindForDirectory(_kind).isNotEmpty)
+        _field('Flag reason', _flagReason, (value) => setState(() => _flagReason = value), placeholder: 'Required to flag'),
+      if (_kind == 'revenue' && _shareTotal.isNotEmpty)
+        p(classes: 'text-sm font-black text-zinc-900', [Component.text('Your share $_shareTotal')]),
+      if (_kind != 'overview' && _records.isEmpty && !_loading)
+        p(classes: 'text-xs text-zinc-500', [Component.text('No rows in this area.')])
+      else if (_kind != 'overview')
+        div(classes: 'flex flex-col gap-2', _records.map(_record).toList()),
+    ]);
+  }
+
+  Component _record(Map<String, dynamic> row) {
+    final id = '${row['uid'] ?? row['id'] ?? ''}';
+    final title = '${row['displayName'] ?? row['title'] ?? row['subject'] ?? id}';
+    final review = row['partnerReview'];
+    final reviewText = review is Map ? '${review['status'] ?? ''}' : '';
+    final kind = reviewKindForDirectory(_kind);
+    return article(classes: 'bg-white border border-zinc-200 rounded-2xl p-3 flex flex-col gap-2', [
+      div(classes: 'flex flex-wrap justify-between gap-2', [
+        span(classes: 'text-xs font-black', [Component.text(title)]),
+        span(classes: 'text-[11px] text-zinc-500', [
+          Component.text('${row['status'] ?? ''} ${row['areaKey'] ?? _areaKey} $reviewText'),
+        ]),
+      ]),
+      if (kind.isNotEmpty)
+        div(classes: 'flex flex-wrap gap-2', [
+          button(classes: _secondary, onClick: _busy ? null : () => _review(kind, id, 'approved'), [Component.text('Approve')]),
+          button(classes: _secondary, onClick: _busy ? null : () => _review(kind, id, 'verified'), [Component.text('Verify')]),
+          button(classes: _secondary, onClick: _busy ? null : () => _review(kind, id, 'flagged'), [Component.text('Flag')]),
+        ]),
+    ]);
+  }
+
+  Component _tab(String label, String id) {
     return button(
-      classes: _tab == id ? _primaryButton : _secondaryButton,
-      onClick: () => setState(() => _tab = id),
+      classes: _kind == id ? _primary : _secondary,
+      onClick: () {
+        setState(() {
+          _kind = id;
+          _records = [];
+          _error = null;
+        });
+        if (id != 'overview') Future.microtask(_loadList);
+      },
       [Component.text(label)],
     );
   }
+
+  Future<void> _loadProfile() => _run(() async {
+        _profile = await _call(partnerDeskCallable, partnerProfileData());
+        final keys = _profile['areaKeys'];
+        if (_areaKey.isEmpty && keys is List && keys.isNotEmpty) _areaKey = '${keys.first}';
+        _loading = false;
+      });
+
+  Future<void> _loadList() => _run(() async {
+        if (_kind == 'revenue') {
+          final result = await _call(partnerDeskCallable, partnerRevenueData());
+          _shareTotal = _money(result['partnerShare']);
+          _records = _rows(result['lines']);
+          return;
+        }
+        final result = await _call(partnerDeskCallable, partnerDirectoryData(areaKey: _areaKey, kind: _kind));
+        _records = _rows(result['records']);
+      });
+
+  Future<void> _review(String kind, String id, String decision) => _run(() async {
+        await _call(
+          partnerDeskCallable,
+          partnerReviewData(kind: kind, id: id, decision: decision, reason: _flagReason),
+        );
+        await _loadList();
+      });
+
+  Future<void> _run(Future<void> Function() body) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await body();
+      if (mounted) setState(() => _busy = false);
+    } on StaffOpsException catch (error) {
+      if (!mounted) return;
+      final hard = error.detailCode == 'MFA_REQUIRED';
+      setState(() {
+        _busy = false;
+        _loading = false;
+        _error = partnerFacingError(error);
+        _mfaHardStop = hard;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _loading = false;
+        _error = '$error';
+      });
+    }
+  }
+
+  Future<Map<String, dynamic>> _call(String name, Map<String, dynamic> data) async {
+    final app = await context.read(firebaseAppProvider.future);
+    return callWorkspaceCallable(app, name, data);
+  }
+}
+
+List<Map<String, dynamic>> _rows(dynamic raw) {
+  if (raw is! List) return [];
+  return raw.whereType<Map>().map((row) => row.cast<String, dynamic>()).toList();
 }
 
 Component _field(String caption, String value, void Function(String value) onValue, {String type = 'text', String? placeholder}) {
@@ -698,7 +497,7 @@ Component _field(String caption, String value, void Function(String value) onVal
     input(
       value: value,
       classes: 'bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-800 normal-case font-medium',
-      attributes: {'type': type == 'text' ? 'text' : type, 'placeholder': ?placeholder},
+      attributes: {'type': type, 'placeholder': ?placeholder},
       onInput: (dynamic next) => onValue((next as String?) ?? ''),
     ),
   ]);
@@ -706,27 +505,9 @@ Component _field(String caption, String value, void Function(String value) onVal
 
 Component _banner(String text, {required bool danger}) {
   return div(
-    classes: 'rounded-2xl px-4 py-3 text-xs font-semibold whitespace-pre-line ${danger ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'}',
+    classes: 'rounded-2xl px-4 py-3 text-xs font-semibold ${danger ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'}',
     [Component.text(text)],
   );
-}
-
-Component _alertCard(String title, String body) {
-  return div(classes: 'bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col gap-1', [
-    h2(classes: 'text-xs font-black text-amber-900', [Component.text(title)]),
-    p(classes: 'text-[11px] text-amber-800 whitespace-pre-line', [Component.text(body)]),
-  ]);
-}
-
-Component _kpi(String label, String value) {
-  return div(classes: 'bg-zinc-50 border border-zinc-100 rounded-xl p-3', [
-    div(classes: 'text-[10px] uppercase tracking-wider text-zinc-400 font-bold', [Component.text(label)]),
-    div(classes: 'text-sm font-black text-zinc-900', [Component.text(value)]),
-  ]);
-}
-
-Component _chip(String label) {
-  return span(classes: 'px-2 py-1 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold', [Component.text(label)]);
 }
 
 String _money(dynamic value) {
@@ -743,6 +524,13 @@ String _when(dynamic value) {
   return '${date.year}-$month-$day';
 }
 
+String _dateInput(int ms) {
+  final date = DateTime.fromMillisecondsSinceEpoch(ms);
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$month-$day';
+}
+
 String _areaText(dynamic areas) {
   if (areas is! List || areas.isEmpty) return 'No area';
   return areas.map((area) {
@@ -751,28 +539,90 @@ String _areaText(dynamic areas) {
   }).where((text) => text.isNotEmpty).join(', ');
 }
 
-String _targetOf(Map<String, dynamic> row, String key) {
-  final targets = row['targets'];
-  if (targets is Map && targets[key] != null) return '${targets[key]}';
-  return '30';
+class VerifyEmailPage extends StatefulComponent {
+  const VerifyEmailPage({super.key});
+
+  @override
+  State<VerifyEmailPage> createState() => _VerifyEmailPageState();
 }
 
-const String _primaryButton =
-    'px-3 py-2 rounded-full bg-black text-white text-[11px] font-extrabold cursor-pointer border-0 disabled:opacity-40';
-const String _secondaryButton =
-    'px-3 py-2 rounded-full border border-zinc-200 bg-white text-zinc-800 text-[11px] font-extrabold cursor-pointer';
+class _VerifyEmailPageState extends State<VerifyEmailPage> {
+  bool _started = false;
+  bool _busy = false;
+  String? _message;
+  String? _error;
 
-void _saveFile(String filename, String mime, List<int> bytes) {
-  final blob = web.Blob(
-    [Uint8List.fromList(bytes).buffer.toJS].toJS,
-    web.BlobPropertyBag(type: mime),
-  );
-  final url = web.URL.createObjectURL(blob);
-  final anchor = web.document.createElement('a') as web.HTMLAnchorElement;
-  anchor.href = url;
-  anchor.download = filename;
-  web.document.body?.append(anchor);
-  anchor.click();
-  anchor.remove();
-  web.URL.revokeObjectURL(url);
+  @override
+  Component build(BuildContext context) {
+    if (!_started) {
+      _started = true;
+      Future.microtask(() => _send(automatic: true));
+    }
+    return div(classes: 'min-h-screen flex items-center justify-center p-6 bg-[#eff2f0]', [
+      div(classes: 'max-w-md w-full bg-white border border-zinc-200 rounded-3xl p-6 flex flex-col gap-3', [
+        h1(classes: 'text-lg font-black text-zinc-900', [Component.text('Verify your email')]),
+        p(classes: 'text-xs text-zinc-600', [
+          Component.text('The city partner desk stays closed until this sign-in email is verified. No other admin pages are available.'),
+        ]),
+        if (_error != null) p(classes: 'text-xs font-semibold text-rose-600', [Component.text(_error!)]),
+        if (_message != null) p(classes: 'text-xs font-semibold text-emerald-700', [Component.text(_message!)]),
+        button(classes: _primary, onClick: _busy ? null : () => _send(), [Component.text('Resend verification email')]),
+        button(classes: _secondary, onClick: _busy ? null : _refresh, [Component.text("I've verified, refresh")]),
+        button(
+          classes: _secondary,
+          onClick: () => context.read(adminAuthProvider).signOut(),
+          [Component.text('Sign out')],
+        ),
+      ]),
+    ]);
+  }
+
+  Future<void> _send({bool automatic = false}) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await context.read(adminAuthProvider).currentUser?.sendEmailVerification();
+      if (mounted) {
+        setState(() => _message = automatic ? 'A verification email is on its way.' : 'Verification email sent.');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not send the verification email.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final user = context.read(adminAuthProvider).currentUser;
+      await user?.reload();
+      await user?.getIdToken(true);
+      if (user?.emailVerified == true) {
+        final app = await context.read(firebaseAppProvider.future);
+        final envUser = FirebaseAuth.instanceFor(app: app).currentUser;
+        if (envUser != null) {
+          try {
+            await callWorkspaceCallable(app, partnerDeskCallable, partnerSyncVerificationData());
+            await envUser.getIdToken(true);
+          } catch (_) {}
+        }
+        if (mounted) setState(() => _message = 'Email verified.');
+      } else if (mounted) {
+        setState(() => _error = 'This sign-in is still unverified.');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not refresh the sign-in.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 }
+
+const String _primary = 'px-3 py-2 rounded-full bg-black text-white text-[11px] font-extrabold cursor-pointer border-0 disabled:opacity-40';
+const String _secondary = 'px-3 py-2 rounded-full border border-zinc-200 bg-white text-zinc-800 text-[11px] font-extrabold cursor-pointer';

@@ -17,8 +17,61 @@ class LoginPage extends StatefulComponent {
 class _LoginPageState extends State<LoginPage> {
   String _email = '';
   String _password = '';
+  String _nextPassword = '';
   String? _error;
+  String? _message;
   bool _loading = false;
+  bool _forgot = false;
+  String? _oobCode;
+  bool _checkedLink = false;
+
+  Future<void> _sendReset(BuildContext context) async {
+    if (_email.trim().isEmpty) {
+      setState(() => _error = 'Enter the email address for the account.');
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+      _message = null;
+    });
+    try {
+      await context.read(adminAuthProvider).sendPasswordResetEmail(email: _email.trim());
+      setState(() => _message = 'Check that email for a link to set a password. No password was created here.');
+    } on FirebaseAuthException catch (error) {
+      setState(() => _error = error.message ?? 'Could not send the set-password email.');
+    } catch (error) {
+      setState(() => _error = 'Could not send the set-password email: $error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _setPassword(BuildContext context) async {
+    final code = _oobCode ?? '';
+    if (code.isEmpty) return;
+    if (_nextPassword.length < 6) {
+      setState(() => _error = 'Use at least 6 characters.');
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+      _message = null;
+    });
+    try {
+      await context.read(adminAuthProvider).confirmPasswordReset(code: code, newPassword: _nextPassword);
+      _nextPassword = '';
+      _oobCode = null;
+      setState(() => _message = 'Password set. Sign in with the email and the password you just chose.');
+    } on FirebaseAuthException catch (error) {
+      setState(() => _error = error.message ?? 'This set-password link is no longer valid. Use Forgot password to send another.');
+    } catch (error) {
+      setState(() => _error = 'Could not set the password: $error');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   Future<void> _handleSubmit(BuildContext context) async {
     if (_email.isEmpty || _password.isEmpty) {
@@ -108,6 +161,13 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Component build(BuildContext context) {
+    if (!_checkedLink) {
+      _checkedLink = true;
+      final params = Uri.parse(web.window.location.href).queryParameters;
+      final code = params['oobCode'] ?? '';
+      if (params['mode'] == 'resetPassword' && code.isNotEmpty) _oobCode = code;
+    }
+    final settingPassword = _oobCode != null;
     return div(
       classes:
           'w-full min-h-screen bg-[#eff2f0] flex flex-col justify-center items-center p-4 relative overflow-hidden',
@@ -148,6 +208,11 @@ class _LoginPageState extends State<LoginPage> {
                   span([Component.text(_error!)]),
                 ],
               ),
+            if (_message != null)
+              div(
+                classes: 'p-3.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs font-semibold',
+                [Component.text(_message!)],
+              ),
 
             // Form Fields
             div(classes: 'flex flex-col gap-4', [
@@ -162,35 +227,61 @@ class _LoginPageState extends State<LoginPage> {
                   onInput: (value) => _email = value as String,
                 ),
               ]),
-              div(classes: 'flex flex-col gap-1.5', [
-                label(classes: 'text-[10px] text-zinc-400 font-bold uppercase tracking-wider', [
-                  Component.text('Password'),
+              if (settingPassword)
+                div(classes: 'flex flex-col gap-1.5', [
+                  label(classes: 'text-[10px] text-zinc-400 font-bold uppercase tracking-wider', [
+                    Component.text('Choose a password'),
+                  ]),
+                  input(
+                    classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-3 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
+                    attributes: {'type': 'password', 'placeholder': 'At least 6 characters'},
+                    onInput: (value) => _nextPassword = value as String,
+                  ),
+                ])
+              else if (!_forgot)
+                div(classes: 'flex flex-col gap-1.5', [
+                  label(classes: 'text-[10px] text-zinc-400 font-bold uppercase tracking-wider', [
+                    Component.text('Password'),
+                  ]),
+                  input(
+                    id: 'login-password-input',
+                    classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-3 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
+                    attributes: {'type': 'password', 'placeholder': '••••••••'},
+                    onInput: (value) => _password = value as String,
+                  ),
                 ]),
-                input(
-                  id: 'login-password-input',
-                  classes: 'bg-[#f8faf9] border border-zinc-200/50 rounded-xl px-4 py-3 text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all',
-                  attributes: {'type': 'password', 'placeholder': '••••••••'},
-                  onInput: (value) => _password = value as String,
-                ),
-              ]),
 
-              // Submit Button (Black minimalist pill)
               button(
                 id: 'login-submit-button',
-                onClick: _loading ? null : () => _handleSubmit(context),
+                onClick: _loading
+                    ? null
+                    : () => settingPassword
+                        ? _setPassword(context)
+                        : _forgot
+                            ? _sendReset(context)
+                            : _handleSubmit(context),
                 classes: 'w-full py-3.5 bg-black hover:bg-zinc-800 disabled:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all duration-300 shadow-md shadow-black/10 flex items-center justify-center gap-2 mt-2 cursor-pointer',
                 attributes: _loading ? {'disabled': 'true'} : {},
                 [
                   if (_loading)
                     span(
-                      classes:
-                          'inline-block animate-spin h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full',
+                      classes: 'inline-block animate-spin h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full',
                       [],
                     )
                   else
-                    Component.text('Authenticate & Enter'),
+                    Component.text(settingPassword ? 'Set password' : _forgot ? 'Email set-password link' : 'Authenticate & Enter'),
                 ],
               ),
+              if (!settingPassword)
+                button(
+                  onClick: () => setState(() {
+                    _forgot = !_forgot;
+                    _error = null;
+                    _message = null;
+                  }),
+                  classes: 'text-[11px] font-bold text-zinc-500 bg-transparent border-0 cursor-pointer',
+                  [Component.text(_forgot ? 'Back to sign in' : 'Forgot password')],
+                ),
             ]),
 
             // Footer disclaimer
