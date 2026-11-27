@@ -11,6 +11,7 @@ import 'package:jaspr_riverpod/legacy.dart';
 import '../app.dart';
 import '../core/access/portal_role.dart';
 import '../core/access/staff_access_sync.dart';
+import '../core/access/staff_award_points.dart';
 import '../core/services/staff_ops_service.dart';
 import '../core/providers/environment_provider.dart';
 import '../core/config/firebase_environments.dart';
@@ -659,31 +660,26 @@ class _UsersPageState extends State<UsersPage> {
     if (_isAwardingPoints) return;
     setState(() => _isAwardingPoints = true);
 
-    final firestore = context.read(firestoreProvider);
-    final historyId = '${user.uid}_${questId}_${DateTime.now().millisecondsSinceEpoch}';
-
     try {
-      // 1. Log to points_history
-      await firestore.collection('points_history').doc(historyId).set({
-        'uid': user.uid,
-        'questId': questId,
-        'points': points,
-        'title': title,
-        'category': category,
-        'createdAt': DateTime.now().millisecondsSinceEpoch,
-      });
-
-      // 2. Update User Profile atomically
-      final updatedRewards = List<String>.from(user.earnedRewards)..add(questId);
-      await firestore.collection('users').doc(user.uid).set({
-        'terraPoints': FieldValue.increment(points),
-        'earnedRewards': FieldValue.arrayUnion([questId]),
-      }, SetOptions(merge: true));
-
-      final newTotalPoints = user.terraPoints + points;
+      final data = buildStaffAwardPointsData(
+        targetUid: user.uid,
+        questId: questId,
+        category: category,
+        title: title,
+        points: points,
+      );
+      final app = await context.read(firebaseAppProvider.future);
+      final result = await callWorkspaceCallable(app, 'staffAwardPoints', data);
+      final credited = result['points'] is num ? (result['points'] as num).toInt() : points;
+      final recordedTitle = result['title'] is String && (result['title'] as String).trim().isNotEmpty
+          ? (result['title'] as String).trim()
+          : title;
+      final nextPoints = result['terraPoints'] is num ? (result['terraPoints'] as num).toInt() : user.terraPoints + credited;
+      final updatedRewards = List<String>.from(user.earnedRewards);
+      if (!updatedRewards.contains(questId)) updatedRewards.add(questId);
       setState(() {
         _selectedUser = user.copyWith(
-          terraPoints: newTotalPoints,
+          terraPoints: nextPoints,
           earnedRewards: updatedRewards,
         );
         _customRewardTitle = '';
@@ -691,7 +687,10 @@ class _UsersPageState extends State<UsersPage> {
         _isAwardingPoints = false;
       });
 
-      _showToast('🪙 Awarded $points TP to ${user.name} for "$title"');
+      _showToast('🪙 Awarded $credited TP to ${user.name} for "$recordedTitle"');
+    } on StaffOpsException catch (e) {
+      setState(() => _isAwardingPoints = false);
+      _showToast('❌ Failed to award points: ${e.message}');
     } catch (e) {
       setState(() => _isAwardingPoints = false);
       _showToast('❌ Failed to award points: $e');
